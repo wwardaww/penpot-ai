@@ -438,6 +438,7 @@
           'app.rpc.commands.management
           'app.rpc.commands.media
           'app.rpc.commands.nitrate
+          'app.rpc.commands.penforge
           'app.rpc.commands.plugins
           'app.rpc.commands.profile
           'app.rpc.commands.projects
