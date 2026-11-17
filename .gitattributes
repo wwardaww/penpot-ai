@@ -1,1 +1,25 @@
 frontend/vendor/* linguist-vendored
+
+# Penforge: force LF in the working tree on every OS (Windows checkouts
+# otherwise get CRLF shell scripts that break inside the devenv container).
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.wasm binary
+*.zip binary
+*.penpot binary
+*.fig binary
+*.pdf binary
+
+# Upstream files committed with CRLF; keep them byte-identical.
+backend/test/backend_tests/test_files/sample1.svg -text
+plugins/apps/composable-test-suite/src/composable-tests/operations/OpOneOf.ts -text
