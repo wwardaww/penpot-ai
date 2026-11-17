@@ -10170,7 +10170,7 @@ msgstr "Abre el enlace de emparejamiento que muestra el agente o pégalo aquí:"
 
 #: src/app/main/ui/workspace/ai/chat/banner.cljs:84
 msgid "penforge.chat.help.start"
-msgstr "Inicia el agente en este ordenador:"
+msgstr "Abre una terminal en la carpeta de Penforge y ejecuta:"
 
 #: src/app/main/ui/workspace/ai/chat/panel.cljs:348
 msgid "penforge.chat.input.attach-selection"

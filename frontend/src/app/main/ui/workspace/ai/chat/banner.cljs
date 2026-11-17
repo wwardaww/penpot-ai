@@ -20,7 +20,7 @@
    [rumext.v2 :as mf]))
 
 (def start-command
-  "cd mcp/packages/server && PENFORGE=1 corepack pnpm run start")
+  "node mcp/scripts/penforge.mjs")
 
 (mf/defc pair-form*
   {::mf/private true}

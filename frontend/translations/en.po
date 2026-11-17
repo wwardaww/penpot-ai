@@ -10177,7 +10177,7 @@ msgstr "Open the pairing link the agent prints, or paste it here:"
 
 #: src/app/main/ui/workspace/ai/chat/banner.cljs:84
 msgid "penforge.chat.help.start"
-msgstr "Start the agent on this computer:"
+msgstr "Open a terminal in the Penforge folder and run:"
 
 #: src/app/main/ui/workspace/ai/chat/panel.cljs:348
 msgid "penforge.chat.input.attach-selection"
