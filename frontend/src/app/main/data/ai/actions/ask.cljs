@@ -8,7 +8,9 @@
   "Ask AI about the selection (W06).
 
   Attaches every selected shape to the next chat message as a node
-  attachment, shows the AI chat and puts the cursor in its input. A few
+  attachment, shows the AI chat and puts the cursor in its input. While
+  the chat is detached (W10) it brings the detached window to the front
+  and focuses the input there, leaving the sidebar alone. A few
   of the shapes (top-level boards first) also get a PNG snapshot,
   rendered afterwards, one per animation frame, so a large selection
   does not freeze the UI or flood the message; the agent can capture
@@ -21,6 +23,7 @@
    [app.common.logging :as log]
    [app.main.data.ai.actions :as actions]
    [app.main.data.ai.chat :as chat]
+   [app.main.data.ai.detached :as detached]
    [app.main.data.ai.protocol :as proto]
    [app.main.data.exports.wasm :as wasm.exports]
    [app.main.data.helpers :as dsh]
@@ -185,14 +188,17 @@
 
 (defn find-chat-input
   "The chat input element, or nil while it is not mounted. The only place
-  that knows where the chat lives: W10 (detached chat window) redirects
-  this lookup to the popup's document when the chat is detached."
+  that knows where the chat lives: while the chat is detached (W10) the
+  input is in the detached window's document."
   []
-  (dom/query input-selector))
+  (if-let [document (detached/chat-document)]
+    (.querySelector ^js document input-selector)
+    (dom/query input-selector)))
 
 (defn- focus-chat-input!
   "Focus the chat input. The panel mounts after the sidebar switches to
-  the AI tab, so look for it a few times before giving up."
+  the AI tab (or, detached, after the window page loads), so look for it
+  a few times before giving up."
   ([] (focus-chat-input! 20))
   ([attempts]
    (if-let [input (find-chat-input)]
@@ -204,7 +210,10 @@
   []
   (ptk/reify ::focus-chat-input
     ptk/EffectEvent
-    (effect [_ _ _]
+    (effect [_ state _]
+      ;; Focusing an element does not raise its window.
+      (when (detached/detached? state)
+        (detached/focus-window!))
       (focus-chat-input!))))
 
 ;; --- Event and action
@@ -229,8 +238,12 @@
           (if (seq attachments)
             (rx/of (add-attachments attachments))
             (rx/empty))
-          (rx/of (chat/open-chat)
-                 (focus-chat-input))
+          ;; Detached, the sidebar only shows a notice: do not switch
+          ;; the user away from the panel they are on.
+          (if (detached/detached? state)
+            (rx/empty)
+            (rx/of (chat/open-chat)))
+          (rx/of (focus-chat-input))
           (->> (render-snapshots candidates (snapshot-fn state))
                (rx/take-until stopper-s))))))))
 
