@@ -10319,3 +10319,13 @@ msgstr "Vuelve a copiar el enlace desde la salida del agente de Penforge."
 #: src/app/main/ui/workspace/sidebar.cljs:176
 msgid "penforge.sidebar.tab"
 msgstr "IA"
+
+# penforge:W06
+
+#: src/app/main/data/ai/actions/ask.cljs
+msgid "penforge.actions.ask"
+msgstr "Preguntar a la IA sobre la selección"
+
+#: src/app/main/data/workspace/shortcuts.cljs
+msgid "shortcuts.ai-ask"
+msgstr "Preguntar a la IA sobre la selección"

@@ -7,6 +7,7 @@
 (ns app.main.data.workspace.shortcuts
   (:require
    [app.config :as cf]
+   [app.main.data.ai.actions.ask :as ai-ask]
    [app.main.data.common :as dcm]
    [app.main.data.event :as ev]
    [app.main.data.exports.assets :as de]
@@ -908,8 +909,20 @@
                :subsections [:modify-layers]
                :fn #(emit-when-no-readonly (dwly/pressed-opacity 9))}})
 
+(def ai-shortcuts
+  ;; Penforge (W06): focus the selection in the AI chat
+  {:ai-ask               {:tooltip (ds/meta (ds/alt "K"))
+                          :label (fn [] (tr "shortcuts.ai-ask"))
+                          :command (ds/c-mod "alt+k")
+                          :subsections [:generic]
+                          :section [:workspace]
+                          :fn #(st/emit! (ai-ask/ask-selection))}})
+
 (def shortcuts
   (cond-> (merge base-shortcuts opacity-shortcuts dwtxts/shortcuts)
+    (contains? cf/flags :ai)
+    (merge ai-shortcuts)
+
     *assert*
     (merge debug-shortcuts)))
 
