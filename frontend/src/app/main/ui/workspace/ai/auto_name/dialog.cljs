@@ -8,7 +8,12 @@
   "Auto-name dialog (W16): pick the layers and the naming style, run
   the daemon workflow `auto-name`, review the proposed names (old →
   new, with checkboxes and editable names) and apply the accepted
-  ones through the `:on-apply` callback."
+  ones through the `:on-apply` callback.
+
+  The dialog state lives in a local atom created once per mount, not
+  in `mf/use-state`: callbacks and stream subscriptions read it after
+  later renders, and `mf/use-state` derefs to the value of the render
+  that created the closure (its `swap!` returns nothing)."
   (:require-macros [app.main.style :as stl])
   (:require
    [app.main.data.ai.chat :as chat]
@@ -26,8 +31,9 @@
    [app.main.ui.ds.notifications.context-notification :refer [context-notification*]]
    [app.main.ui.ds.product.loader :refer [loader*]]
    [app.util.dom :as dom]
-   [app.util.i18n :refer [tr]]
+   [app.util.i18n :as i18n :refer [tr]]
    [beicon.v2.core :as rx]
+   [cuerdas.core :as str]
    [okulary.core :as l]
    [rumext.v2 :as mf]))
 
@@ -45,6 +51,14 @@
     (and (not= scope :selection) (some? page-id))
     (assoc :page-id page-id)))
 
+(defn- review-state
+  [state renames]
+  (assoc state
+         :step :review
+         :renames (vec renames)
+         :checked (into #{} (map :node-id) renames)
+         :edits {}))
+
 (defn next-state
   "Dialog state after a daemon message of the run (see
   `app.main.data.ai.chat/workflow-messages`)."
@@ -57,28 +71,41 @@
     (assoc state :progress (select-keys payload [:stage :done :total]))
 
     (and (= type "workflow.event") (= kind "result"))
-    (let [renames (vec (:renames payload))]
-      (assoc state
-             :result (dissoc payload :renames)
-             :renames renames
-             :checked (into #{} (map :node-id) renames)
-             :edits {}))
+    (assoc state
+           :result (dissoc payload :renames)
+           :renames (vec (:renames payload))
+           :checked (into #{} (map :node-id) (:renames payload))
+           :edits {})
 
     (= type "workflow.done")
     (if ok
-      (assoc state
-             :step (if (seq (:renames state)) :review :empty)
-             :run-id nil)
-      (assoc state
-             :step :error
-             :error (or error summary)
-             :run-id nil))
+      (-> state
+          (assoc :step (if (seq (:renames state)) :review :empty))
+          (dissoc :run-id))
+      (-> state
+          (assoc :step :error :error (or error summary))
+          (dissoc :run-id)))
 
     (= type "error")
-    (assoc state :step :error :error (or message code))
+    (-> state
+        (assoc :step :error :error (or message code))
+        (dissoc :run-id))
 
     :else
     state))
+
+(defn apply-all-step
+  "For a \"Rename all\" run that reached the review: the renames to
+  apply now and the state after them. Names that replace a real word
+  (`:ambiguous`) are never applied blindly: they stay for review."
+  [state]
+  (let [{plain false ambiguous true} (group-by #(boolean (:ambiguous %)) (:renames state))
+        applied (+ (or (:applied state) 0) (count plain))]
+    {:apply (vec plain)
+     :state (if (seq ambiguous)
+              (-> (review-state state ambiguous)
+                  (assoc :applied applied :ambiguous-review true :apply-all false))
+              (assoc state :step :done :applied applied :apply-all false))}))
 
 (defn accepted-renames
   "Checked renames, with the names the user edited."
@@ -87,10 +114,24 @@
         (comp (filter #(contains? checked (:node-id %)))
               (map (fn [{:keys [node-id] :as rename}]
                      (if-let [edited (get edits node-id)]
-                       (assoc rename :new-name edited)
+                       (assoc rename :new-name (str/trim edited))
                        rename)))
-              (remove #(empty? (:new-name %))))
+              (remove #(str/blank? (:new-name %))))
         renames))
+
+(defn error-message
+  "Translated text of a run error. Daemon errors of this workflow
+  start with `auto-name/<code>`."
+  [error]
+  (let [error (str error)
+        code  (second (re-find #"^auto-name/([a-z-]+)" error))]
+    (cond
+      (= code "no-selection") (tr "penforge.auto-name.error.no-selection")
+      (= code "read-failed")  (tr "penforge.auto-name.error.read-failed")
+      (= code "apply-failed") (tr "penforge.auto-name.error.apply-failed")
+      (= error "busy")        (tr "penforge.auto-name.error.busy")
+      (= error "cancelled")   (tr "penforge.auto-name.error.cancelled")
+      :else                   (tr "penforge.auto-name.error" error))))
 
 ;; --- Components
 
@@ -179,9 +220,9 @@
 
         handle-components
         (mf/use-fn
-         (mf/deps on-change include-components)
+         (mf/deps on-change)
          (fn [_]
-           (on-change :include-components (not include-components))))]
+           (on-change :include-components not)))]
 
     [:div {:class (stl/css :setup)}
      [:> text* {:as "p" :typography t/body-medium :class (stl/css :description)}
@@ -211,13 +252,16 @@
 (mf/defc review-step*
   {::mf/private true}
   [{:keys [state on-toggle on-toggle-all on-edit]}]
-  (let [{:keys [renames checked edits result]} state
+  (let [{:keys [renames checked edits result ambiguous-review applied]} state
         all-checked (= (count checked) (count renames))
         remaining   (or (:remaining result) 0)]
     [:div {:class (stl/css :review)}
+     (when ambiguous-review
+       [:> text* {:as "p" :typography t/body-small :class (stl/css :hint)}
+        (tr "penforge.auto-name.review-ambiguous" (i18n/c (or applied 0)))])
      [:div {:class (stl/css :review-header)}
       [:> checkbox* {:id "penforge-auto-name-all"
-                     :label (tr "penforge.auto-name.select-all" (count renames))
+                     :label (tr "penforge.auto-name.select-all" (i18n/c (count renames)))
                      :checked all-checked
                      :on-change on-toggle-all}]]
      [:ul {:class (stl/css :rows)}
@@ -230,7 +274,10 @@
                          :on-edit on-edit}])]
      (when (pos? remaining)
        [:> text* {:as "p" :typography t/body-small :class (stl/css :hint)}
-        (tr "penforge.auto-name.remaining" remaining)])]))
+        (tr "penforge.auto-name.remaining" (i18n/c remaining))])
+     (when (:truncated result)
+       [:> text* {:as "p" :typography t/body-small :class (stl/css :hint)}
+        (tr "penforge.auto-name.truncated")])]))
 
 (mf/defc message-step*
   {::mf/private true}
@@ -240,7 +287,7 @@
     (cond
       (= step :done)
       [:> context-notification* {:level :success :appearance :ghost}
-       (tr "penforge.auto-name.done" applied)]
+       (tr "penforge.auto-name.done" (i18n/c (or applied 0)))]
 
       (= step :empty)
       [:div {:class (stl/css :messages)}
@@ -248,11 +295,21 @@
         (tr "penforge.auto-name.none")]
        (when (pos? skipped)
          [:> text* {:as "p" :typography t/body-small :class (stl/css :hint)}
-          (tr "penforge.auto-name.skipped-components" skipped)])]
+          (tr "penforge.auto-name.skipped-components" (i18n/c skipped))])
+       (when (:truncated result)
+         [:> text* {:as "p" :typography t/body-small :class (stl/css :hint)}
+          (tr "penforge.auto-name.truncated")])]
 
       :else
       [:> context-notification* {:level :error :appearance :ghost}
-       (tr "penforge.auto-name.error" (str error))])))
+       (error-message error)])))
+
+(defn- initial-state
+  [scope has-selection]
+  {:step :setup
+   :options {:scope (if (and (= scope :selection) has-selection) :selection :page)
+             :convention :title
+             :include-components false}})
 
 (mf/defc auto-name-dialog
   "Modal `:penforge-auto-name`. Props: `:scope` (`:selection` or
@@ -265,44 +322,52 @@
         developer     (= persona :developer)
         has-selection (boolean (seq node-ids))
 
-        state*  (mf/use-state
-                 #(hash-map :step :setup
-                            :options {:scope (if (and (= scope :selection) has-selection)
-                                               :selection
-                                               :page)
-                                      :convention :title
-                                      :include-components false}))
-        state   (deref state*)
+        ;; one atom per mount; callbacks read it live (see ns doc)
+        state*  (mf/with-memo [] (atom (initial-state scope has-selection)))
+        state   (mf/deref state*)
         step    (:step state)
 
         subscription (mf/use-ref nil)
 
+        apply!
+        (mf/use-fn
+         (mf/deps on-apply)
+         (fn [renames]
+           (when (seq renames)
+             (on-apply renames))))
+
+        handle-message
+        (mf/use-fn
+         (mf/deps state* apply!)
+         (fn [message]
+           (let [updated (swap! state* next-state message)]
+             (when (and (:apply-all updated) (= :review (:step updated)))
+               (let [{to-apply :apply after :state} (apply-all-step updated)]
+                 (reset! state* after)
+                 (apply! to-apply))))))
+
         handle-option
         (mf/use-fn
+         (mf/deps state*)
          (fn [key value]
-           (swap! state* assoc-in [:options key] value)))
+           (if (fn? value)
+             (swap! state* update-in [:options key] value)
+             (swap! state* assoc-in [:options key] value))))
 
         start
         (mf/use-fn
-         (mf/deps node-ids page-id on-apply)
+         (mf/deps state* node-ids page-id handle-message)
          (fn [apply-all]
            (let [rid    (str (random-uuid))
                  params (workflow-params (assoc (:options @state*)
                                                 :node-ids node-ids
                                                 :page-id page-id))]
-             (swap! state* assoc :step :running :apply-all apply-all :progress nil)
+             (swap! state* assoc :step :running :apply-all apply-all :progress nil :applied 0)
              ;; subscribe before the request goes out
              (some-> (mf/ref-val subscription) rx/dispose!)
-             (mf/set-ref-val!
-              subscription
-              (->> (chat/workflow-messages st/stream rid)
-                   (rx/subs!
-                    (fn [message]
-                      (let [next (swap! state* next-state message)]
-                        (when (and (:apply-all next) (= :review (:step next)))
-                          (let [renames (accepted-renames next)]
-                            (on-apply renames)
-                            (swap! state* assoc :step :done :applied (count renames)))))))))
+             (mf/set-ref-val! subscription
+                              (rx/subs! handle-message
+                                        (chat/workflow-messages st/stream rid)))
              (st/emit! (chat/run-workflow "auto-name" params {:rid rid :silent true})))))
 
         handle-preview
@@ -313,12 +378,14 @@
 
         handle-toggle
         (mf/use-fn
+         (mf/deps state*)
          (fn [node-id]
            (swap! state* update :checked
                   #(if (contains? % node-id) (disj % node-id) (conj % node-id)))))
 
         handle-toggle-all
         (mf/use-fn
+         (mf/deps state*)
          (fn [_]
            (swap! state* (fn [{:keys [renames checked] :as state}]
                            (assoc state :checked
@@ -328,16 +395,20 @@
 
         handle-edit
         (mf/use-fn
+         (mf/deps state*)
          (fn [node-id value]
            (swap! state* assoc-in [:edits node-id] value)))
 
         handle-apply
         (mf/use-fn
-         (mf/deps on-apply)
+         (mf/deps state* apply!)
          (fn [_]
            (let [renames (accepted-renames @state*)]
-             (on-apply renames)
-             (swap! state* assoc :step :done :applied (count renames)))))
+             (apply! renames)
+             (swap! state* (fn [state]
+                             (assoc state
+                                    :step :done
+                                    :applied (+ (or (:applied state) 0) (count renames))))))))
 
         ;; the unmount effect below stops a running workflow
         handle-close
@@ -355,7 +426,7 @@
 
     ;; closing the dialog (also with Escape or a click outside) stops
     ;; a run still going
-    (mf/with-effect []
+    (mf/with-effect [state*]
       (fn []
         (some-> (mf/ref-val subscription) rx/dispose!)
         (when-let [run-id (:run-id @state*)]
@@ -423,7 +494,7 @@
           [:> button* {:variant "primary"
                        :disabled (zero? accepted)
                        :on-click handle-apply}
-           (tr "penforge.auto-name.apply" accepted)]]
+           (tr "penforge.auto-name.apply" (i18n/c accepted))]]
 
          :else
          [:> button* {:variant "primary" :on-click handle-close} (tr "labels.close")])]]]))

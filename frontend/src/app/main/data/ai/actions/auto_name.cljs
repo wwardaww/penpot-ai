@@ -32,10 +32,20 @@
    [potok.v2.core :as ptk]))
 
 (defn- renamable?
+  "Copies follow their main component, so layers inside a copy are
+  never renamed here (a rename would become an override)."
   [shape]
   (and (some? shape)
+       (not (ctc/in-component-copy? shape))
        (not (ctc/is-variant-main? shape))
        (not (ctc/is-variant-container? shape))))
+
+(defn can-edit?
+  "True when the open file can be changed: edit permission and not in
+  read-only mode."
+  [state]
+  (and (true? (get-in state [:permissions :can-edit]))
+       (not (get-in state [:workspace-global :read-only?]))))
 
 (defn plan-renames
   "Group accepted renames by page, keeping only layers that still exist
@@ -122,5 +132,7 @@
   :icon i/text
   :order 30
   :scopes #{:context-menu :main-menu :command-palette}
+  :visible? can-edit?
+  :enabled? can-edit?
   :run (fn [context]
          (st/emit! (open-dialog context)))})

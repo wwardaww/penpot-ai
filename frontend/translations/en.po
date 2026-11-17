@@ -10334,7 +10334,9 @@ msgstr "Name layers with AI"
 
 #: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
 msgid "penforge.auto-name.apply"
-msgstr "Apply %s names"
+msgid_plural "penforge.auto-name.apply"
+msgstr[0] "Apply 1 name"
+msgstr[1] "Apply %s names"
 
 #: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
 msgid "penforge.auto-name.apply-all"
@@ -10362,15 +10364,37 @@ msgstr "Gives layers with default names like “Board 4” or “Rectangle 12”
 
 #: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
 msgid "penforge.auto-name.done"
-msgstr "Renamed %s layers. Press Ctrl+Z to undo."
+msgid_plural "penforge.auto-name.done"
+msgstr[0] "Renamed 1 layer. Press Ctrl+Z to undo."
+msgstr[1] "Renamed %s layers. Press Ctrl+Z to undo."
 
 #: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
 msgid "penforge.auto-name.error"
 msgstr "Could not name the layers: %s"
 
 #: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.error.apply-failed"
+msgstr "Could not rename the layers in the design."
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.error.busy"
+msgstr "The AI assistant is busy. Try again in a moment."
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.error.cancelled"
+msgstr "Naming was stopped."
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.error.no-selection"
+msgstr "Select some layers first."
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.error.read-failed"
+msgstr "Could not read the layers of the design. Check that the file is open."
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
 msgid "penforge.auto-name.include-components"
-msgstr "Also rename components and their copies"
+msgstr "Also rename main components (their copies follow)"
 
 #: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
 msgid "penforge.auto-name.new-name"
@@ -10398,7 +10422,15 @@ msgstr "Naming layers: %s of %s"
 
 #: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
 msgid "penforge.auto-name.remaining"
-msgstr "%s more layers have default names. Run again to name them."
+msgid_plural "penforge.auto-name.remaining"
+msgstr[0] "1 more layer has a default name. Run again to name it."
+msgstr[1] "%s more layers have default names. Run again to name them."
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.review-ambiguous"
+msgid_plural "penforge.auto-name.review-ambiguous"
+msgstr[0] "Renamed 1 layer. These layers are named with a real word like “Text” or “Image”: check their new names before you apply them."
+msgstr[1] "Renamed %s layers. These layers are named with a real word like “Text” or “Image”: check their new names before you apply them."
 
 #: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
 msgid "penforge.auto-name.running"
@@ -10422,12 +10454,20 @@ msgstr "Selection"
 
 #: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
 msgid "penforge.auto-name.select-all"
-msgstr "All %s new names"
+msgid_plural "penforge.auto-name.select-all"
+msgstr[0] "1 new name"
+msgstr[1] "All %s new names"
 
 #: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
 msgid "penforge.auto-name.skipped-components"
-msgstr "%s layers in components were left alone. Turn on “Also rename components” to name them."
+msgid_plural "penforge.auto-name.skipped-components"
+msgstr[0] "1 layer of a main component was left alone. Turn on “Also rename main components” to name it; copies follow their main component."
+msgstr[1] "%s layers of main components were left alone. Turn on “Also rename main components” to name them; copies follow their main component."
 
 #: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
 msgid "penforge.auto-name.title"
 msgstr "Name layers"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.truncated"
+msgstr "This file is very large: only its first 50,000 layers were looked at."
