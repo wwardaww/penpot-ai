@@ -141,6 +141,9 @@ test("readDesignSystemCode falls back to the current page, handles an empty page
 test("createBoardCode opens the page and creates a flex board with guides", async () => {
     const opened: string[] = [];
     const guides: [string, number][] = [];
+    // order of page switch, undo block and board edits
+    const calls: string[] = [];
+    const block = Symbol("block");
     const target = page("page-2", "Flows", []);
     let created: any = null;
     const penpot: any = {
@@ -148,9 +151,18 @@ test("createBoardCode opens the page and creates a flex board with guides", asyn
         currentFile: { pages: [target] },
         openPage: async (p: any) => {
             opened.push(p.id);
+            calls.push("openPage");
             penpot.currentPage = p;
         },
+        history: {
+            undoBlockBegin: () => {
+                calls.push("undoBlockBegin");
+                return block;
+            },
+            undoBlockFinish: (id: symbol) => calls.push(id === block ? "undoBlockFinish" : "wrong block"),
+        },
         createBoard: () => {
+            calls.push("createBoard");
             created = {
                 id: "board-1",
                 width: 100,
@@ -163,7 +175,10 @@ test("createBoardCode opens the page and creates a flex board with guides", asyn
                     this.flex = {};
                     return this.flex;
                 },
-                addRulerGuide: (orientation: string, value: number) => guides.push([orientation, value]),
+                addRulerGuide: (orientation: string, value: number) => {
+                    calls.push("addRulerGuide");
+                    guides.push([orientation, value]);
+                },
             };
             return created;
         },
@@ -181,6 +196,14 @@ test("createBoardCode opens the page and creates a flex board with guides", asyn
         penpot
     );
     assert.deepEqual(opened, ["page-2"]);
+    assert.deepEqual(calls, [
+        "openPage",
+        "undoBlockBegin",
+        "createBoard",
+        "addRulerGuide",
+        "addRulerGuide",
+        "undoBlockFinish",
+    ]);
     assert.deepEqual(board, {
         boardId: "board-1",
         pageId: "page-2",
@@ -197,6 +220,24 @@ test("createBoardCode opens the page and creates a flex board with guides", asyn
         ["horizontal", 47],
         ["horizontal", 810],
     ]);
+
+    // the undo block is closed when an edit throws
+    calls.length = 0;
+    penpot.currentPage = target;
+    const createBoard = penpot.createBoard;
+    penpot.createBoard = () => {
+        const board = createBoard();
+        board.resize = () => {
+            throw new Error("resize failed");
+        };
+        return board;
+    };
+    await assert.rejects(
+        run(createBoardCode({ pageId: "page-2", name: "x", x: 0, y: 0, width: 1, height: 1, guides: [] }), penpot),
+        /resize failed/
+    );
+    assert.deepEqual(calls, ["undoBlockBegin", "createBoard", "undoBlockFinish"]);
+    penpot.createBoard = createBoard;
 
     await assert.rejects(
         run(createBoardCode({ pageId: "nope", name: "x", x: 0, y: 0, width: 1, height: 1, guides: [] }), penpot),

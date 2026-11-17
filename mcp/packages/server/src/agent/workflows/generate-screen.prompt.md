@@ -23,6 +23,9 @@ Build rules:
 - Keep the board width. Grow its height when the content needs more room; never squeeze content.
 - Real, plausible copy; no lorem ipsum. Images: a placeholder rectangle named after its content.
 - Work in a few large `execute_code` calls (one per section), keeping references in `storage`.
+- Wrap the body of every `execute_code` call that changes the design in one undo block, so each
+  section undoes in one step:
+  `const block = penpot.history.undoBlockBegin(); try { … } finally { penpot.history.undoBlockFinish(block); }`
 {{#web}}
 - Platform: responsive web. Desktop board; content in a centered column with a sensible max
   width, generous whitespace, pointer-sized controls.

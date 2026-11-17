@@ -193,7 +193,7 @@ return {
 
 /**
  * Code creating the empty screen board: opens the page, places and sizes the board, adds a vertical
- * flex layout and the safe-area guides.
+ * flex layout and the safe-area guides, all in one undo block.
  */
 export function createBoardCode(args: {
     pageId: string;
@@ -211,19 +211,27 @@ if (!penpot.currentPage || penpot.currentPage.id !== args.pageId) {
     if (!page) { throw new Error("Page not found: " + args.pageId); }
     await penpot.openPage(page);
 }
-const board = penpot.createBoard();
-board.name = args.name;
-board.x = args.x;
-board.y = args.y;
-board.resize(args.width, args.height);
-board.clipContent = true;
-board.fills = [{ fillColor: "#FFFFFF", fillOpacity: 1 }];
-const flex = board.addFlexLayout();
-flex.dir = "column";
-flex.alignItems = "stretch";
-flex.justifyContent = "start";
-for (const offset of args.guides) {
-    board.addRulerGuide("horizontal", offset);
+// one undo step for the whole board (the page switch is not undoable)
+const history = penpot.history;
+const block = history && typeof history.undoBlockBegin === "function" ? history.undoBlockBegin() : undefined;
+let board;
+try {
+    board = penpot.createBoard();
+    board.name = args.name;
+    board.x = args.x;
+    board.y = args.y;
+    board.resize(args.width, args.height);
+    board.clipContent = true;
+    board.fills = [{ fillColor: "#FFFFFF", fillOpacity: 1 }];
+    const flex = board.addFlexLayout();
+    flex.dir = "column";
+    flex.alignItems = "stretch";
+    flex.justifyContent = "start";
+    for (const offset of args.guides) {
+        board.addRulerGuide("horizontal", offset);
+    }
+} finally {
+    if (block !== undefined) { history.undoBlockFinish(block); }
 }
 return { boardId: board.id, pageId: penpot.currentPage.id, name: board.name,
     x: board.x, y: board.y, width: board.width, height: board.height };
