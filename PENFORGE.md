@@ -73,11 +73,12 @@ The AI daemon runs on the host, where `claude` is logged in (`claude auth login`
 It extends the MCP server in `mcp/`:
 
 ```bash
-cd mcp
-corepack pnpm -r install
-corepack pnpm run build
-cd packages/server && PENFORGE=1 corepack pnpm run start
+node mcp/scripts/penforge.mjs   # from the repository root, any shell or OS
 ```
+
+It installs dependencies on first run, builds, starts the daemon and prints a
+pairing link (`https://localhost:3449/#/penforge/pair?token=...`). Open it, or
+paste it into the AI tab's pairing box.
 
 Ports on the host: 4401 (MCP), 4402 (plugin bridge), 4410 (agent WebSocket). The
 devenv container's own MCP server is published on 14401 so it does not clash.
