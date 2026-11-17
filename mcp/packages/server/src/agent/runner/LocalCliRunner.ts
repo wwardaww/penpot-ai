@@ -106,6 +106,8 @@ export class LocalCliRunner implements ClaudeRunner {
             includePartialMessages: true,
             resume: conversation.resumeSessionId,
             settingSources: ["project"],
+            // only the Penpot server: no claude.ai connectors or user-level MCP servers
+            strictMcpConfig: true,
             permissionMode: "default",
             mcpServers: {
                 [PENPOT_MCP_SERVER_NAME]: { type: "http", url: this.settings.mcpUrl },
