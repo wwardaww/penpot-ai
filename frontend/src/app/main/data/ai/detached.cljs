@@ -154,6 +154,28 @@
     (when (window-open? opener)
       (.postMessage ^js opener (window-message event) (.. js/window -location -origin)))))
 
+(def pairing-token-key
+  "sessionStorage key of the daemon pairing token; the same key as
+  `app.main.data.ai.client/token-key` (that namespace is not loaded in
+  the detached window page)."
+  "penforge.token")
+
+(defn forget-pairing-token!
+  "Called from the detached window page. `window.open` copies the
+  opener's sessionStorage into the new window, pairing token included.
+  The window never talks to the daemon, so it drops the copy: if it
+  outlives its opener, nothing in it can open a second agent session
+  with that token."
+  ([] (forget-pairing-token! (try
+                               (unchecked-get js/globalThis "sessionStorage")
+                               (catch :default _ nil))))
+  ([^js storage]
+   (when (some? storage)
+     (try
+       (.removeItem storage pairing-token-key)
+       (catch :default cause
+         (log/warn :hint "unable to drop the pairing token" :cause cause))))))
+
 ;; --- Render latency (dev builds only)
 
 (defonce ^:private last-message

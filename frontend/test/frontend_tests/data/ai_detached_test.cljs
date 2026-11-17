@@ -14,6 +14,7 @@
    ["jsdom" :refer [JSDOM]]
    ["react" :as react]
    ["react-dom/client" :as rdc]
+   [app.main.data.ai.client :as client]
    [app.main.data.ai.detached :as detached]
    [app.main.store :as st]
    [app.main.ui.workspace.ai.chat.panel :as panel]
@@ -170,7 +171,37 @@
 (t/deftest ^:async window-page-without-opener-explains-itself
   (let [markup (await (with-dom {}
                         #(render-markup % (mf/element page/detached-chat-page* #js {}))))]
-    (t/is (str/includes? markup "ai-detached-page"))))
+    (t/is (str/includes? markup "ai-detached-page"))
+    (t/is (str/includes? markup "penforge.detached.page.close")
+          "an orphan window only offers to close itself")))
+
+;; --- Pairing token
+
+(defn- fake-storage
+  [entries]
+  (let [items (atom entries)]
+    {:items items
+     :storage #js {:removeItem #(swap! items dissoc %)}}))
+
+(t/deftest pairing-token-key-matches-the-client
+  (t/is (= client/token-key detached/pairing-token-key)))
+
+(t/deftest the-window-drops-the-copied-pairing-token
+  (let [{:keys [items storage]} (fake-storage {"penforge.token" "secret" "other" "kept"})]
+    (detached/forget-pairing-token! storage)
+    (t/is (= {"other" "kept"} @items)))
+  (t/is (nil? (detached/forget-pairing-token! nil)) "no storage, nothing to do"))
+
+(t/deftest ^:async the-window-page-drops-the-token-on-load
+  (let [{:keys [items storage]} (fake-storage {"penforge.token" "secret"})
+        previous (.-sessionStorage js/globalThis)]
+    (set! (.-sessionStorage js/globalThis) storage)
+    (try
+      (await (with-dom {}
+               #(render-markup % (mf/element page/detached-chat-page* #js {}))))
+      (finally
+        (set! (.-sessionStorage js/globalThis) previous)))
+    (t/is (empty? @items))))
 
 (t/deftest ^:async chat-renders-into-the-detached-window-document
   (let [state (assoc-in chat-state [:penforge :detached] {:status :open :window-name "w"})]

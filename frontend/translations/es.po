@@ -10342,9 +10342,9 @@ msgstr "Abrir el chat en una ventana nueva"
 msgid "penforge.detached.dock"
 msgstr "Devolver a la barra lateral"
 
-#: src/app/main/ui/workspace/ai/detached/page.cljs:54
-msgid "penforge.detached.page.continue"
-msgstr "Ir a Penpot"
+#: src/app/main/ui/workspace/ai/detached/page.cljs:57
+msgid "penforge.detached.page.close"
+msgstr "Cerrar ventana"
 
 #: src/app/main/ui/workspace/ai/detached/page.cljs:48
 msgid "penforge.detached.page.orphan"
@@ -10352,7 +10352,7 @@ msgstr "Esta ventana no tiene espacio de trabajo"
 
 #: src/app/main/ui/workspace/ai/detached/page.cljs:52
 msgid "penforge.detached.page.orphan-hint"
-msgstr "Abre un archivo y usa \"Abrir el chat en una ventana nueva\" en la pestaña IA."
+msgstr "Abre el chat desde la pestaña IA de un espacio de trabajo. Esta ventana no se conecta a la IA por sí sola."
 
 #: src/app/main/ui/workspace/ai/detached/page.cljs:47
 msgid "penforge.detached.page.waiting"

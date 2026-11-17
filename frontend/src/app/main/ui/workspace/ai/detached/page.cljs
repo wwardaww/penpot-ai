@@ -7,15 +7,17 @@
 (ns app.main.ui.workspace.ai.detached.page
   "Page of the detached chat window (route `penforge-chat`).
 
-  This page bootstraps no workspace: it tells the workspace tab that
-  opened it that it is ready, and that tab renders the chat on top of
-  it (see `app.main.data.ai.detached`). The page itself only shows a
-  waiting message, or a hint when no workspace tab opened it."
+  This page bootstraps no workspace and never connects to the daemon:
+  it drops the pairing token `window.open` copied from the opener, tells
+  the workspace tab that opened it that it is ready, and that tab
+  renders the chat on top of it (see `app.main.data.ai.detached`). The
+  page itself only shows a waiting message, or, when no workspace tab
+  opened it, a hint and a button that closes the window. It offers no
+  way into the app, so it can never start a second agent session for
+  the file of its opener."
   (:require-macros [app.main.style :as stl])
   (:require
    [app.main.data.ai.detached :as detached]
-   [app.main.router :as rt]
-   [app.main.store :as st]
    [app.main.ui.ds.buttons.button :refer [button*]]
    [app.main.ui.ds.foundations.typography :as t]
    [app.main.ui.ds.foundations.typography.text :refer [text*]]
@@ -31,10 +33,11 @@
   []
   (let [opener? (mf/with-memo [] (has-opener?))
 
-        on-continue
-        (mf/use-fn #(st/emit! (rt/nav-root)))]
+        on-close
+        (mf/use-fn #(.close js/window))]
 
     (mf/with-effect []
+      (detached/forget-pairing-token!)
       (detached/notify-opener! :ready)
       (let [on-hide #(detached/notify-opener! :unload)]
         (.addEventListener js/window "pagehide" on-hide)
@@ -51,5 +54,5 @@
         [:*
          [:> text* {:as "p" :typography t/body-medium :class (stl/css :hint)}
           (tr "penforge.detached.page.orphan-hint")]
-         [:> button* {:variant "primary" :on-click on-continue}
-          (tr "penforge.detached.page.continue")]])]]))
+         [:> button* {:variant "primary" :on-click on-close}
+          (tr "penforge.detached.page.close")]])]]))

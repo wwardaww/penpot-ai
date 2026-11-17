@@ -10349,9 +10349,9 @@ msgstr "Open chat in a new window"
 msgid "penforge.detached.dock"
 msgstr "Bring back to the sidebar"
 
-#: src/app/main/ui/workspace/ai/detached/page.cljs:54
-msgid "penforge.detached.page.continue"
-msgstr "Go to Penpot"
+#: src/app/main/ui/workspace/ai/detached/page.cljs:57
+msgid "penforge.detached.page.close"
+msgstr "Close window"
 
 #: src/app/main/ui/workspace/ai/detached/page.cljs:48
 msgid "penforge.detached.page.orphan"
@@ -10359,7 +10359,7 @@ msgstr "This window has no workspace"
 
 #: src/app/main/ui/workspace/ai/detached/page.cljs:52
 msgid "penforge.detached.page.orphan-hint"
-msgstr "Open a file and use \"Open chat in a new window\" in the AI tab."
+msgstr "Open the chat from the AI tab of a workspace. This window does not connect to the AI on its own."
 
 #: src/app/main/ui/workspace/ai/detached/page.cljs:47
 msgid "penforge.detached.page.waiting"
