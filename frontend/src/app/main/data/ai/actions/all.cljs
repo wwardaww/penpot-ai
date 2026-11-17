@@ -10,4 +10,5 @@
   `app.main.data.ai.actions.<name>` namespace."
   (:require
    [app.main.data.ai.actions.build]
-   [app.main.data.ai.actions.chat]))
+   [app.main.data.ai.actions.chat]
+   [app.main.ui.workspace.ai.build.actions]))
