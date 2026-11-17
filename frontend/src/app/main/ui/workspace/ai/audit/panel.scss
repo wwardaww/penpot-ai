@@ -1,0 +1,151 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/_utils.scss" as *;
+@use "ds/_sizes.scss" as *;
+@use "ds/_borders.scss" as *;
+@use "ds/typography.scss" as t;
+
+.modal-overlay {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-index-set);
+  background-color: var(--color-overlay-default);
+}
+
+.modal-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-l);
+  inline-size: px2rem(480);
+  max-inline-size: calc(100vw - var(--sp-xxxl));
+  max-block-size: 80vh;
+  padding: var(--sp-xxl);
+  border-radius: $br-8;
+  border: $b-2 solid var(--color-background-quaternary);
+  background-color: var(--color-background-primary);
+  color: var(--color-foreground-primary);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-m);
+  min-block-size: 0;
+  overflow-y: auto;
+}
+
+.progress,
+.scope,
+.empty,
+.report {
+  @include t.use-typography("body-medium");
+
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+}
+
+.group-title {
+  @include t.use-typography("headline-small");
+
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs);
+  margin: 0;
+}
+
+.group-icon {
+  color: var(--color-foreground-secondary);
+}
+
+.error {
+  color: var(--color-foreground-error);
+}
+
+.warning {
+  color: var(--color-accent-warning);
+}
+
+.findings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.finding-button {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xxs);
+  inline-size: 100%;
+  padding: var(--sp-s) var(--sp-m);
+  border: none;
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+  color: var(--color-foreground-primary);
+  text-align: start;
+  cursor: pointer;
+
+  &:hover {
+    background-color: var(--color-background-quaternary);
+  }
+}
+
+.finding-title {
+  @include t.use-typography("body-medium");
+
+  font-weight: 600;
+}
+
+.finding-node,
+.finding-suggestion,
+.finding-meta {
+  @include t.use-typography("body-small");
+
+  color: var(--color-foreground-secondary);
+}
+
+.finding-message {
+  @include t.use-typography("body-medium");
+}
+
+.finding-badge {
+  @include t.use-typography("body-small");
+
+  align-self: flex-start;
+  padding: 0 var(--sp-xs);
+  border-radius: $br-4;
+  background-color: var(--color-background-quaternary);
+  color: var(--color-foreground-secondary);
+}
+
+.options {
+  display: flex;
+  align-items: center;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-s);
+}

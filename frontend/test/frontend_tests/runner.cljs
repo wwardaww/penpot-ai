@@ -11,6 +11,7 @@
    [frontend-tests.config-test]
    [frontend-tests.copy-as-svg-test]
    [frontend-tests.data.ai-actions-test]
+   [frontend-tests.data.ai-audit-test]
    [frontend-tests.data.ai-chat-test]
    [frontend-tests.data.ai-protocol-test]
    [frontend-tests.data.auth-test]
@@ -229,6 +230,7 @@
    'frontend-tests.config-test
    'frontend-tests.copy-as-svg-test
    'frontend-tests.data.ai-actions-test
+   'frontend-tests.data.ai-audit-test
    'frontend-tests.data.ai-chat-test
    'frontend-tests.data.ai-protocol-test
    'frontend-tests.data.auth-test

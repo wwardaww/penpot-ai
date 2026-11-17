@@ -9,4 +9,7 @@
   Append-only: each feature adds one require line for its own
   `app.main.data.ai.actions.<name>` namespace."
   (:require
-   [app.main.data.ai.actions.chat]))
+   [app.main.data.ai.actions.audit]
+   [app.main.data.ai.actions.chat]
+   ;; W15: registers the audit results modal
+   [app.main.ui.workspace.ai.audit.panel]))

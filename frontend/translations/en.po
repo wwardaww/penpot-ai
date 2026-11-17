@@ -10326,3 +10326,97 @@ msgstr "Copy the link again from the Penforge agent output."
 #: src/app/main/ui/workspace/sidebar.cljs:176
 msgid "penforge.sidebar.tab"
 msgstr "AI"
+
+# penforge:W15
+
+#: src/app/main/data/ai/actions/audit.cljs
+msgid "penforge.actions.audit"
+msgstr "Audit design"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.title"
+msgstr "Design audit"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.running"
+msgstr "Checking the design…"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.fixing"
+msgstr "Fixing the audit comments…"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.not-connected"
+msgstr "Connect the AI assistant first (AI tab in the left sidebar)."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.error"
+msgstr "The audit could not finish: %s"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.stopped"
+msgstr "Stopped."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.no-findings"
+msgstr "No problems found."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.scope"
+msgstr "Checked %s layers in %s boards."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.comments-added"
+msgstr "Added %s comments to the canvas."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.truncated"
+msgstr "This page is large, so only part of it was checked."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.group.error"
+msgstr "Errors (%s)"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.group.warning"
+msgstr "Warnings (%s)"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.group.info"
+msgstr "Notes (%s)"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.suggestion"
+msgstr "Fix: %s"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.already-commented"
+msgstr "Already commented"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.show-node"
+msgstr "Show on canvas"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.report"
+msgstr "Report saved to %s"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.fixed"
+msgstr "Fixed %s of %s comments."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.ai-review"
+msgstr "Include AI review (hierarchy, alignment, consistency)"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.run-again"
+msgstr "Run again"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.stop"
+msgstr "Stop"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.fix-all"
+msgstr "Fix all with AI"
