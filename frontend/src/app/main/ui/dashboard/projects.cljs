@@ -24,6 +24,9 @@
    [app.main.ui.dashboard.import :as udi]
    [app.main.ui.dashboard.inline-edition :refer [inline-edition]]
    [app.main.ui.dashboard.layout-toggle :as lt :refer [layout-toggle*]]
+   [app.main.ui.dashboard.penforge.create-project]
+   [app.main.ui.dashboard.penforge.persona :refer [persona-gate*]]
+   [app.main.ui.dashboard.penforge.platform-badge :refer [platform-badge*]]
    [app.main.ui.dashboard.project-menu :refer [project-menu*
                                                project-menu-items*]]
    [app.main.ui.ds.buttons.button :refer [button*]]
@@ -240,6 +243,8 @@
                                    :on-edit on-edit-open
                                    :on-import-click on-import-click}]])
 
+       [:> platform-badge* {:project-id project-id}]
+
        [:div {:class (stl/css :info-wrapper)}
 
         ;; We group these two spans under a div to avoid having extra space between them.
@@ -382,6 +387,7 @@
 
     (when (seq projects)
       [:*
+       [:> persona-gate*]
        [:> header* {:can-edit can-edit
                     :layout layout
                     :on-change on-layout-change

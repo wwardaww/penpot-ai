@@ -1,0 +1,22 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/_borders.scss" as *;
+
+.badge {
+  flex: none;
+  padding-block: var(--sp-xxs);
+  padding-inline: var(--sp-s);
+  margin-inline-end: var(--sp-m);
+  border-radius: $br-8;
+  border: $b-1 solid var(--color-background-quaternary);
+  background-color: var(--color-background-tertiary);
+  color: var(--color-foreground-secondary);
+}
+
+.badge-mobile {
+  color: var(--color-accent-primary);
+}

@@ -12,6 +12,7 @@
    [app.common.data.macros :as dm]
    [app.common.schema :as sm]
    [app.main.data.event :as ev]
+   [app.main.data.penforge :as pf]
    [app.main.data.profile :as du]
    [app.main.store :as st]
    [app.main.ui.components.forms :as fm]
@@ -358,9 +359,13 @@
         (mf/use-fn
          (mf/deps @clean-data)
          (fn [form]
-           (let [data (merge @clean-data (:clean-data @form))]
+           (let [data    (merge @clean-data (:clean-data @form))
+                 persona (when (pf/enabled?)
+                           (pf/role->persona (:role data)))]
              (reset! clean-data data)
-             (st/emit! (du/mark-questions-as-answered data)))))]
+             (st/emit! (du/mark-questions-as-answered data))
+             (when (some? persona)
+               (st/emit! (pf/set-persona persona))))))]
 
     [:div {:class (stl/css-case
                    :modal-overlay true)}
