@@ -20,3 +20,5 @@ export { workflow as designMdSave } from "./design-md-save";
 export { workflow as designMdDraft } from "./design-md-draft";
 export { workflow as designMdImport } from "./design-md-import";
 export { workflow as designMdExport } from "./design-md-export";
+export { workflow as buildPlan } from "./build-plan";
+export { workflow as buildRun } from "./build-run";
