@@ -7,20 +7,20 @@
 (ns app.main.data.ai.actions.all
   "Loads every AI action namespace so its actions get registered.
   Append-only: each feature adds one require line for its own
-  `app.main.data.ai.actions.<name>` namespace."
+  `app.main.data.ai.actions.<name>` namespace, keeping the list sorted."
   (:require
-   [app.main.data.ai.actions.chat]
-   [app.main.data.ai.actions.build]
-   [app.main.data.ai.actions.ask]
-   ;; W19: AI history dialog; requires app.main.data.ai.actions.checkpoints
-   [app.main.ui.workspace.ai.checkpoints.history]
-   [app.main.data.ai.actions.auto-name]
-   [app.main.data.ai.actions.comments]
-   [app.main.data.ai.actions.generate]
    [app.main.data.ai.actions.adapt]
+   [app.main.data.ai.actions.ask]
    [app.main.data.ai.actions.audit]
+   [app.main.data.ai.actions.auto-name]
+   [app.main.data.ai.actions.build]
+   [app.main.data.ai.actions.chat]
+   [app.main.data.ai.actions.comments]
+   [app.main.data.ai.actions.design-md]
+   [app.main.data.ai.actions.detached]
+   [app.main.data.ai.actions.generate]
    ;; W15: registers the audit results modal
    [app.main.ui.workspace.ai.audit.panel]
-   [app.main.data.ai.actions.design-md]
    [app.main.ui.workspace.ai.build.actions]
-   [app.main.data.ai.actions.detached]))
+   ;; W19: AI history dialog; requires app.main.data.ai.actions.checkpoints
+   [app.main.ui.workspace.ai.checkpoints.history]))
