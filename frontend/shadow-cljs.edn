@@ -3,6 +3,11 @@
  :nrepl {:port #shadow/env ["NREPL_PORT" :as :int :default 3447] :host "0.0.0.0"}
  :dev-http {#shadow/env ["DEV_PORT" :as :int :default 8888] "classpath:public"}
  :cache-root #shadow/env ["CACHE" :default ".shadow-cljs"]
+ ;; Penforge: poll for changes. File events do not cross the Windows/macOS
+ ;; file-sharing bridge into the devenv container, so the default watcher
+ ;; never saw edits made on the host. A full scan of the sources takes
+ ;; about 1.7 s over the bridge; scan every 2 s.
+ :fs-watch {:impl :polling :loop-wait 2000}
 
  :builds
  {:main
