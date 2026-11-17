@@ -10868,3 +10868,228 @@ msgstr "Made \"%s\" (%s×%s). Layers to check: %s."
 #: src/app/main/data/ai/actions/adapt.cljs:122
 msgid "penforge.adapt.summary.kept"
 msgstr "Kept %s"
+# penforge:W15
+
+#: src/app/main/data/ai/actions/audit.cljs
+msgid "penforge.actions.audit"
+msgstr "Audit design"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.title"
+msgstr "Design audit"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.running"
+msgstr "Checking the design…"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.fixing"
+msgstr "Fixing the audit comments…"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.not-connected"
+msgstr "Connect the AI assistant first (AI tab in the left sidebar)."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.error"
+msgstr "The audit could not finish: %s"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.stopped"
+msgstr "Stopped."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.no-findings"
+msgstr "No problems found."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.scope"
+msgstr "Checked %s layers in %s boards."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.comments-added"
+msgstr "Added %s comments to the canvas."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.truncated"
+msgstr "This page is large, so only part of it was checked."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.group.error"
+msgstr "Errors (%s)"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.group.warning"
+msgstr "Warnings (%s)"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.group.info"
+msgstr "Notes (%s)"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.suggestion"
+msgstr "Fix: %s"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.already-commented"
+msgstr "Already commented"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.show-node"
+msgstr "Show on canvas"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.report"
+msgstr "Report saved to %s"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.fixed"
+msgstr "Fixed %s of %s comments."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.ai-review"
+msgstr "Include AI review (hierarchy, alignment, consistency)"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.run-again"
+msgstr "Run again"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.stop"
+msgstr "Stop"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.fix-all"
+msgstr "Fix all with AI"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.contrast-unchecked"
+msgstr "Contrast not checked for %s texts: nothing opaque is behind them (or only gradients and images)."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.ai-badge"
+msgstr "AI review"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.contrast.title"
+msgstr "Low contrast"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.contrast.message"
+msgstr "%s has a contrast of %s:1 against %s; text this size needs at least %s:1 to be easy to read."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.contrast.suggestion"
+msgstr "Use a text color such as %s, or change the background."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.contrast.suggestion-generic"
+msgstr "Change the text or background color so they stand apart more."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.touch-target.title"
+msgstr "Small tap target"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.touch-target.message"
+msgstr "%s is %s×%s px; targets should be at least %s×%s px."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.touch-target.suggestion"
+msgstr "Make it at least %s×%s px, for example with padding around the content."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.text-cut-off.title"
+msgstr "Text cut off"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.text-cut-off.message"
+msgstr "%s sticks out of \"%s\", which hides what overflows."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.text-cut-off.suggestion"
+msgstr "Move or shrink the text, or make the board larger."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.text-may-overflow.title"
+msgstr "Text may overflow"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.text-may-overflow.message"
+msgstr "%s needs about %s lines, but its fixed-size box fits about %s."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.text-may-overflow.suggestion"
+msgstr "Set the text box to auto height, make it taller, or shorten the text."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.broken-component.title"
+msgstr "Broken component copy"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.broken-component.message"
+msgstr "%s is a component copy whose main component is missing."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.broken-component.suggestion"
+msgstr "Swap it for a component from the library, or detach it on purpose."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.detached-component.title"
+msgstr "Detached component"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.detached-component.message"
+msgstr "%s looks like a copy of the \"%s\" component that is no longer linked to it."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.detached-component.suggestion"
+msgstr "Replace it with an instance of \"%s\" so library changes reach it."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.spacing.title"
+msgstr "Off-scale spacing"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.spacing.message"
+msgstr "%s uses spacing of %s, which is not on the %s px grid."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.spacing.suggestion"
+msgstr "Change it to %s, or apply a spacing token."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.color-duplicate.title"
+msgstr "Near-duplicate color"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.color-duplicate.message"
+msgstr "%s on %s is almost the same as %s (used %s times); the difference is hard to see."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.color-duplicate.suggestion"
+msgstr "Use %s instead, ideally from a shared library color or token."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.type-scale.title"
+msgstr "Off-scale font size"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.type-scale.message"
+msgstr "Font size %s px (%s, %s text layers) is not on the type scale."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.type-scale.suggestion"
+msgstr "Use %s px, or a text style from the library."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.default-name.title"
+msgstr "Default layer names"
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.default-name.message"
+msgstr "%s layers have a default name, such as %s."
+
+#: src/app/main/ui/workspace/ai/audit/panel.cljs
+msgid "penforge.audit.default-name.suggestion"
+msgstr "Give layers names that say what they are (Auto-name can do it for you)."

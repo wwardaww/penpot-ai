@@ -16,4 +16,7 @@
    [app.main.data.ai.actions.auto-name]
    [app.main.data.ai.actions.comments]
    [app.main.data.ai.actions.generate]
-   [app.main.data.ai.actions.adapt]))
+   [app.main.data.ai.actions.adapt]
+   [app.main.data.ai.actions.audit]
+   ;; W15: registers the audit results modal
+   [app.main.ui.workspace.ai.audit.panel]))
