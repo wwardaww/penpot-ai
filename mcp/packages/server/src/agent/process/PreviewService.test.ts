@@ -4,15 +4,18 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import type { ContextSetMessage } from "@penpot/mcp-common";
+import type { ContextSetMessage, DaemonMessage } from "@penpot/mcp-common";
+import type { AgentClient } from "../AgentClient";
 import { AgentConfig } from "../AgentConfig";
 import { PenforgeDaemon } from "../PenforgeDaemon";
 import { FakeRunner } from "../runner/FakeRunner";
 import { AgentTestClient } from "../testing/AgentTestClient";
+import { CommandPolicy } from "./CommandPolicy";
 import { DevServerManager } from "./DevServerManager";
 import { PortPool } from "./PortPool";
+import { PreviewService } from "./PreviewService";
 
-const FAKE_SERVER = join(dirname(fileURLToPath(import.meta.url)), "testing", "fakeDevServer.mjs");
+const FAKE_SERVER = join(dirname(fileURLToPath(import.meta.url)), "testing", "fakeDevServer.mjs").replace(/\\/g, "/");
 const ORIGIN = "https://localhost:3449";
 const PROJECT_ID = "6a1f0e2c-7d33-4f0b-9c55-0e1d2b3c4d01";
 const FIRST_PORT = 47360;
@@ -51,6 +54,7 @@ beforeEach(async () => {
         probeIntervalMs: 50,
         restartDelayMs: 50,
         idleStopMs: 200,
+        commandPolicy: new CommandPolicy(["node"]),
     });
     daemon = new PenforgeDaemon(config, { runner: new FakeRunner(), tools: null, devServers, authTimeoutMs: 500 });
     await daemon.start();
@@ -79,7 +83,7 @@ async function client(persona: "designer" | "developer"): Promise<AgentTestClien
 
 function writeStack(mode: string): void {
     const file = join(home, "projects", PROJECT_ID, ".penforge", "stack.json");
-    writeFileSync(file, JSON.stringify({ name: "fake", dev: `node "${FAKE_SERVER}" ${mode}` }));
+    writeFileSync(file, JSON.stringify({ name: "fake", commands: { dev: ["node", FAKE_SERVER, mode] } }));
 }
 
 test("preview.start runs the dev server and reports ready", async () => {
@@ -123,7 +127,8 @@ test("preview.stop stops the server for every watching tab", async () => {
 
     b.send({ type: "preview.stop", projectId: PROJECT_ID });
     await a.next("preview.stopped");
-    await a.next("preview.status", (m) => m.state === "stopped");
+    const status = await a.next("preview.status", (m) => m.state === "stopped");
+    assert.equal(status.reason, "stopped");
     await b.next("preview.stopped");
     assert.deepEqual(devServers.liveProjects, []);
 });
@@ -166,4 +171,52 @@ test("stopping the daemon stops the dev servers", async () => {
     await daemon.stop();
     assert.deepEqual(devServers.liveProjects, []);
     assert.equal(await PortPool.isFree(FIRST_PORT), true);
+});
+
+/** Client double counting the listeners on its close signal. */
+class CountingClient implements AgentClient {
+    public readonly id = "client-1";
+    public readonly sent: DaemonMessage[] = [];
+    public listeners = 0;
+    private readonly controller = new AbortController();
+
+    constructor(private readonly home: string) {
+        const signal = this.controller.signal;
+        const add = signal.addEventListener.bind(signal);
+        signal.addEventListener = ((...args: Parameters<AbortSignal["addEventListener"]>) => {
+            this.listeners++;
+            add(...args);
+        }) as AbortSignal["addEventListener"];
+    }
+
+    public get closed(): AbortSignal {
+        return this.controller.signal;
+    }
+
+    public send(message: DaemonMessage): void {
+        this.sent.push(message);
+    }
+
+    public close(): void {
+        this.controller.abort();
+    }
+
+    public async setup(): ReturnType<AgentClient["setup"]> {
+        const { ProjectWorkspace } = await import("../workspace/ProjectWorkspace");
+        const workspace = new ProjectWorkspace(join(this.home, "projects"), PROJECT_ID);
+        const { type: _type, ...ctx } = context("designer");
+        return { context: ctx, workspace } as unknown as Awaited<ReturnType<AgentClient["setup"]>>;
+    }
+}
+
+test("repeated preview.start keeps one close listener per client", async () => {
+    const service = new PreviewService(devServers);
+    const fake = new CountingClient(home);
+    for (let i = 0; i < 5; i++) {
+        await service.start(fake, { type: "preview.start", projectId: PROJECT_ID }).catch(() => undefined);
+    }
+    assert.equal(fake.listeners, 1);
+    assert.equal(service.subscriberCount, 1);
+    fake.close();
+    assert.equal(service.subscriberCount, 0);
 });

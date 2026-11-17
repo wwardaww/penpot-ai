@@ -257,6 +257,15 @@ export interface PreviewStoppedMessage {
 export type PreviewState = "starting" | "ready" | "stopped" | "failed";
 
 /**
+ * Why a dev server is restarting, stopped or failed; the client words it for the user.
+ * `restarting` after a crash, `start-timeout` (no HTTP answer in time), `crashed` (gave up after
+ * the restarts), `command-failed` (the dev command could not start), `stopped` (`preview.stop`),
+ * `project-closed` (no tab watched it for a while), `daemon-stopped`.
+ */
+export type PreviewReason =
+    "restarting" | "start-timeout" | "crashed" | "command-failed" | "stopped" | "project-closed" | "daemon-stopped";
+
+/**
  * Status of a project's dev server; sent on every state change (and on `preview.start` of a
  * client that joins a running server). `preview.ready` / `preview.stopped` are sent as well.
  */
@@ -266,7 +275,9 @@ export interface PreviewStatusMessage {
     state: PreviewState;
     /** preview URL once a port is assigned */
     url?: string;
-    /** why the server failed or stopped (plain language) */
+    /** why the server is restarting, failed or stopped (code; see {@link PreviewReason}) */
+    reason?: PreviewReason;
+    /** technical detail of `reason`, in English (for logs and the developer persona) */
     message?: string;
     /** number of restarts after crashes */
     restarts?: number;

@@ -23,6 +23,7 @@ class ClientPreviewObserver implements DevServerObserver {
             projectId,
             state: status.state,
             url: status.url,
+            reason: status.reason,
             message: status.message,
             restarts: status.restarts,
         });
@@ -48,6 +49,7 @@ class ClientPreviewObserver implements DevServerObserver {
  * client disconnects) and starts the server, or replays the status of the running one.
  */
 export class PreviewService {
+    /** current subscription of each client, by client id */
     private readonly watches = new Map<string, PreviewWatch>();
 
     /**
@@ -80,7 +82,7 @@ export class PreviewService {
     public async stop(client: AgentClient, message: PreviewStopMessage): Promise<void> {
         const { context } = await client.setup();
         PreviewService.checkProject(context, message.projectId);
-        const wasRunning = await this.manager.stop(context.projectId, "Stopped");
+        const wasRunning = await this.manager.stop(context.projectId, "stopped");
         if (!wasRunning) {
             client.send({ type: "preview.status", projectId: context.projectId, state: "stopped", restarts: 0 });
         }
@@ -94,21 +96,28 @@ export class PreviewService {
     }
 
     private subscribe(client: AgentClient, context: AgentContext): ClientPreviewObserver {
-        this.watches.get(client.id)?.dispose();
-        const observer = new ClientPreviewObserver(client, context.projectId, context.persona);
-        const watch = this.manager.watch(context.projectId, observer);
-        this.watches.set(client.id, watch);
-        client.closed.addEventListener(
-            "abort",
-            () => {
-                watch.dispose();
-                if (this.watches.get(client.id) === watch) {
+        const previous = this.watches.get(client.id);
+        if (previous) {
+            previous.dispose();
+        } else {
+            // one listener per client, however often it starts the preview
+            client.closed.addEventListener(
+                "abort",
+                () => {
+                    this.watches.get(client.id)?.dispose();
                     this.watches.delete(client.id);
-                }
-            },
-            { once: true }
-        );
+                },
+                { once: true }
+            );
+        }
+        const observer = new ClientPreviewObserver(client, context.projectId, context.persona);
+        this.watches.set(client.id, this.manager.watch(context.projectId, observer));
         return observer;
+    }
+
+    /** Number of clients with a preview subscription (for tests). */
+    public get subscriberCount(): number {
+        return this.watches.size;
     }
 
     private static checkProject(context: AgentContext, projectId: string): void {

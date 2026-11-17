@@ -68,6 +68,21 @@ export class PortPool {
     }
 
     /**
+     * Reserves a port a dev server chose itself (announced in its output), if it lies in the
+     * range and no other server holds it.
+     *
+     * @param port - the announced port
+     * @returns whether the port is now reserved for the caller
+     */
+    public claim(port: number): boolean {
+        if (!Number.isInteger(port) || port < this.first || port > this.last || this.taken.has(port)) {
+            return false;
+        }
+        this.taken.add(port);
+        return true;
+    }
+
+    /**
      * Returns a port to the pool.
      *
      * @param port - a port returned by {@link acquire}

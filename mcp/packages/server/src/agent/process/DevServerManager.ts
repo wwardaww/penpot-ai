@@ -1,3 +1,4 @@
+import type { PreviewReason } from "@penpot/mcp-common";
 import { createLogger } from "../../logger";
 import type { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import {
@@ -7,6 +8,7 @@ import {
     type LogLine,
     type PreviewStatus,
 } from "./DevServer";
+import { CommandPolicy } from "./CommandPolicy";
 import { PortPool } from "./PortPool";
 import { StackConfig } from "./StackConfig";
 
@@ -16,6 +18,8 @@ export interface DevServerManagerOptions extends Partial<DevServerOptions> {
     ports?: PortPool;
     /** time a server keeps running once nobody watches it (survives page reloads) */
     idleStopMs?: number;
+    /** rules for the dev command; package managers only by default */
+    commandPolicy?: CommandPolicy;
 }
 
 /**
@@ -46,10 +50,11 @@ export class PreviewWatch {
  * process tree when the daemon stops or the node process exits.
  */
 export class DevServerManager {
-    private static readonly DEFAULTS: DevServerOptions = {
+    private static readonly DEFAULTS: Omit<DevServerOptions, "baseEnv"> = {
         maxRestarts: 3,
         probeIntervalMs: 500,
         restartDelayMs: 1000,
+        healthyMs: 60_000,
     };
     private static readonly DEFAULT_IDLE_STOP_MS = 120_000;
 
@@ -57,6 +62,7 @@ export class DevServerManager {
     private readonly ports: PortPool;
     private readonly idleStopMs: number;
     private readonly serverOptions: DevServerOptions;
+    private readonly policy: CommandPolicy;
     private readonly servers = new Map<string, DevServer>();
     private readonly pending = new Map<string, Promise<DevServer>>();
     private readonly watchers = new Map<string, Set<DevServerObserver>>();
@@ -74,7 +80,10 @@ export class DevServerManager {
             maxRestarts: options.maxRestarts ?? DevServerManager.DEFAULTS.maxRestarts,
             probeIntervalMs: options.probeIntervalMs ?? DevServerManager.DEFAULTS.probeIntervalMs,
             restartDelayMs: options.restartDelayMs ?? DevServerManager.DEFAULTS.restartDelayMs,
+            healthyMs: options.healthyMs ?? DevServerManager.DEFAULTS.healthyMs,
+            baseEnv: options.baseEnv ?? process.env,
         };
+        this.policy = options.commandPolicy ?? new CommandPolicy();
     }
 
     /**
@@ -103,16 +112,16 @@ export class DevServerManager {
      * Stops the dev server of a project.
      *
      * @param projectId - the project
-     * @param message - why, for the client
+     * @param reason - why, for the client
      * @returns whether a server was running
      */
-    public async stop(projectId: string, message?: string): Promise<boolean> {
+    public async stop(projectId: string, reason: PreviewReason = "stopped"): Promise<boolean> {
         await this.pending.get(projectId)?.catch(() => undefined);
         const server = this.servers.get(projectId);
         if (!server) {
             return false;
         }
-        await server.stop(message);
+        await server.stop(reason);
         return true;
     }
 
@@ -121,7 +130,7 @@ export class DevServerManager {
      */
     public async stopAll(): Promise<void> {
         await Promise.all([...this.pending.values()].map((pending) => pending.catch(() => undefined)));
-        await Promise.all([...this.servers.keys()].map((projectId) => this.stop(projectId, "Penforge stopped")));
+        await Promise.all([...this.servers.keys()].map((projectId) => this.stop(projectId, "daemon-stopped")));
     }
 
     /**
@@ -172,12 +181,13 @@ export class DevServerManager {
 
     private async launch(workspace: ProjectWorkspace): Promise<DevServer> {
         const projectId = workspace.projectId;
-        const stack = await StackConfig.load(workspace);
+        const stack = await StackConfig.load(workspace, this.policy);
         const port = await this.ports.acquire();
         const server = new DevServer(
             projectId,
             stack,
             port,
+            this.ports,
             {
                 onStatus: (status) => this.statusChanged(server, status),
                 onLog: (line) => this.forEachWatcher(projectId, (watcher) => watcher.onLog(line)),
@@ -197,7 +207,9 @@ export class DevServerManager {
             if (this.servers.get(projectId) === server) {
                 this.servers.delete(projectId);
             }
-            this.ports.release(server.port);
+            for (const port of [server.port, ...server.claimedPorts]) {
+                this.ports.release(port);
+            }
             this.cancelIdleStop(projectId);
             if (this.servers.size === 0) {
                 this.removeExitHook();
@@ -225,7 +237,7 @@ export class DevServerManager {
             this.idleTimers.delete(projectId);
             if ((this.watchers.get(projectId)?.size ?? 0) === 0) {
                 this.logger.info("Stopping the unwatched dev server of project %s", projectId);
-                void this.stop(projectId, "The project was closed");
+                void this.stop(projectId, "project-closed");
             }
         }, this.idleStopMs);
         timer.unref();

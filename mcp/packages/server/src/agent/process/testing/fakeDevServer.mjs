@@ -7,6 +7,8 @@
 //   crash-once <file>  exit with code 1 when <file> does not exist (and create it), else serve
 //   never              print output but never listen
 //   tree <file>        start a grandchild that serves on $PORT, write its pid to <file>, stay alive
+//   flaky              serve on $PORT, then exit with code 1 after 400 ms
+//   env <file>         write the environment as JSON to <file>, then serve
 //   child              (internal) serve on $PORT; used by `tree`
 import { spawn } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
@@ -47,6 +49,14 @@ switch (mode) {
             console.error("first start crashes");
             process.exit(1);
         }
+        break;
+    case "flaky":
+        serve(port);
+        setTimeout(() => process.exit(1), 400);
+        break;
+    case "env":
+        writeFileSync(arg, JSON.stringify(process.env));
+        serve(port);
         break;
     case "never":
         console.log("starting, but never listening");

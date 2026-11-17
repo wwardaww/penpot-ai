@@ -1,6 +1,9 @@
-import type { PreviewLogMessage, PreviewState } from "@penpot/mcp-common";
+import type { PreviewLogMessage, PreviewReason, PreviewState } from "@penpot/mcp-common";
 import { createLogger } from "../../logger";
+import { ChildEnv } from "./ChildEnv";
+import { CommandLauncher } from "./CommandLauncher";
 import { HttpProbe } from "./HttpProbe";
+import type { PortPool } from "./PortPool";
 import { ProcessTree } from "./ProcessTree";
 import type { StackConfig } from "./StackConfig";
 
@@ -8,6 +11,9 @@ import type { StackConfig } from "./StackConfig";
 export interface PreviewStatus {
     state: PreviewState;
     url?: string;
+    /** why it is restarting, stopped or failed */
+    reason?: PreviewReason;
+    /** technical detail, in English */
     message?: string;
     restarts: number;
 }
@@ -32,16 +38,25 @@ export interface DevServerOptions {
     probeIntervalMs: number;
     /** pause before a restart */
     restartDelayMs: number;
+    /** time a server must stay ready before a crash no longer counts against the restart limit */
+    healthyMs: number;
+    /** environment the child environment is derived from (secrets are dropped) */
+    baseEnv: NodeJS.ProcessEnv;
 }
 
 /**
  * Dev server of one project's generated app.
  *
- * Runs the stack's dev command in its own process tree with the assigned port, reports `starting`
- * until the server answers HTTP, then `ready`. Restarts it after a crash (up to
- * {@link DevServerOptions.maxRestarts} times), reports `failed` when it does not come up in time
- * or keeps crashing, and kills the whole tree on {@link stop}. Servers that ignore the port and
- * announce another loopback URL in their output are found on that port instead.
+ * Runs the stack's dev command (an argument vector, no shell) in its own process tree with the
+ * assigned port, bound to the loopback interface where the stack honours `HOST`, with an
+ * environment free of secrets. Reports `starting` until the server answers HTTP, then `ready`.
+ * Restarts it after a crash (up to {@link DevServerOptions.maxRestarts} times in a row; a server
+ * that stayed up for {@link DevServerOptions.healthyMs} starts counting again), reports `failed`
+ * when it does not come up in time or keeps crashing, and kills the whole tree on {@link stop}.
+ *
+ * The assigned port is always probed first. A server that ignores it may announce a loopback URL
+ * in its output; that port is used only if it lies in the daemon's port pool and can be reserved
+ * there, so URLs of unrelated services (proxy targets, other apps) are ignored.
  */
 export class DevServer {
     /** Number of output lines kept for clients that join later. */
@@ -50,16 +65,17 @@ export class DevServer {
     private static readonly MAX_LINE_LENGTH = 2000;
     // eslint-disable-next-line no-control-regex
     private static readonly ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
-    private static readonly ANNOUNCED_URL = /https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0):(\d{2,5})/;
+    private static readonly ANNOUNCED_URL = /https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\]):(\d{2,5})(?![\d])/g;
 
     private readonly logger = createLogger("DevServer");
     private readonly probe: HttpProbe;
     private readonly logs: LogLine[] = [];
     private readonly partial = new Map<LogLine["stream"], string>();
-    private readonly announcedPorts = new Set<number>();
+    private readonly claimed = new Set<number>();
     private status: PreviewStatus;
     private tree?: ProcessTree;
     private restartTimer?: NodeJS.Timeout;
+    private readyAt?: number;
     /** incremented on every launch and on stop; stale callbacks compare against it */
     private generation = 0;
     private stopped = false;
@@ -67,7 +83,8 @@ export class DevServer {
     /**
      * @param projectId - the project
      * @param stack - the project's stack settings
-     * @param port - the assigned port
+     * @param port - the assigned port (reserved in `ports`)
+     * @param ports - the port pool, for ports the server announces itself
      * @param observer - receives status changes and output
      * @param options - tunables
      */
@@ -75,6 +92,7 @@ export class DevServer {
         public readonly projectId: string,
         private readonly stack: StackConfig,
         public readonly port: number,
+        private readonly ports: PortPool,
         private readonly observer: DevServerObserver,
         private readonly options: DevServerOptions
     ) {
@@ -97,6 +115,11 @@ export class DevServer {
         return [...this.logs];
     }
 
+    /** Ports the server announced and that were reserved for it in the pool. */
+    public get claimedPorts(): number[] {
+        return [...this.claimed];
+    }
+
     /** Process id of the running tree's root, if any. */
     public get pid(): number | undefined {
         return this.tree?.hasExited ? undefined : this.tree?.pid;
@@ -112,9 +135,9 @@ export class DevServer {
     /**
      * Kills the process tree and reports `stopped`.
      *
-     * @param message - why it stopped, for the client
+     * @param reason - why it stopped
      */
-    public async stop(message?: string): Promise<void> {
+    public async stop(reason: PreviewReason = "stopped"): Promise<void> {
         if (this.stopped) {
             return;
         }
@@ -123,8 +146,8 @@ export class DevServer {
         clearTimeout(this.restartTimer);
         await this.tree?.kill();
         if (this.status.state !== "failed") {
-            this.log("system", "Dev server stopped");
-            this.setStatus({ state: "stopped", message });
+            this.log("system", `Dev server stopped (${reason})`);
+            this.setStatus({ state: "stopped", reason });
         }
     }
 
@@ -140,38 +163,52 @@ export class DevServer {
 
     private launch(): void {
         const generation = ++this.generation;
-        this.announcedPorts.clear();
         this.partial.clear();
-        const command = this.stack.commandFor(this.port);
-        this.setStatus({ state: "starting", url: DevServer.urlFor(this.port) });
-        this.log("system", `$ ${command}  (port ${this.port})`);
-        this.logger.info("Starting dev server of project %s on port %d: %s", this.projectId, this.port, command);
-
-        const tree = new ProcessTree(command, {
-            cwd: this.stack.cwd,
-            env: {
-                ...process.env,
-                [this.stack.portEnv]: String(this.port),
-                BROWSER: "none",
-                FORCE_COLOR: "0",
-            },
-            stdio: ["ignore", "pipe", "pipe"],
+        this.readyAt = undefined;
+        const argv = this.stack.argvFor(this.port);
+        this.setStatus({
+            state: "starting",
+            url: DevServer.urlFor(this.port),
+            reason: this.status.restarts > 0 ? "restarting" : undefined,
         });
+        this.log("system", `> ${argv.join(" ")}  (port ${this.port})`);
+        this.logger.info("Starting dev server of project %s on port %d: %s", this.projectId, this.port, argv.join(" "));
+
+        const env = ChildEnv.scrub(this.options.baseEnv, {
+            [this.stack.portEnv]: String(this.port),
+            HOST: "127.0.0.1",
+            BROWSER: "none",
+            FORCE_COLOR: "0",
+        });
+        let tree: ProcessTree;
+        try {
+            const spec = new CommandLauncher(env).spawnSpec(argv);
+            tree = new ProcessTree(spec, { cwd: this.stack.cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+        } catch (error) {
+            void this.fail("command-failed", error instanceof Error ? error.message : String(error));
+            return;
+        }
         this.tree = tree;
         tree.child.stdout?.on("data", (chunk: Buffer) => this.output("stdout", chunk));
         tree.child.stderr?.on("data", (chunk: Buffer) => this.output("stderr", chunk));
-        tree.child.once("error", (error) => this.log("system", `Could not start the dev server: ${error.message}`));
-        tree.waitForExit().then(() => this.exited(generation, tree.child.exitCode));
+        tree.child.once("error", (error) => {
+            if (tree.pid === undefined && this.isCurrent(generation)) {
+                void this.fail("command-failed", `Could not start the dev server: ${error.message}`);
+            }
+        });
+        tree.waitForExit().then(() => this.exited(generation, tree));
         void this.waitUntilReady(generation);
     }
 
     private async waitUntilReady(generation: number): Promise<void> {
         const deadline = Date.now() + this.stack.readyTimeoutMs;
         while (this.isCurrent(generation) && this.status.state === "starting") {
-            for (const port of [this.port, ...this.announcedPorts]) {
+            // the assigned port first, then ports the server announced and that were reserved
+            for (const port of [this.port, ...this.claimed]) {
                 if (await this.probe.answers(port)) {
                     if (this.isCurrent(generation) && this.status.state === "starting") {
                         this.log("system", `Dev server ready on port ${port}`);
+                        this.readyAt = Date.now();
                         this.setStatus({ state: "ready", url: DevServer.urlFor(port) });
                     }
                     return;
@@ -179,7 +216,7 @@ export class DevServer {
             }
             if (Date.now() > deadline) {
                 if (this.isCurrent(generation)) {
-                    await this.fail("The app did not start in time.");
+                    await this.fail("start-timeout", "The app did not answer in time");
                 }
                 return;
             }
@@ -187,20 +224,23 @@ export class DevServer {
         }
     }
 
-    private exited(generation: number, code: number | null): void {
+    private exited(generation: number, tree: ProcessTree): void {
         this.flush();
-        if (!this.isCurrent(generation)) {
+        if (!this.isCurrent(generation) || tree.pid === undefined) {
             return;
         }
+        const code = tree.child.exitCode;
         this.log("system", `Dev server exited${code === null ? "" : ` with code ${code}`}`);
-        if (this.status.restarts >= this.options.maxRestarts) {
-            void this.fail("The app stopped and could not be restarted.");
+        const healthy = this.readyAt !== undefined && Date.now() - this.readyAt >= this.options.healthyMs;
+        const previous = healthy ? 0 : this.status.restarts;
+        if (previous >= this.options.maxRestarts) {
+            void this.fail("crashed", "The app stopped and could not be restarted");
             return;
         }
-        const restarts = this.status.restarts + 1;
+        const restarts = previous + 1;
         // ends the readiness loop of the crashed process
         const pending = ++this.generation;
-        this.setStatus({ state: "starting", restarts, message: "Restarting the app" });
+        this.setStatus({ state: "starting", restarts, reason: "restarting" });
         this.restartTimer = setTimeout(() => {
             if (this.isCurrent(pending)) {
                 this.log("system", `Restarting (${restarts} of ${this.options.maxRestarts})`);
@@ -209,14 +249,14 @@ export class DevServer {
         }, this.options.restartDelayMs);
     }
 
-    private async fail(message: string): Promise<void> {
+    private async fail(reason: PreviewReason, message: string): Promise<void> {
         this.stopped = true;
         this.generation++;
         clearTimeout(this.restartTimer);
         this.log("system", message);
         this.logger.warn("Dev server of project %s failed: %s", this.projectId, message);
         await this.tree?.kill();
-        this.setStatus({ state: "failed", message });
+        this.setStatus({ state: "failed", reason, message });
     }
 
     private isCurrent(generation: number): boolean {
@@ -247,10 +287,11 @@ export class DevServer {
             return;
         }
         if (this.status.state === "starting") {
-            const match = text.match(DevServer.ANNOUNCED_URL);
-            const announced = match ? Number(match[1]) : NaN;
-            if (Number.isInteger(announced) && announced !== this.port && announced <= 65535) {
-                this.announcedPorts.add(announced);
+            for (const match of text.matchAll(DevServer.ANNOUNCED_URL)) {
+                const announced = Number(match[1]);
+                if (announced !== this.port && !this.claimed.has(announced) && this.ports.claim(announced)) {
+                    this.claimed.add(announced);
+                }
             }
         }
         this.log(stream, text);
@@ -265,10 +306,11 @@ export class DevServer {
         this.notify(() => this.observer.onLog(line));
     }
 
-    private setStatus(change: Partial<PreviewStatus> & Pick<PreviewStatus, "state">): void {
+    private setStatus(change: Omit<Partial<PreviewStatus>, "state"> & Pick<PreviewStatus, "state">): void {
         this.status = {
             state: change.state,
             url: change.url ?? this.status.url,
+            reason: change.reason,
             message: change.message,
             restarts: change.restarts ?? this.status.restarts,
         };

