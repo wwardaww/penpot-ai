@@ -10740,3 +10740,75 @@ msgstr "No change"
 #: src/app/main/ui/workspace/ai/comments/fix_button.cljs
 msgid "penforge.comments.unchanged"
 msgstr "Not changed"
+# penforge:W13
+#: src/app/main/data/ai/actions/generate.cljs
+msgid "penforge.actions.generate-screen"
+msgstr "Generate screen"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.title"
+msgstr "Generate a screen"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.prompt"
+msgstr "What should the screen show?"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.prompt-placeholder"
+msgstr "A login screen with email, password and a sign-in button"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.platform"
+msgstr "Platform"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.platform.web"
+msgstr "Web"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.platform.mobile"
+msgstr "Mobile app"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.use-selection"
+msgstr "Use the selected layers as a reference (%s)"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.use-selection-empty"
+msgstr "Use the selected layers as a reference (select some first)"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.hint"
+msgstr "The screen is built next to your boards with this file's components, tokens and styles. Progress shows in the AI tab."
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.submit"
+msgstr "Generate"
+
+#: src/app/main/data/ai/actions/generate.cljs
+msgid "penforge.generate.step.design-system"
+msgstr "Reading the design system"
+
+#: src/app/main/data/ai/actions/generate.cljs
+msgid "penforge.generate.step.board"
+msgstr "Creating the board"
+
+#: src/app/main/data/ai/actions/generate.cljs
+msgid "penforge.generate.step.build"
+msgstr "Designing the screen"
+
+#: src/app/main/data/ai/actions/generate.cljs
+msgid "penforge.generate.step.check"
+msgstr "Checking the result"
+
+#: src/app/main/data/ai/actions/generate.cljs
+msgid "penforge.generate.step.review"
+msgstr "Polishing the screen"
+
+#: src/app/main/data/ai/actions/generate.cljs
+msgid "penforge.generate.summary"
+msgstr "Created \"%s\" (%s)"
+
+#: src/app/main/data/ai/actions/generate.cljs
+msgid "penforge.generate.summary-details"
+msgstr "Created \"%s\" (%s) with %s component instances and %s tokens"
