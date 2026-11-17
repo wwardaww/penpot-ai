@@ -167,7 +167,7 @@
 (defn file-format
   "What a file is by its first bytes: `:zip`, `:canvas` or nil."
   [path]
-  (with-open [input (java.io.FileInputStream. (fs/file path))]
+  (with-open [input (java.io.FileInputStream. ^java.io.File (fs/file path))]
     (let [buf (byte-array 8)
           n   (.read input buf)]
       (cond
@@ -204,7 +204,7 @@
 
 (defn- read-zip
   [path {:keys [max-chunk-size max-image-size max-images-size max-zip-entries] :as limits}]
-  (with-open [zip (ZipFile. (fs/file path))]
+  (with-open [zip (ZipFile. ^java.io.File (fs/file path))]
     (when (> (.size zip) max-zip-entries)
       (invalid :invalid-fig-file "the file has too many entries" :entries (.size zip)))
     (let [canvas (or (.getEntry zip "canvas.fig")

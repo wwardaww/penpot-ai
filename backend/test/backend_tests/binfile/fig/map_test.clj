@@ -57,9 +57,10 @@
     (t/is (= 12.0 (:r1 card)))
     (t/is (= :drop-shadow (get-in card [:shadow 0 :style])))
     (t/testing "children go in reversed: penpot lays out flex children from the top layer"
-      (t/is (= ["Buy button" "Photo" "Title"]
-               (mapv #(:name (get-in file [:data :pages-index (:page-id card) :objects %]))
-                     (:shapes card)))))
+      (let [objects (->> (vals (get-in file [:data :pages-index]))
+                         (some #(when (contains? (:objects %) (:id card)) (:objects %))))]
+        (t/is (= ["Buy button" "Photo" "Title"]
+                 (mapv #(:name (get objects %)) (:shapes card))))))
     (t/testing "a stretched child fills the cross axis"
       (t/is (= :fill (:layout-item-h-sizing (one file "Photo")))))))
 
@@ -87,8 +88,12 @@
     (t/is (= [["Heading" "Body" "gfont-inter" "16"]]
              (mapv (juxt :path :name :font-id :font-size) typos)))
     (t/testing "a fill that uses a style references the library color"
-      (let [default (one file "Button")]
-        (t/is (some? default))))))
+      (let [default (->> (objects-by-name file)
+                         (vals)
+                         (apply concat)
+                         (filter #(= "Default" (:variant-name %)))
+                         (first))]
+        (t/is (= (:id (first colors)) (get-in default [:fills 0 :fill-color-ref-id])))))))
 
 (t/deftest an-image-fill-points-at-the-stored-media
   (let [{:keys [file media]} (mapped)
@@ -129,7 +134,7 @@
              (into #{} (map :variant-properties) (vals (:components data)))))
     (t/testing "the instance is a copy of the default variant"
       (t/is (:component-root copy))
-      (t/is (= (:file-id file) (:component-file copy)))
+      (t/is (= (:id file) (:component-file copy)))
       (t/is (contains? (into #{} (map :id) mains) (:shape-ref copy))))
     (t/testing "the overridden text is kept and marked as touched"
       (t/is (= "Buy" (get-in label [:content :children 0 :children 0 :children 0 :text])))

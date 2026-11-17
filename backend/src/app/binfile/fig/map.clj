@@ -26,6 +26,7 @@
    [app.binfile.fig.tree :as tree]
    [app.common.data :as d]
    [app.common.files.builder :as fb]
+   [app.common.files.changes :as ch]
    [app.common.geom.matrix :as gmt]
    [app.common.math :as mth]
    [app.common.path-names :as cpn]
@@ -81,7 +82,15 @@
 (defn- build!
   "Apply a builder function to the builder state."
   [{:keys [state]} f & args]
-  (apply vswap! state f args))
+  (vreset! state (apply f @state args)))
+
+(defn- add-library-color!
+  "Add a library color to the file being built. `fb/add-library-color`
+  passes the color twice to its schema check and cannot be used, so the
+  change goes in directly."
+  [{:keys [state file-id]} color]
+  (vswap! state update-in [::fb/files file-id :data]
+          ch/process-changes [{:type :add-color :color (update color :opacity d/nilv 1)}] false))
 
 (defn- keep-name!
   "Remember the name the shape has in Figma: the builder makes names
@@ -1003,14 +1012,14 @@
                                [path name] (cpn/split-group-name (or (:name node) "Color"))]
                            (if (or (:fill-color fill) (:fill-color-gradient fill))
                              (let [id (id-of ctx (str "color:" (::tree/key node)))]
-                               (build! ctx fb/add-library-color
-                                       (d/without-nils
-                                        {:id       id
-                                         :name     (if (str/blank? name) "Color" name)
-                                         :path     path
-                                         :color    (:fill-color fill)
-                                         :gradient (:fill-color-gradient fill)
-                                         :opacity  (:fill-opacity fill)}))
+                               (add-library-color! ctx
+                                                   (d/without-nils
+                                                    {:id       id
+                                                     :name     (if (str/blank? name) "Color" name)
+                                                     :path     path
+                                                     :color    (:fill-color fill)
+                                                     :gradient (:fill-color-gradient fill)
+                                                     :opacity  (:fill-opacity fill)}))
                                (count! ctx :colors)
                                (assoc acc (::tree/key node) id))
                              acc)))

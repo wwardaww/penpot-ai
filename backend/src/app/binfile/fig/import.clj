@@ -36,7 +36,11 @@
    [app.storage.tmp :as tmp]
    [app.util.events :as events]
    [datoteka.fs :as fs]
-   [datoteka.io :as io]))
+   [datoteka.io :as io])
+  (:import
+   java.io.ByteArrayInputStream
+   javax.imageio.ImageIO
+   javax.imageio.ImageReader))
 
 (def schema:report
   "The compatibility report of an import: what could not be imported as
@@ -58,9 +62,23 @@
   [data]
   (events/tap :progress data))
 
-(defn- image-info
-  "The dimensions of image bytes, read by the media processor, or nil
-  when the bytes are not an image it accepts."
+(defn- header-dimensions
+  "The dimensions of image bytes read from their header with the JDK
+  readers (PNG, JPEG, GIF, BMP), without decoding the pixels."
+  [^bytes data]
+  (try
+    (with-open [input (ImageIO/createImageInputStream (ByteArrayInputStream. data))]
+      (let [readers (ImageIO/getImageReaders input)]
+        (when (.hasNext readers)
+          (let [^ImageReader reader (.next readers)]
+            (try
+              (.setInput reader input true true)
+              {:width (.getWidth reader 0) :height (.getHeight reader 0)}
+              (finally
+                (.dispose reader)))))))
+    (catch Exception _ nil)))
+
+(defn- media-info
   [cfg ^bytes data mtype]
   (let [path (tmp/tempfile :prefix "penpot.fig-image.")]
     (try
@@ -71,6 +89,14 @@
         nil)
       (finally
         (fs/delete path)))))
+
+(defn- image-info
+  "The dimensions of image bytes: from their header when the JDK reads
+  the format, from the media processor otherwise (WEBP), or nil when the
+  bytes are not an image."
+  [cfg ^bytes data mtype]
+  (or (header-dimensions data)
+      (media-info cfg data mtype)))
 
 (defn- store-images!
   "Put the images of the file in the storage and answer with what a fill

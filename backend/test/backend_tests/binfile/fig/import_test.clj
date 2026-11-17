@@ -43,7 +43,7 @@
   (let [profile (th/create-profile* 1)
         result  (run-job! profile (fx/medium-fig!) {})
         file-id (first (:file-ids result))
-        file    (bfc/get-file th/*system* file-id)
+        file    (bfc/get-file th/*system* file-id :realize? true)
         media   (th/db-query :file-media-object {:file-id file-id})]
 
     (t/testing "the job answers with the file and the report"
