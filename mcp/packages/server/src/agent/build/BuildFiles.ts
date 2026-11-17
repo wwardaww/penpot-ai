@@ -2,24 +2,19 @@ import { mkdir, writeFile } from "fs/promises";
 import { dirname, join } from "path";
 import { z } from "zod";
 import type { WorkflowWorkspaceApi } from "@penpot/mcp-common";
-
-/** Programs a stack command may start (package managers only). */
-const COMMAND_PROGRAMS = ["npm", "npx", "pnpm", "yarn", "bun"] as const;
+import { StackCommand } from "./StackCommand";
 
 /**
- * Pattern of one command argument: no spaces, quotes or shell operators. `{port}` is replaced by
- * the dev server port (W09).
+ * Command of a stack, as an argument vector run by the daemon in `app-src/`; see
+ * {@link StackCommand} for the rules and the trust boundary. `{port}` is replaced by the dev
+ * server port (W09).
  */
-const COMMAND_ARG = /^(?:[A-Za-z0-9@%+=:,./_~^-]|\{port\})+$/;
-
-/** Command of a stack, as an argument vector run in `app-src/` without a shell. */
-export const CommandSchema = z
-    .array(z.string().regex(COMMAND_ARG, "unsafe command argument"))
-    .min(1)
-    .max(16)
-    .refine((argv) => (COMMAND_PROGRAMS as readonly string[]).includes(argv[0]), {
-        message: `command must start with one of ${COMMAND_PROGRAMS.join(", ")}`,
-    });
+export const CommandSchema = z.array(z.string()).superRefine((argv, ctx) => {
+    const problem = StackCommand.problem(argv);
+    if (problem !== null) {
+        ctx.addIssue({ code: "custom", message: problem });
+    }
+});
 
 /** Stack of the generated app (`.penforge/stack.json`, see `wiki/architecture.md` §4). */
 export const StackSchema = z.object({
@@ -29,7 +24,7 @@ export const StackSchema = z.object({
     name: z.string().min(1).max(120),
     /** main versions, e.g. "react 19, vite 6" */
     version: z.string().max(120).default(""),
-    packageManager: z.enum(COMMAND_PROGRAMS).default("npm"),
+    packageManager: z.enum(StackCommand.PROGRAMS).default("npm"),
     commands: z.object({
         install: CommandSchema,
         build: CommandSchema,

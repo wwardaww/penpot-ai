@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "child_process";
 import type { AbortSignalLike } from "@penpot/mcp-common";
 import { CommandSchema } from "./BuildFiles";
+import { ChildEnvironment } from "./ChildEnvironment";
 
 /** Options of one command run. */
 export interface CommandOptions {
@@ -33,9 +34,11 @@ export interface CommandExecutor {
 /**
  * Executor running commands as child processes.
  *
- * Only argument vectors accepted by {@link CommandSchema} run (package managers, no shell
- * operators), so starting them through a shell on Windows (needed for `npm.cmd`) cannot inject
- * other commands. The whole process tree is killed on abort or timeout.
+ * Only argument vectors accepted by {@link CommandSchema} run: the command line holds plain
+ * tokens, so starting it through a shell on Windows (needed for `npm.cmd`) adds no other command.
+ * What the command then runs (package scripts, dependencies) is code Claude wrote or chose; it
+ * gets a scrubbed environment ({@link ChildEnvironment}) without the daemon's secrets. The whole
+ * process tree is killed on abort or timeout.
  */
 export class ProcessCommandExecutor implements CommandExecutor {
     private static readonly MAX_OUTPUT_CHARS = 64 * 1024;
@@ -52,7 +55,7 @@ export class ProcessCommandExecutor implements CommandExecutor {
         return new Promise<CommandOutcome>((resolve, reject) => {
             const child = spawn(argv[0], argv.slice(1), {
                 cwd: options.cwd,
-                env: { ...process.env, CI: "1", FORCE_COLOR: "0", NO_COLOR: "1" },
+                env: ChildEnvironment.scrub(process.env, { CI: "1", FORCE_COLOR: "0", NO_COLOR: "1" }),
                 shell: ProcessCommandExecutor.IS_WINDOWS,
                 detached: !ProcessCommandExecutor.IS_WINDOWS,
                 windowsHide: true,

@@ -5,6 +5,7 @@ import type { WorkflowContext, WorkflowResult } from "@penpot/mcp-common";
 import { AppSourceGit } from "./AppSourceGit";
 import { BuildFiles, type BuildMap, type Plan, type PlanScreen, type Stack, StackSchema } from "./BuildFiles";
 import { BuildError } from "./BuildError";
+import { BuildLock } from "./BuildLock";
 import { type BuildStep, BuildText } from "./BuildText";
 import { type CommandExecutor, type CommandOutcome, ProcessCommandExecutor } from "./CommandExecutor";
 import { JsonReply } from "./JsonReply";
@@ -65,7 +66,7 @@ interface CommandFailure {
  * and check (typecheck, build) with autonomous fix turns, commit to the `app-src` git repository
  * and update `.penforge/map.json` (board → files). Incremental builds only regenerate new and
  * changed screens; edits a turn makes to files of other screens are reverted. Progress is reported
- * per step (`progress` events with `step`, `id`, `label`, `status`); technical output goes to
+ * per step (`progress` events with `step`, `id`, `status`, …); technical output goes to
  * developers only (`log` events).
  */
 export class AppBuilder {
@@ -74,9 +75,6 @@ export class AppBuilder {
     private static readonly MAX_PROMPT_OUTPUT_CHARS = 6000;
     private static readonly DEPENDENCY_FILES =
         /(^|\/)(package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?)$/;
-
-    /** project folders with a running build */
-    private static readonly running = new Set<string>();
 
     private static readonly ScaffoldReplySchema = z.object({
         stack: StackSchema.omit({ platform: true, schemaVersion: true, preBuild: true }),
@@ -108,15 +106,14 @@ export class AppBuilder {
     }
 
     public async build(params: BuildRunParams = {}): Promise<WorkflowResult> {
-        const key = this.ctx.workspace.root;
-        if (AppBuilder.running.has(key)) {
-            throw new BuildError(this.text.busy());
+        const release = BuildLock.tryAcquire(this.ctx.workspace.root);
+        if (release === null) {
+            throw new BuildError(this.text.busy(), "busy");
         }
-        AppBuilder.running.add(key);
         try {
             return await this.run(params);
         } finally {
-            AppBuilder.running.delete(key);
+            release();
         }
     }
 
@@ -132,12 +129,12 @@ export class AppBuilder {
             plan.fileId !== this.ctx.context.fileId ||
             (params.planId !== undefined && plan.planId !== params.planId);
         if (stalePlan) {
-            throw new BuildError(this.text.stalePlan());
+            throw new BuildError(this.text.stalePlan(), "stale-plan");
         }
         const full = plan.mode === "full";
         const map = full ? null : await this.files.readMap();
         if (!full && map === null) {
-            throw new BuildError(this.text.stalePlan());
+            throw new BuildError(this.text.stalePlan(), "stale-plan");
         }
         const screens = AppBuilder.applyRoutes(plan.screens, overrides.data.routes);
 
@@ -229,8 +226,10 @@ export class AppBuilder {
         owners: Map<string, string>,
         overrides: BuildOverrides
     ): Promise<string[]> {
-        const label = this.text.screen(screen.name, screen.status === "changed");
-        this.ctx.emit("progress", { step: "screen", id: screen.boardId, label, status: "running" });
+        const update = screen.status === "changed";
+        const progress = { step: "screen", id: screen.boardId, name: screen.name, update };
+        const label = this.text.screen(screen.name, update);
+        this.ctx.emit("progress", { ...progress, label, status: "running" });
         const before = await this.git.snapshot();
         const result = await this.turn(this.screenPrompt(plan, screens, screen, previous, owners, overrides));
         const after = await this.git.snapshot();
@@ -251,7 +250,7 @@ export class AppBuilder {
         const files = [...new Set([...previous, ...changed, ...claimed])]
             .filter((file) => this.git.exists(file))
             .sort();
-        this.ctx.emit("progress", { step: "screen", id: screen.boardId, label, status: "done" });
+        this.ctx.emit("progress", { ...progress, label, status: "done" });
         return files;
     }
 
@@ -284,7 +283,7 @@ export class AppBuilder {
                     BuildText.tail(failure.outcome.output, AppBuilder.MAX_PROMPT_OUTPUT_CHARS)
             );
             if (attempt >= this.maxFixAttempts) {
-                throw new BuildError(this.text.gaveUp(failure.command, failure.outcome, attempt));
+                throw new BuildError(this.text.gaveUp(failure.command, failure.outcome, attempt), "gave-up");
             }
             const fixId = String(attempt + 1);
             this.step("fix", "running", fixId, `fix-${fixId}`);
@@ -498,8 +497,16 @@ export class AppBuilder {
 
     // helpers ---------------------------------------------------------------------------------
 
+    /**
+     * Reports a step. Clients translate by `step` (and `name`/`update`/`detail`); `label` is an
+     * English fallback. `detail` (command, stack, workflow id, fix attempt) goes to developers only.
+     */
     private step(step: BuildStep, status: "running" | "done" | "error", detail?: string, id?: string): void {
-        this.ctx.emit("progress", { step, id: id ?? step, label: this.text.step(step, detail), status });
+        const payload: Record<string, unknown> = { step, id: id ?? step, label: this.text.step(step, detail), status };
+        if (detail !== undefined && this.text.isDeveloper) {
+            payload.detail = detail;
+        }
+        this.ctx.emit("progress", payload);
     }
 
     private log(text: string): void {

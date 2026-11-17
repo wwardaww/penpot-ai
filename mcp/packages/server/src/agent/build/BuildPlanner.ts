@@ -14,6 +14,7 @@ import {
     StackSchema,
 } from "./BuildFiles";
 import { BuildError } from "./BuildError";
+import { BuildLock } from "./BuildLock";
 import { BuildText } from "./BuildText";
 import { type DesignBoard, DesignReader, type DesignSnapshot } from "./DesignReader";
 import { JsonReply } from "./JsonReply";
@@ -91,11 +92,23 @@ export class BuildPlanner {
     }
 
     public async plan(params: BuildPlanParams = {}): Promise<WorkflowResult> {
+        const release = BuildLock.tryAcquire(this.ctx.workspace.root);
+        if (release === null) {
+            throw new BuildError(this.text.busy(), "busy");
+        }
+        try {
+            return await this.run(params);
+        } finally {
+            release();
+        }
+    }
+
+    private async run(params: BuildPlanParams): Promise<WorkflowResult> {
         this.progress("read", "running");
         const design = await this.reader.read();
         this.progress("read", "done");
         if (design.boards.length === 0) {
-            throw new BuildError(this.text.noBoards());
+            throw new BuildError(this.text.noBoards(), "no-boards");
         }
         const map = await this.files.readMap();
         const stack = await this.files.readStack();
@@ -158,7 +171,7 @@ export class BuildPlanner {
             reply = JsonReply.parse(result.text, BuildPlanner.ReplySchema);
         }
         if (reply === null) {
-            throw new BuildError(this.text.planFailed());
+            throw new BuildError(this.text.planFailed(), "plan-failed");
         }
         this.progress("plan", "done");
 

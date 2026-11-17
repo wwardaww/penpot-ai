@@ -61,11 +61,8 @@ export class AppSourceGit {
         if (from === to) {
             return [];
         }
-        const out = await this.git(["diff", "--name-only", "--no-renames", from, to]);
-        return out
-            .split("\n")
-            .map((line) => line.trim())
-            .filter((line) => line.length > 0);
+        const out = await this.git(["-c", "core.quotepath=off", "diff", "--name-only", "--no-renames", "-z", from, to]);
+        return AppSourceGit.splitNul(out);
     }
 
     /**
@@ -78,8 +75,8 @@ export class AppSourceGit {
         if (files.length === 0) {
             return;
         }
-        const listed = await this.git(["ls-tree", "-r", "--name-only", snapshot, "--", ...files]);
-        const present = new Set(listed.split("\n").filter((line) => line.length > 0));
+        const listed = await this.git(["ls-tree", "-r", "-z", "--name-only", snapshot, "--", ...files]);
+        const present = new Set(AppSourceGit.splitNul(listed));
         const kept = files.filter((file) => present.has(file));
         const removed = files.filter((file) => !present.has(file));
         if (kept.length > 0) {
@@ -93,6 +90,11 @@ export class AppSourceGit {
     /** Tells whether a file exists in the working folder. */
     public exists(file: string): boolean {
         return existsSync(join(this.dir, file));
+    }
+
+    /** Splits NUL-separated git output (`-z`: paths verbatim, never quoted). */
+    private static splitNul(out: string): string[] {
+        return out.split("\0").filter((path) => path.length > 0);
     }
 
     private async git(args: string[]): Promise<string> {

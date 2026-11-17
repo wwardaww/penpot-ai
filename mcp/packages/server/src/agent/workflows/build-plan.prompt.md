@@ -18,11 +18,13 @@ Choose the stack:
 - Default for mobile: Expo (React Native + TypeScript) with `react-native-web`, so the app can be
   previewed in a browser; navigation with `expo-router` or React Navigation.
 {{/mobile}}
-- Commands are argument lists for npm, npx, pnpm, yarn or bun only, with no shell operators.
+- Commands are argument lists for npm, pnpm, yarn or bun (`npx` only for expo, vite, next or
+  tsc), each argument a plain token with no spaces, quotes or shell operators.
 - `install` installs dependencies, `build` must fail on errors (include a type check when the
   stack has one, or give it as `typecheck`), `dev` starts a dev server on `127.0.0.1`. Penforge
   picks the port: it replaces the argument `{port}` and also sets the environment variable named
   by `portEnv` (default `PORT`). Vite ignores `PORT`, so pass `--port {port} --strictPort`.
+  The dev server must stay on this computer: pass `--host 127.0.0.1` (never `0.0.0.0`).
 
 Decide which top-level boards are screens (skip boards that only hold components, notes or
 assets) and give each screen a route; the first screen of the main flow gets `/`.
@@ -49,7 +51,7 @@ End your reply with exactly one fenced ```json block in this shape:
     "commands": {
       "install": ["npm", "install"],
       "build": ["npm", "run", "build"],
-      "dev": ["npm", "run", "dev", "--", "--port", "{port}", "--strictPort"]
+      "dev": ["npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", "{port}", "--strictPort"]
     },
     "portEnv": "PORT"
   },

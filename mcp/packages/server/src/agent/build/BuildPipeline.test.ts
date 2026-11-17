@@ -19,6 +19,9 @@ import type { CommandExecutor, CommandOptions, CommandOutcome } from "./CommandE
 import { ProcessCommandExecutor } from "./CommandExecutor";
 import { JsonReply } from "./JsonReply";
 import { Routes } from "./Routes";
+import { BuildLock } from "./BuildLock";
+import { ChildEnvironment } from "./ChildEnvironment";
+import { StackCommand } from "./StackCommand";
 
 const LOGIN = "board-login";
 const DASHBOARD = "board-dashboard";
@@ -132,7 +135,7 @@ class FakeClaude {
             commands: {
                 install: ["npm", "install"],
                 build: ["npm", "run", "build"],
-                dev: ["npm", "run", "dev", "--", "--port", "{port}", "--strictPort"],
+                dev: ["npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", "{port}", "--strictPort"],
             },
             portEnv: "PORT",
         };
@@ -262,7 +265,7 @@ test("first build: plan for a designer, then build every screen and commit", asy
     const files = new BuildFiles(workspace);
     assert.equal((await files.readStack())?.name, "React + Vite + TypeScript");
     const stackJson = JSON.parse(readFileSync(join(workspace.metaDir, "stack.json"), "utf8"));
-    assert.equal(stackJson.dev, "npm run dev -- --port {port} --strictPort", "W09 reads a dev string");
+    assert.equal(stackJson.dev, "npm run dev -- --host 127.0.0.1 --port {port} --strictPort", "W09 reads a dev string");
     assert.equal(stackJson.portEnv, "PORT");
 
     const result = await build("designer", { planId: payload.planId });
@@ -430,6 +433,7 @@ test("the build-run workflow reports persona-safe failures as a failed event", a
     await assert.rejects(workflow.run(context("designer"), { planId: "missing" }));
     const failed = events.find((e) => e.kind === "failed");
     assert.match(failed?.payload.message ?? "", /press Build again/);
+    assert.equal(failed?.payload.code, "stale-plan");
 });
 
 test("asking build-plan: the answer ends the run with result {confirmed}", async () => {
@@ -450,4 +454,74 @@ test("asking build-plan: the answer ends the run with result {confirmed}", async
     const plans = events.filter((e) => e.kind === "plan").map((e) => e.payload.mode);
     assert.deepEqual(plans, ["none", "full"], "rebuild re-plans from scratch");
     assert.equal(events.filter((e) => e.kind === "result").at(-1)?.payload.confirmed, true);
+});
+
+test("stack commands keep dev servers on loopback and refuse fetch-and-run", () => {
+    const refused = [
+        ["npm", "run", "dev", "--", "--host", "0.0.0.0"],
+        ["npm", "run", "dev", "--", "--host=0.0.0.0"],
+        ["npm", "run", "dev", "--", "--host"],
+        ["npm", "run", "dev", "--", "--host", "--port", "5200"],
+        ["npm", "run", "dev", "--", "--host", "192.168.1.20"],
+        ["npx", "next", "dev", "-H", "::"],
+        ["npm", "run", "dev", "--", "%PATH%"],
+        ["npm", "install", "react@^19"],
+        ["npx", "cowsay"],
+        ["npx", "--yes", "vite"],
+        ["pnpm", "dlx", "create-vite"],
+        ["npm", "exec", "anything"],
+        ["bun", "x", "anything"],
+    ];
+    for (const argv of refused) {
+        assert.notEqual(StackCommand.problem(argv), null, argv.join(" "));
+    }
+    const accepted = [
+        ["npx", "vite", "--host", "127.0.0.1", "--port", "{port}"],
+        ["npm", "run", "dev", "--", "--host=localhost", "--port", "{port}", "--strictPort"],
+        ["npx", "expo", "start", "--web", "--port", "{port}"],
+        ["pnpm", "install"],
+    ];
+    for (const argv of accepted) {
+        assert.equal(StackCommand.problem(argv), null, argv.join(" "));
+    }
+});
+
+test("child processes get a scrubbed environment", () => {
+    const env = ChildEnvironment.scrub(
+        {
+            Path: "C:\Windows",
+            SystemRoot: "C:\Windows",
+            HOME: "/home/a",
+            npm_config_cache: "/tmp/npm",
+            npm_config__authToken: "x",
+            PENFORGE_TOKEN: "x",
+            ANTHROPIC_API_KEY: "x",
+            CLAUDE_CODE_OAUTH_TOKEN: "x",
+            GITHUB_TOKEN: "x",
+            AWS_SECRET_ACCESS_KEY: "x",
+            CLAUDE_CONFIG_DIR: "x",
+        },
+        { CI: "1" }
+    );
+    assert.deepEqual(Object.keys(env).sort(), ["CI", "HOME", "Path", "SystemRoot", "npm_config_cache"]);
+});
+
+test("a plan while a build holds the project lock fails fast", async () => {
+    const release = BuildLock.tryAcquire(workspace.root)!;
+    try {
+        const { workflow } = await import("../workflows/build-plan");
+        events = [];
+        await assert.rejects(workflow.run(context("designer"), { ask: false }), /already being built/);
+        assert.equal(events.find((e) => e.kind === "failed")?.payload.code, "busy");
+    } finally {
+        release();
+    }
+    await plan();
+});
+
+test("non-ASCII screen file names are mapped", async () => {
+    design.boards[0].name = "Giriş";
+    await build("designer", { planId: (await plan()).planId });
+    const map = await new BuildFiles(workspace).readMap();
+    assert.ok(map?.boards[LOGIN].files.includes("src/screens/Giriş.tsx"), JSON.stringify(map?.boards[LOGIN]));
 });
