@@ -31,6 +31,7 @@ export interface NodeSnapshot {
     id: string;
     name: string;
     type: string;
+    parentId?: string | null;
     visible?: boolean;
     geometry?: { x: number; y: number; width: number; height: number; rotation?: number };
     opacity?: number;
@@ -110,6 +111,11 @@ export class TreeNode {
     public readonly children: TreeNode[] = [];
     /** position in the paint order of its board (0 = painted first) */
     public paintIndex = 0;
+    /**
+     * roots only: ancestors outside the audited tree, nearest first (set when only some nodes
+     * are audited, so their visibility, opacity and fills are known)
+     */
+    public outer: NodeSnapshot[] = [];
 
     constructor(
         public readonly snapshot: NodeSnapshot,
@@ -146,16 +152,29 @@ export class TreeNode {
                 return false;
             }
         }
-        return true;
+        return this.root.outer.every((ancestor) => ancestor.visible !== false);
     }
 
     /** Product of the opacities of the node and its ancestors. */
     public effectiveOpacity(): number {
         let opacity = 1;
         for (let node: TreeNode | null = this; node; node = node.parent) {
-            opacity *= typeof node.snapshot.opacity === "number" ? node.snapshot.opacity : 1;
+            opacity *= TreeNode.opacity(node.snapshot);
+        }
+        for (const ancestor of this.root.outer) {
+            opacity *= TreeNode.opacity(ancestor);
         }
         return opacity;
+    }
+
+    /** Opacity of a snapshot (1 when missing). */
+    public static opacity(snapshot: NodeSnapshot): number {
+        return typeof snapshot.opacity === "number" ? snapshot.opacity : 1;
+    }
+
+    /** Whether the node is a top-level board (or other top-level layer) of its page. */
+    public isTopLevel(): boolean {
+        return this.parent === null && this.outer.length === 0;
     }
 
     /** Ancestors, nearest first. */
@@ -216,13 +235,15 @@ export class DesignTree {
 
     /**
      * @param snapshots - full snapshots of the roots, with full descendants
+     * @param ancestry - ancestors of the roots outside the tree, by root id, nearest first
      */
-    constructor(snapshots: NodeSnapshot[]) {
+    constructor(snapshots: NodeSnapshot[], ancestry: Map<string, NodeSnapshot[]> = new Map()) {
         for (const snapshot of snapshots) {
             if (this.byId.has(snapshot.id)) {
                 continue;
             }
             const root = this.add(snapshot, null, null);
+            root.outer = ancestry.get(snapshot.id) ?? [];
             this.roots.push(root);
             const order = [...root.walk()];
             order.forEach((node, index) => (node.paintIndex = index));

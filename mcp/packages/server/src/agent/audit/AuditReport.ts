@@ -3,6 +3,7 @@ import { dirname } from "path";
 import type { WorkflowWorkspaceApi } from "@penpot/mcp-common";
 import { SEVERITIES } from "./AuditFinding";
 import type { AuditFinding, AuditSeverity } from "./AuditFinding";
+import { ReportCommitter } from "./ReportCommitter";
 
 /** What an audit looked at. */
 export interface AuditScope {
@@ -47,7 +48,12 @@ export class AuditReport {
 
     /** Report path relative to the project folder. */
     public path(): string {
-        return `design/audits/${AuditReport.day(this.date)}.md`;
+        return `design/${this.repoPath()}`;
+    }
+
+    /** Report path relative to the design repository. */
+    public repoPath(): string {
+        return `audits/${AuditReport.day(this.date)}.md`;
     }
 
     /** One-line count of findings by severity ("1 error, 2 warnings, 3 notes"). */
@@ -110,12 +116,17 @@ export class AuditReport {
     }
 
     /**
-     * Writes (or appends) the report and commits the design repository.
+     * Writes (or appends) the report and commits that file alone in the design repository.
      *
      * @param workspace - the project folder
      * @param message - the commit message
+     * @param committer - commits the report file
      */
-    public async write(workspace: WorkflowWorkspaceApi, message: string): Promise<WrittenReport> {
+    public async write(
+        workspace: WorkflowWorkspaceApi,
+        message: string,
+        committer: ReportCommitter = new ReportCommitter()
+    ): Promise<WrittenReport> {
         const path = this.path();
         const file = workspace.resolve(path);
         await mkdir(dirname(file), { recursive: true });
@@ -125,7 +136,7 @@ export class AuditReport {
         } else {
             await appendFile(file, (existing.endsWith("\n") ? "\n" : "\n\n") + this.render(false), "utf8");
         }
-        const commit = await workspace.commitAll("design", message);
+        const commit = await committer.commitFile(workspace.designDir, this.repoPath(), message);
         return { path, commit };
     }
 

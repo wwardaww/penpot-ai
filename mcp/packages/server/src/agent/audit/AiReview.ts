@@ -12,6 +12,9 @@ export class AiReview {
     /** maximum number of findings taken from Claude */
     public static readonly MAX_FINDINGS = 12;
 
+    /** problem categories Claude picks from; with the node they make the finding's stable id */
+    public static readonly CATEGORIES = ["hierarchy", "alignment", "spacing", "consistency", "other"];
+
     private static readonly SEVERITIES = new Set<AuditSeverity>(["error", "warning", "info"]);
 
     constructor(private readonly tree: DesignTree) {}
@@ -35,7 +38,9 @@ export class AiReview {
             ...(already.length > 0 ? already : ["- (none)"]),
             "",
             `Answer with a JSON array of at most ${AiReview.MAX_FINDINGS} findings in a \`\`\`json block, ` +
-                'each {"nodeId", "severity": "error"|"warning"|"info", "title", "message", "suggestion"}. ' +
+                `each {"nodeId", "category": ${AiReview.CATEGORIES.map((c) => `"${c}"`).join("|")}, ` +
+                '"severity": "error"|"warning"|"info", "title", "message", "suggestion"}. ' +
+                "Report at most one finding per layer and category. " +
                 "Answer [] if the design has no such problems.",
         ].join("\n");
     }
@@ -69,8 +74,14 @@ export class AiReview {
             const severity = AiReview.SEVERITIES.has(raw.severity as AuditSeverity)
                 ? (raw.severity as AuditSeverity)
                 : "info";
+            const category =
+                typeof raw.category === "string" && AiReview.CATEGORIES.includes(raw.category) ? raw.category : "other";
             drafts.push({
+                // stable across runs: the category and node, never Claude's wording
+                key: `ai-review:${category}:${node.id}`,
                 check: "ai-review",
+                code: "ai-review",
+                params: { category },
                 severity,
                 nodeId: node.id,
                 nodeName: node.name,

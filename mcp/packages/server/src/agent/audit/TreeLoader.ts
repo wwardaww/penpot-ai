@@ -110,4 +110,36 @@ export class TreeLoader {
         }
         return roots;
     }
+
+    /**
+     * Loads the ancestors of roots that are not top-level layers (an audit of selected nodes), so
+     * the checks know what is painted behind them.
+     *
+     * @param roots - the loaded roots
+     * @returns ancestors by root id, nearest first; top-level roots get none
+     */
+    public async ancestry(roots: NodeSnapshot[]): Promise<Map<string, NodeSnapshot[]>> {
+        const result = new Map<string, NodeSnapshot[]>();
+        for (const root of roots) {
+            const chain: NodeSnapshot[] = [];
+            let parentId = root.parentId;
+            while (TreeLoader.isLayer(parentId) && chain.length < TreeLoader.MAX_ANCESTORS) {
+                const parent = await this.reader.node(parentId, 1);
+                chain.push(parent);
+                parentId = parent.parentId;
+            }
+            result.set(root.id, chain);
+        }
+        return result;
+    }
+
+    /** upper bound of loaded ancestors per root */
+    private static readonly MAX_ANCESTORS = 30;
+
+    /** id of a page's root frame, the parent of top-level layers */
+    private static readonly ROOT_FRAME_ID = "00000000-0000-0000-0000-000000000000";
+
+    private static isLayer(id: string | null | undefined): id is string {
+        return typeof id === "string" && id.length > 0 && id !== TreeLoader.ROOT_FRAME_ID;
+    }
 }

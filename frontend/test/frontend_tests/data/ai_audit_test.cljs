@@ -154,3 +154,35 @@
          (t/is (str/includes? html "ai-audit-panel"))
          (t/is (str/includes? html "Low contrast"))
          (t/is (str/includes? html "penforge.audit.fix-all")))))))
+
+(t/deftest finding-texts-translate-codes-and-keep-ai-texts
+  (let [contrast (assoc finding-contrast
+                        :code "contrast"
+                        :params {:label "\"Hint\"" :ratio 1.9 :background "#FFFFFF"
+                                 :required 4.5 :color "#767676"})
+        ai       {:code "ai-review" :params {:category "hierarchy"}
+                  :title "Weak heading" :message "m" :suggestion "s"}]
+    (t/is (= ["penforge.audit.contrast.title"
+              "penforge.audit.contrast.message"
+              "penforge.audit.contrast.suggestion"]
+             (mapv #(first (str/split % #" ")) (panel/finding-texts contrast))))
+    (t/is (= ["Weak heading" "m" "s"] (panel/finding-texts ai)))
+    (t/is (= ["Low contrast" (:message finding-contrast) (:suggestion finding-contrast)]
+             (panel/finding-texts finding-contrast)))))
+
+(t/deftest content-labels-ai-findings-and-unchecked-contrast
+  (let [ai   {:id "ai-review:hierarchy:text-title" :check "ai-review" :code "ai-review"
+              :params {:category "hierarchy"} :severity "info" :node-id "text-title"
+              :node-name "Title" :board-name "Login" :title "Weak heading"
+              :message "The heading does not stand out." :suggestion "Make it bolder."}
+        html (render (mf/element panel/audit-content*
+                                 #js {:audit {:status :done
+                                              :result (assoc result
+                                                             :findings [ai]
+                                                             :contrast-unchecked 2)}
+                                      :persona :designer
+                                      :onSelect identity
+                                      :onAiChange identity}))]
+    (t/is (str/includes? html "Weak heading"))
+    (t/is (str/includes? html "penforge.audit.ai-badge"))
+    (t/is (str/includes? html "penforge.audit.contrast-unchecked"))))

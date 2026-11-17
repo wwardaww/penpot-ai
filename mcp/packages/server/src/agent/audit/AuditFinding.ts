@@ -29,16 +29,28 @@ export interface AuditPoint {
  * comments, results panel, report); `data` holds the measured values for developers and tests.
  */
 export interface AuditFinding {
-    /** stable id inside one audit run (`<check>:<nodeId>`, suffixed when taken) */
+    /**
+     * stable id: the same problem gets the same id in every audit run (`<check>:<nodeId>` or a
+     * check-specific key such as `type-scale:<boardId>:<size>`; suffixed when taken in one run)
+     */
     id: string;
+    /** short hash of `id`, written into the canvas comment to recognize it in later audits */
+    ref: string;
     check: AuditCheckId;
+    /**
+     * kind of message, for clients that translate the texts from `params` (`contrast`,
+     * `touch-target`, `text-cut-off`, ...); `ai-review` findings have only free texts
+     */
+    code: string;
+    /** values of the message, already formatted (labels, sizes, colors) */
+    params: Record<string, string | number>;
     severity: AuditSeverity;
     nodeId: string;
     nodeName: string;
     /** top-level board holding the node */
     boardId: string;
     boardName: string;
-    /** short label, also the comment prefix used for de-duplication */
+    /** short label */
     title: string;
     message: string;
     suggestion: string;
@@ -49,5 +61,5 @@ export interface AuditFinding {
     data?: Record<string, unknown>;
 }
 
-/** Finding before the auditor assigns its id. */
-export type AuditFindingDraft = Omit<AuditFinding, "id">;
+/** Finding before the auditor assigns its id and ref; `key` is the stable id to start from. */
+export type AuditFindingDraft = Omit<AuditFinding, "id" | "ref"> & { key: string };

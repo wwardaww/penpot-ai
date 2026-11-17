@@ -79,12 +79,14 @@ class AuditRun {
             pageName = boards[0]?.pageName;
         }
         pageName ??= pageId;
-        const tree = new DesignTree(snapshots);
+        // selected nodes: their ancestors tell what is painted behind them
+        const tree = new DesignTree(snapshots, await loader.ancestry(snapshots));
         const overrides = await ctx.workspace.readJson<AuditConfigOverrides>("audit.json", {}).catch(() => ({}));
         const config = new AuditConfig(ctx.context.platform, overrides ?? {});
 
         this.progress("Checking contrast, sizes, spacing and names");
-        let findings = new DesignAuditor().audit(tree, config);
+        const auditor = new DesignAuditor();
+        let findings = auditor.audit(tree, config);
 
         const aiReview = params.ai === true && tree.roots.length > 0;
         if (aiReview) {
@@ -92,7 +94,7 @@ class AuditRun {
             const review = new AiReview(tree);
             const answer = await ctx.runner.run({ prompt: review.prompt(findings), promptName: "audit" });
             this.checkCancelled();
-            const drafts = findings.map(({ id: _id, ...draft }) => draft);
+            const drafts = findings.map(({ id, ref: _ref, ...draft }) => ({ key: id, ...draft }));
             findings = DesignAuditor.finish(tree, [...drafts, ...review.parse(answer.text)]);
         }
 
@@ -129,6 +131,7 @@ class AuditRun {
             boards: tree.roots.map((root) => ({ id: root.id, name: root.name })),
             nodeCount: tree.size,
             truncated: loader.truncated,
+            contrastUnchecked: auditor.unknownBackgrounds.length,
             aiReview,
             counts: {
                 error: findings.filter((f) => f.severity === "error").length,

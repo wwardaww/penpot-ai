@@ -1,19 +1,26 @@
 import { AuditCheck } from "./AuditCheck";
 import type { AuditConfig } from "./AuditConfig";
 import type { AuditFindingDraft } from "./AuditFinding";
-import type { DesignTree, SpanSnapshot, TreeNode } from "./DesignTree";
+import { Bounds, TreeNode } from "./DesignTree";
+import type { DesignTree, NodeSnapshot, SpanSnapshot } from "./DesignTree";
 import { Rgb } from "./Rgb";
 
 /**
  * Text vs background contrast (WCAG AA: 4.5:1, or 3:1 for large text).
  *
- * The background is the composite of the flat fills painted below the text's center, over white.
- * Texts over gradients or images are skipped: their background is unknown.
+ * The background is the composite of the flat fills painted below the text's center: layers of the
+ * audited tree first, then the ancestors outside it (audits of selected nodes). It is known only
+ * when an opaque flat fill is found; texts over gradients, images or nothing at all are not
+ * checked and are counted in {@link unknownBackgrounds} instead (white is never assumed).
  */
 export class ContrastCheck extends AuditCheck {
     public readonly id = "contrast" as const;
 
+    /** Texts of the last run whose background could not be known. */
+    public unknownBackgrounds: string[] = [];
+
     public run(tree: DesignTree): AuditFindingDraft[] {
+        this.unknownBackgrounds = [];
         const findings: AuditFindingDraft[] = [];
         for (const node of tree.visibleNodes()) {
             const text = node.snapshot.text;
@@ -22,6 +29,7 @@ export class ContrastCheck extends AuditCheck {
             }
             const background = ContrastCheck.background(tree, node);
             if (!background) {
+                this.unknownBackgrounds.push(node.id);
                 continue;
             }
             const worst = ContrastCheck.worstSpan(node, background);
@@ -30,12 +38,21 @@ export class ContrastCheck extends AuditCheck {
             }
             const ratio = Math.floor(worst.ratio * 10) / 10;
             const better = ContrastCheck.betterColor(worst.color, background, worst.alpha, worst.required);
+            const label = AuditCheck.label(node);
             findings.push(
                 this.finding(node, {
+                    code: better ? "contrast" : "contrast-generic",
+                    params: {
+                        label,
+                        ratio,
+                        background: background.hex(),
+                        required: worst.required,
+                        color: better ? better.hex() : "",
+                    },
                     severity: worst.ratio < 3 ? "error" : "warning",
                     title: "Low contrast",
                     message:
-                        `${AuditCheck.label(node)} has a contrast of ${ratio}:1 against ${background.hex()}; ` +
+                        `${label} has a contrast of ${ratio}:1 against ${background.hex()}; ` +
                         `text this size needs at least ${worst.required}:1 to be easy to read.`,
                     suggestion: better
                         ? `Use a text color such as ${better.hex()}, or change the background.`
@@ -60,33 +77,54 @@ export class ContrastCheck extends AuditCheck {
      */
     public static background(tree: DesignTree, node: TreeNode): Rgb | null {
         const center = node.bounds().center();
-        const layers: { rgb: Rgb; alpha: number }[] = [];
+        // what is painted below, nearest first: tree layers, then ancestors outside the tree
+        const candidates: { snapshot: NodeSnapshot; bounds: Bounds; opacity: number }[] = [];
         for (const below of tree.paintedBelow(node)) {
-            if (below.type === "text" || !below.isVisible() || !below.bounds().containsPoint(center)) {
-                continue;
+            if (below.isVisible()) {
+                candidates.push({
+                    snapshot: below.snapshot,
+                    bounds: below.bounds(),
+                    opacity: below.effectiveOpacity(),
+                });
             }
-            const fills = below.snapshot.fills;
-            if (!Array.isArray(fills) || fills.length === 0) {
+        }
+        const outer = node.root.outer;
+        outer.forEach((ancestor, index) => {
+            const g = ancestor.geometry;
+            if (g) {
+                const opacity = outer.slice(index).reduce((product, a) => product * TreeNode.opacity(a), 1);
+                candidates.push({ snapshot: ancestor, bounds: new Bounds(g.x, g.y, g.width, g.height), opacity });
+            }
+        });
+        const layers: { rgb: Rgb; alpha: number }[] = [];
+        for (const candidate of candidates) {
+            const fills = candidate.snapshot.fills;
+            if (
+                candidate.snapshot.type === "text" ||
+                !candidate.bounds.containsPoint(center) ||
+                !Array.isArray(fills) ||
+                fills.length === 0
+            ) {
                 continue;
             }
             const paint = AuditCheck.solid(fills);
             if (!paint) {
                 return null;
             }
-            const alpha = paint.opacity * below.effectiveOpacity();
+            const alpha = paint.opacity * candidate.opacity;
             if (alpha <= 0.01) {
                 continue;
             }
             layers.push({ rgb: paint.rgb, alpha });
             if (alpha >= 0.99) {
-                break;
+                let color = paint.rgb;
+                for (const layer of layers.slice(0, -1).reverse()) {
+                    color = layer.rgb.over(color, layer.alpha);
+                }
+                return color;
             }
         }
-        let color = Rgb.WHITE;
-        for (const layer of layers.reverse()) {
-            color = layer.rgb.over(color, layer.alpha);
-        }
-        return color;
+        return null;
     }
 
     private static worstSpan(node: TreeNode, background: Rgb) {
@@ -122,8 +160,8 @@ export class ContrastCheck extends AuditCheck {
      * Closest text color (towards black or white) that reaches the required contrast.
      */
     private static betterColor(color: Rgb, background: Rgb, alpha: number, required: number): Rgb | null {
-        const target =
-            Rgb.WHITE.contrast(background) > new Rgb(0, 0, 0).contrast(background) ? Rgb.WHITE : new Rgb(0, 0, 0);
+        const black = new Rgb(0, 0, 0);
+        const target = Rgb.WHITE.contrast(background) > black.contrast(background) ? Rgb.WHITE : black;
         for (let step = 0.05; step <= 1.0001; step += 0.05) {
             const candidate = target.over(color, step);
             if (candidate.over(background, alpha).contrast(background) >= required) {
@@ -138,7 +176,8 @@ export class ContrastCheck extends AuditCheck {
  * Tap/click targets smaller than the platform minimum (44 px on mobile, 24 px on web).
  *
  * A node is a target when it has prototype interactions or its (component) name says button, link,
- * tab, toggle and the like. Only the outermost target is checked; texts are never targets.
+ * tab, toggle and the like. Only the outermost target is checked; texts are never targets, and
+ * neither are top-level boards (screens).
  */
 export class TouchTargetCheck extends AuditCheck {
     public readonly id = "touch-target" as const;
@@ -157,13 +196,16 @@ export class TouchTargetCheck extends AuditCheck {
                 const b = node.bounds();
                 const min = config.minTouchTarget;
                 if (b.width < min || b.height < min) {
-                    const size = `${Math.round(b.width)}×${Math.round(b.height)} px`;
+                    const label = AuditCheck.label(node);
+                    const width = Math.round(b.width);
+                    const height = Math.round(b.height);
                     findings.push(
                         this.finding(node, {
+                            params: { label, width, height, minimum: min },
                             severity: Math.min(b.width, b.height) < min * 0.6 ? "error" : "warning",
                             title: "Small tap target",
                             message:
-                                `${AuditCheck.label(node)} is ${size}; ` +
+                                `${label} is ${width}×${height} px; ` +
                                 `${config.platform === "mobile" ? "tap" : "click"} targets should be at least ${min}×${min} px.`,
                             suggestion: `Make it at least ${min}×${min} px, for example with padding around the content.`,
                             data: { width: b.width, height: b.height, minimum: min },
@@ -178,7 +220,11 @@ export class TouchTargetCheck extends AuditCheck {
             node.children.forEach(visit);
         };
         for (const root of tree.roots) {
-            root.children.forEach(visit);
+            if (root.isTopLevel()) {
+                root.children.forEach(visit);
+            } else {
+                visit(root);
+            }
         }
         return findings;
     }
@@ -228,15 +274,18 @@ export class SpacingCheck extends AuditCheck {
                 continue;
             }
             const distinct = [...new Set(off.map((v) => v.value))];
-            const replacements = distinct.map((v) => `${config.nearestSpacing(v)} px instead of ${v} px`).join(", ");
+            const label = AuditCheck.label(node);
+            const spacing = distinct.map((v) => `${v} px`).join(", ");
+            const replacements = distinct.map((v) => `${v} → ${config.nearestSpacing(v)} px`).join(", ");
             findings.push(
                 this.finding(node, {
+                    params: { label, values: spacing, base: config.spacingBase, replacements },
                     severity: "info",
                     title: "Off-scale spacing",
                     message:
-                        `${AuditCheck.label(node)} uses spacing of ${distinct.map((v) => `${v} px`).join(", ")} ` +
-                        `(${off.map((v) => v.property).join(", ")}), which is not on the ${config.spacingBase} px grid.`,
-                    suggestion: `Use ${replacements}, or apply a spacing token.`,
+                        `${label} uses spacing of ${spacing} (${off.map((v) => v.property).join(", ")}), ` +
+                        `which is not on the ${config.spacingBase} px grid.`,
+                    suggestion: `Change it to ${replacements}, or apply a spacing token.`,
                     data: { values: off },
                 })
             );
@@ -296,13 +345,17 @@ export class ColorDuplicateCheck extends AuditCheck {
                     continue;
                 }
                 assigned.add(variant);
+                const label = AuditCheck.label(nodes[0]);
+                const more = nodes.length > 1 ? ` and ${nodes.length - 1} more layers` : "";
                 findings.push(
                     this.finding(nodes[0], {
+                        key: `color-duplicate:${variant}:${canonical}`,
+                        params: { color: variant, label, canonical, uses: canonicalNodes.length },
                         severity: "info",
                         title: "Near-duplicate color",
                         message:
-                            `${variant} on ${AuditCheck.label(nodes[0])}${nodes.length > 1 ? ` and ${nodes.length - 1} more layers` : ""} ` +
-                            `is almost the same as ${canonical} (used ${canonicalNodes.length} times); the difference is hard to see.`,
+                            `${variant} on ${label}${more} is almost the same as ${canonical} ` +
+                            `(used ${canonicalNodes.length} times); the difference is hard to see.`,
                         suggestion: `Use ${canonical} instead, ideally from a shared library color or token.`,
                         relatedNodeIds: nodes.slice(1).map((n) => n.id),
                         data: { color: variant, canonical, uses: nodes.length },
@@ -345,16 +398,20 @@ export class TypeScaleCheck extends AuditCheck {
                 }
             }
             for (const [size, nodes] of bySize) {
+                const label = AuditCheck.label(nodes[0]);
+                const nearest = config.nearestTypeSize(size);
                 findings.push(
                     this.finding(nodes[0], {
+                        key: `type-scale:${root.id}:${size}`,
+                        params: { size, label, count: nodes.length, nearest },
                         severity: "info",
                         title: "Off-scale font size",
                         message:
-                            `Font size ${size} px (${AuditCheck.label(nodes[0])}` +
+                            `Font size ${size} px (${label}` +
                             `${nodes.length > 1 ? ` and ${nodes.length - 1} more` : ""}) is not on the type scale.`,
-                        suggestion: `Use ${config.nearestTypeSize(size)} px, or a text style from the library.`,
+                        suggestion: `Use ${nearest} px, or a text style from the library.`,
                         relatedNodeIds: nodes.slice(1).map((n) => n.id),
-                        data: { fontSize: size, nearest: config.nearestTypeSize(size), uses: nodes.length },
+                        data: { fontSize: size, nearest, uses: nodes.length },
                     })
                 );
             }
@@ -405,6 +462,7 @@ export class DefaultNameCheck extends AuditCheck {
             const examples = [...new Set(named.map((n) => `"${n.name}"`))].slice(0, 3).join(", ");
             findings.push(
                 this.finding(root, {
+                    params: { count: named.length, examples },
                     severity: "info",
                     title: "Default layer names",
                     message: `${named.length} ${named.length === 1 ? "layer has" : "layers have"} a default name, such as ${examples}.`,
@@ -440,12 +498,15 @@ export class DetachedInstanceCheck extends AuditCheck {
         const findings: AuditFindingDraft[] = [];
         for (const node of tree.visibleNodes()) {
             const component = node.snapshot.component;
+            const label = AuditCheck.label(node);
             if (component?.isInstance && !component.isMainInstance && !component.componentId) {
                 findings.push(
                     this.finding(node, {
+                        code: "broken-component",
+                        params: { label },
                         severity: "warning",
                         title: "Broken component copy",
-                        message: `${AuditCheck.label(node)} is a component copy whose main component is missing.`,
+                        message: `${label} is a component copy whose main component is missing.`,
                         suggestion: "Swap it for a component from the library, or detach it on purpose.",
                     })
                 );
@@ -454,16 +515,18 @@ export class DetachedInstanceCheck extends AuditCheck {
             const match = componentNames.get(node.name.trim().toLowerCase());
             if (
                 !component &&
-                node.parent !== null &&
+                !node.isTopLevel() &&
                 (node.type === "board" || node.type === "group") &&
                 node.children.length > 0 &&
                 match
             ) {
                 findings.push(
                     this.finding(node, {
+                        code: "detached-component",
+                        params: { label, component: match },
                         severity: "info",
                         title: "Detached component",
-                        message: `${AuditCheck.label(node)} looks like a copy of the "${match}" component that is no longer linked to it.`,
+                        message: `${label} looks like a copy of the "${match}" component that is no longer linked to it.`,
                         suggestion: `Replace it with an instance of "${match}" so library changes reach it.`,
                         data: { component: match },
                     })
@@ -491,15 +554,18 @@ export class TextOverflowCheck extends AuditCheck {
             if (node.type !== "text" || !text || text.content.trim() === "") {
                 continue;
             }
+            const label = AuditCheck.label(node);
             const clipper = node
                 .ancestors()
                 .find((a) => a.snapshot.layout?.clipContent === true && a.bounds().overflowedBy(node.bounds(), 1));
             if (clipper) {
                 findings.push(
                     this.finding(node, {
+                        code: "text-cut-off",
+                        params: { label, board: clipper.name },
                         severity: "warning",
                         title: "Text cut off",
-                        message: `${AuditCheck.label(node)} sticks out of "${clipper.name}", which hides what overflows.`,
+                        message: `${label} sticks out of "${clipper.name}", which hides what overflows.`,
                         suggestion: "Move or shrink the text, or make the board larger.",
                         data: { clippedBy: clipper.id },
                     })
@@ -511,13 +577,16 @@ export class TextOverflowCheck extends AuditCheck {
             }
             const estimate = TextOverflowCheck.estimate(node);
             if (estimate && estimate.needed > estimate.available * 1.2 + 2) {
+                const fits = Math.max(1, estimate.fits);
                 findings.push(
                     this.finding(node, {
+                        code: "text-may-overflow",
+                        params: { label, lines: estimate.lines, fits },
                         severity: "warning",
                         title: "Text may overflow",
                         message:
-                            `${AuditCheck.label(node)} needs about ${estimate.lines} lines, ` +
-                            `but its fixed-size box fits about ${Math.max(1, estimate.fits)}.`,
+                            `${label} needs about ${estimate.lines} lines, ` +
+                            `but its fixed-size box fits about ${fits}.`,
                         suggestion: "Set the text box to auto height, make it taller, or shorten the text.",
                         data: estimate,
                     })

@@ -11,6 +11,12 @@ export interface SolidPaint {
 
 /** Texts and severity of a finding about one node. */
 export interface FindingFields {
+    /** stable id of the problem (default `<check>:<nodeId>`) */
+    key?: string;
+    /** kind of message (default: the check id) */
+    code?: string;
+    /** values of the message, for clients that translate it */
+    params: Record<string, string | number>;
     severity: AuditSeverity;
     title: string;
     message: string;
@@ -41,14 +47,17 @@ export abstract class AuditCheck {
      * @param fields - severity and texts
      */
     protected finding(node: TreeNode, fields: FindingFields): AuditFindingDraft {
+        const { key, code, ...rest } = fields;
         return {
+            key: key ?? `${this.id}:${node.id}`,
             check: this.id,
+            code: code ?? this.id,
             nodeId: node.id,
             nodeName: node.name,
             boardId: node.root.id,
             boardName: node.root.name,
             position: node.anchor(),
-            ...fields,
+            ...rest,
         };
     }
 

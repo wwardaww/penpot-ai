@@ -57,10 +57,78 @@
     (= error "cancelled")          (tr "penforge.audit.stopped")
     :else                          (tr "penforge.audit.error" (or error error-code ""))))
 
+(defn finding-texts
+  "Translated `[title message suggestion]` of a finding, from its
+  `:code` and `:params`. Findings of the AI review (and codes this
+  client does not know) keep the daemon's own texts."
+  [{:keys [code params title message suggestion]}]
+  (let [{:keys [label ratio background required color width height minimum
+                board lines fits component values base replacements canonical
+                uses size nearest examples]
+         n :count} params]
+    (case code
+      "contrast"
+      [(tr "penforge.audit.contrast.title")
+       (tr "penforge.audit.contrast.message" label ratio background required)
+       (tr "penforge.audit.contrast.suggestion" color)]
+
+      "contrast-generic"
+      [(tr "penforge.audit.contrast.title")
+       (tr "penforge.audit.contrast.message" label ratio background required)
+       (tr "penforge.audit.contrast.suggestion-generic")]
+
+      "touch-target"
+      [(tr "penforge.audit.touch-target.title")
+       (tr "penforge.audit.touch-target.message" label width height minimum minimum)
+       (tr "penforge.audit.touch-target.suggestion" minimum minimum)]
+
+      "text-cut-off"
+      [(tr "penforge.audit.text-cut-off.title")
+       (tr "penforge.audit.text-cut-off.message" label board)
+       (tr "penforge.audit.text-cut-off.suggestion")]
+
+      "text-may-overflow"
+      [(tr "penforge.audit.text-may-overflow.title")
+       (tr "penforge.audit.text-may-overflow.message" label lines fits)
+       (tr "penforge.audit.text-may-overflow.suggestion")]
+
+      "broken-component"
+      [(tr "penforge.audit.broken-component.title")
+       (tr "penforge.audit.broken-component.message" label)
+       (tr "penforge.audit.broken-component.suggestion")]
+
+      "detached-component"
+      [(tr "penforge.audit.detached-component.title")
+       (tr "penforge.audit.detached-component.message" label component)
+       (tr "penforge.audit.detached-component.suggestion" component)]
+
+      "spacing"
+      [(tr "penforge.audit.spacing.title")
+       (tr "penforge.audit.spacing.message" label values base)
+       (tr "penforge.audit.spacing.suggestion" replacements)]
+
+      "color-duplicate"
+      [(tr "penforge.audit.color-duplicate.title")
+       (tr "penforge.audit.color-duplicate.message" color label canonical uses)
+       (tr "penforge.audit.color-duplicate.suggestion" canonical)]
+
+      "type-scale"
+      [(tr "penforge.audit.type-scale.title")
+       (tr "penforge.audit.type-scale.message" size label n)
+       (tr "penforge.audit.type-scale.suggestion" nearest)]
+
+      "default-name"
+      [(tr "penforge.audit.default-name.title")
+       (tr "penforge.audit.default-name.message" n examples)
+       (tr "penforge.audit.default-name.suggestion")]
+
+      [title message suggestion])))
+
 (mf/defc finding-row*
   {::mf/private true}
   [{:keys [finding developer on-select]}]
-  (let [{:keys [title message suggestion node-id node-name board-name check duplicate]} finding
+  (let [{:keys [code node-id node-name board-name check duplicate]} finding
+        [title message suggestion] (finding-texts finding)
         on-click (mf/use-fn
                   (mf/deps on-select node-id)
                   #(on-select node-id))]
@@ -68,7 +136,10 @@
      [:button {:class (stl/css :finding-button)
                :title (tr "penforge.audit.show-node")
                :on-click on-click}
-      [:span {:class (stl/css :finding-title)} title]
+      [:span {:class (stl/css :finding-title)}
+       title
+       (when (= code "ai-review")
+         [:span {:class (stl/css :finding-ai)} (tr "penforge.audit.ai-badge")])]
       [:span {:class (stl/css :finding-node)}
        (if (= board-name node-name) node-name (str board-name " › " node-name))]
       [:span {:class (stl/css :finding-message)} message]
@@ -115,6 +186,11 @@
         (when (:truncated result)
           [:> context-notification* {:level :warning}
            (tr "penforge.audit.truncated")])
+
+        (let [unchecked (:contrast-unchecked result 0)]
+          (when (pos? unchecked)
+            [:p {:class (stl/css :scope)}
+             (tr "penforge.audit.contrast-unchecked" unchecked)]))
 
         (if (empty? findings)
           [:p {:class (stl/css :empty)} (tr "penforge.audit.no-findings")]

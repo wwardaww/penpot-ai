@@ -27,17 +27,17 @@ export interface PostResult {
  * Canvas comments of the design audit: posts findings as `[Audit]` threads and finds the open ones.
  *
  * Threads are created with `Page.addCommentThread` through `execute_code` (no typed tool creates
- * comments) at the finding's position in page coordinates, on the page made active first. A finding
- * is a duplicate when an open audit thread with the same title sits on the same node, or within a
- * few pixels of the same spot.
+ * comments) at the finding's position in page coordinates, on the page made active first. Each
+ * comment ends with `Ref: <ref>`, the short hash of the finding's stable id; a finding is a
+ * duplicate when an open audit thread carries its ref, wherever the thread sits.
  */
 export class AuditComments {
     /** Prefix of every audit comment. */
     public static readonly PREFIX = "[Audit]";
 
     private static readonly MAX_LENGTH = 750;
-    private static readonly SAME_SPOT_PX = 6;
     private static readonly BATCH = 15;
+    private static readonly REF_PATTERN = /\bRef: (A-[0-9a-f]{8})\s*$/;
 
     constructor(private readonly reader: DesignReader) {}
 
@@ -47,8 +47,21 @@ export class AuditComments {
      * @param finding - the finding
      */
     public static content(finding: AuditFinding): string {
+        const ref = `\nRef: ${finding.ref}`;
+        const max = AuditComments.MAX_LENGTH - ref.length;
         const text = `${AuditComments.PREFIX} ${finding.title}: ${finding.message}\nSuggested fix: ${finding.suggestion}`;
-        return text.length > AuditComments.MAX_LENGTH ? text.slice(0, AuditComments.MAX_LENGTH - 1) + "…" : text;
+        return (text.length > max ? text.slice(0, max - 1) + "…" : text) + ref;
+    }
+
+    /**
+     * Ref of the finding an audit thread reports, from its first comment.
+     *
+     * @param thread - the thread
+     * @returns the ref, or null for threads without one
+     */
+    public static refOf(thread: CanvasThread): string | null {
+        const match = AuditComments.REF_PATTERN.exec(thread.comments[0]?.content ?? "");
+        return match ? match[1] : null;
     }
 
     /**
@@ -79,21 +92,7 @@ export class AuditComments {
      * @param threads - open audit threads
      */
     public static duplicateOf(finding: AuditFinding, threads: CanvasThread[]): CanvasThread | undefined {
-        const head = `${AuditComments.PREFIX} ${finding.title}:`;
-        return threads.find((thread) => {
-            if (!thread.comments[0].content.trimStart().startsWith(head)) {
-                return false;
-            }
-            if (thread.nodeId && thread.nodeId === finding.nodeId) {
-                return true;
-            }
-            const p = thread.position;
-            return (
-                !!p &&
-                Math.abs(p.x - finding.position.x) <= AuditComments.SAME_SPOT_PX &&
-                Math.abs(p.y - finding.position.y) <= AuditComments.SAME_SPOT_PX
-            );
-        });
+        return threads.find((thread) => AuditComments.refOf(thread) === finding.ref);
     }
 
     /**

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
@@ -93,10 +94,24 @@ afterEach(() => {
     rmSync(root, { recursive: true, force: true });
 });
 
+/** Runs git in the test project's design folder. */
+function designGit(...args: string[]): string {
+    return execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@localhost", ...args], {
+        cwd: join(root, "design"),
+        encoding: "utf8",
+    });
+}
+
+/** Creates the design repository the way the daemon does (W01). */
+function initDesignRepo(): void {
+    mkdirSync(join(root, "design"), { recursive: true });
+    designGit("init", "-q", "-b", "main");
+    designGit("commit", "-q", "--allow-empty", "-m", "init");
+}
+
 function context(penpot: FakePenpot, onTurn: (request: WorkflowClaudeRequest) => string = () => "[]") {
     const events: { kind: WorkflowEventKind; payload: any }[] = [];
     const turns: WorkflowClaudeRequest[] = [];
-    const commits: string[] = [];
     const ctx: WorkflowContext = {
         runId: "run-1",
         context: {
@@ -125,9 +140,8 @@ function context(penpot: FakePenpot, onTurn: (request: WorkflowClaudeRequest) =>
             appSrcDir: join(root, "app-src"),
             metaDir: join(root, ".penforge"),
             resolve: (path) => join(root, path),
-            commitAll: async (_repo, message) => {
-                commits.push(message);
-                return "c0ffee";
+            commitAll: async () => {
+                throw new Error("the audit must commit its report only");
             },
             readJson: async (_name, fallback) => fallback,
             writeJson: async () => {},
@@ -139,11 +153,13 @@ function context(penpot: FakePenpot, onTurn: (request: WorkflowClaudeRequest) =>
         },
     };
     const result = () => events.find((e) => e.kind === "result")!.payload;
-    return { ctx, events, turns, commits, result };
+    return { ctx, events, turns, result };
 }
 
 describe("audit workflow", () => {
     test("comments the low-contrast label and the small tap target, then fixes both", async () => {
+        initDesignRepo();
+        writeFileSync(join(root, "design", "DESIGN.md"), "user draft\n");
         const penpot = new FakePenpot([loginBoard()]);
         const run = context(penpot, (request) => {
             // Claude fixes every thread listed in the prompt
@@ -164,10 +180,10 @@ describe("audit workflow", () => {
             ]
         );
         assert.deepEqual(
-            penpot.threads.map((t) => [t.nodeId, t.position]),
+            penpot.threads.map((t) => t.position),
             [
-                ["text-hint", { x: 124, y: 150 }],
-                ["close-button", { x: 354, y: 24 }],
+                { x: 124, y: 150 },
+                { x: 354, y: 24 },
             ]
         );
         assert.match(
@@ -175,9 +191,11 @@ describe("audit workflow", () => {
             /^\[Audit\] Low contrast: "Forgot your password\?" has a contrast/
         );
         assert.match(result.report.path, /^design\/audits\/\d{4}-\d{2}-\d{2}\.md$/);
-        assert.equal(result.report.commit, "c0ffee");
+        assert.match(result.report.commit, /^[0-9a-f]{40}$/);
         assert.match(readFileSync(join(root, result.report.path), "utf8"), /Low contrast/);
-        assert.deepEqual(run.commits, ["penforge(audit): 1 error, 1 warning on Home"]);
+        assert.equal(designGit("log", "-1", "--format=%s").trim(), "penforge(audit): 1 error, 1 warning on Home");
+        // the user's own file in design/ stays out of the audit commit
+        assert.equal(designGit("status", "--porcelain").trim(), "?? DESIGN.md");
         assert.equal(run.turns.length, 0, "no Claude turn without the AI review");
 
         const fix = await workflow.run(run.ctx, { mode: "fix" });
@@ -191,6 +209,11 @@ describe("audit workflow", () => {
     test("does not post a second comment for a finding that is still open", async () => {
         const penpot = new FakePenpot([loginBoard()]);
         await workflow.run(context(penpot).ctx, { report: false });
+        // the hit test may name another layer and comments may sit elsewhere: only the ref counts
+        for (const thread of penpot.threads) {
+            thread.nodeId = "some-child";
+            thread.position = { x: thread.position!.x + 40, y: thread.position!.y + 40 };
+        }
         const again = context(penpot);
         const summary = await workflow.run(again.ctx, { report: false });
         assert.equal(penpot.threads.length, 2);
@@ -227,6 +250,18 @@ describe("audit workflow", () => {
         assert.equal(result.pageName, "Home");
     });
 
+    test("does not repost AI findings whose wording changed", async () => {
+        const penpot = new FakePenpot([loginBoard()]);
+        const answer = (title: string) => () =>
+            `[{"nodeId":"text-title","category":"hierarchy","severity":"info","title":"${title}","message":"m"}]`;
+        await workflow.run(context(penpot, answer("Weak heading")).ctx, { ai: true, report: false });
+        assert.equal(penpot.threads.length, 3);
+        const again = context(penpot, answer("Heading lacks weight"));
+        await workflow.run(again.ctx, { ai: true, report: false });
+        assert.equal(penpot.threads.length, 3);
+        assert.deepEqual(again.result().comments, { posted: 0, duplicates: 3, overLimit: 0 });
+    });
+
     test("reports an empty page and an empty fix", async () => {
         const penpot = new FakePenpot([]);
         const run = context(penpot);
@@ -238,11 +273,9 @@ describe("audit workflow", () => {
     test("keeps the audit result when the report cannot be written", async () => {
         const penpot = new FakePenpot([loginBoard()]);
         const run = context(penpot);
-        run.ctx.workspace.commitAll = async () => {
-            throw new Error("git is missing");
-        };
+        // no design repository
         await workflow.run(run.ctx, { comments: false });
         assert.equal(run.result().report, null);
-        assert.ok(run.events.some((e) => e.kind === "log" && /git is missing/.test(e.payload.text)));
+        assert.ok(run.events.some((e) => e.kind === "log" && /Could not write the audit report/.test(e.payload.text)));
     });
 });

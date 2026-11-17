@@ -12,7 +12,8 @@ text. The user message says which of the two jobs below to do.
   action or heading, competing emphasis), misaligned elements, uneven spacing between similar
   items, inconsistent styles for the same kind of element (buttons, cards, headings).
 - Do not change the design while reviewing.
-- Use the id of the layer the problem is about (the smallest layer that shows it).
+- Use the id of the layer the problem is about (the smallest layer that shows it), and the
+  category that fits best: `hierarchy`, `alignment`, `spacing`, `consistency` or `other`.
 - `title`: 2 to 4 words. `message`: one sentence on what is wrong. `suggestion`: one short
   sentence on how to fix it. Write for a designer: plain words, no code.
 - Severity: `error` makes the screen hard to use, `warning` looks clearly off, `info` is polish.

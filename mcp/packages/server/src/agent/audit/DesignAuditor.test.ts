@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, test } from "node:test";
 import { AiReview } from "./AiReview";
 import { AuditComments } from "./AuditComments";
@@ -17,6 +21,7 @@ import {
 } from "./checks";
 import { DesignAuditor } from "./DesignAuditor";
 import { DesignTree } from "./DesignTree";
+import { ReportCommitter } from "./ReportCommitter";
 import { Rgb } from "./Rgb";
 import { fill, loginBoard, node, text } from "./testing/fixtures";
 import { DesignReader, TreeLoader } from "./TreeLoader";
@@ -185,7 +190,13 @@ describe("SpacingCheck", () => {
             findings.map((f) => f.nodeId),
             ["a"]
         );
-        assert.match(findings[0].suggestion, /^Use 12 px instead of 13 px, 8 px instead of 7 px/);
+        assert.match(findings[0].suggestion, /^Change it to 13 → 12 px, 7 → 8 px/);
+        assert.deepEqual(findings[0].params, {
+            label: '"a"',
+            values: "13 px, 7 px",
+            base: 4,
+            replacements: "13 → 12 px, 7 → 8 px",
+        });
     });
 });
 
@@ -370,7 +381,10 @@ describe("TreeLoader", () => {
 describe("AuditComments", () => {
     const finding = {
         id: "contrast:t",
+        ref: DesignAuditor.ref("contrast:t"),
         check: "contrast",
+        code: "contrast",
+        params: {},
         severity: "error",
         nodeId: "t",
         nodeName: "Hint",
@@ -382,18 +396,35 @@ describe("AuditComments", () => {
         position: { x: 100, y: 100 },
     } as AuditFinding;
 
-    test("formats comments with the audit prefix and matches open duplicates", () => {
-        assert.equal(AuditComments.content(finding), "[Audit] Low contrast: Too light.\nSuggested fix: Darken it.");
+    test("ends comments with the finding's ref and matches open threads by ref only", () => {
+        assert.match(finding.ref, /^A-[0-9a-f]{8}$/);
+        assert.equal(
+            AuditComments.content(finding),
+            `[Audit] Low contrast: Too light.\nSuggested fix: Darken it.\nRef: ${finding.ref}`
+        );
         const thread = (content: string, nodeId: string | null, position = { x: 0, y: 0 }) => ({
             threadId: "th",
             nodeId,
             position,
             comments: [{ content }],
         });
-        assert.ok(AuditComments.duplicateOf(finding, [thread("[Audit] Low contrast: old text", "t")]));
-        assert.ok(AuditComments.duplicateOf(finding, [thread("[Audit] Low contrast: x", null, { x: 103, y: 98 })]));
-        assert.equal(AuditComments.duplicateOf(finding, [thread("[Audit] Small tap target: x", "t")]), undefined);
-        assert.equal(AuditComments.duplicateOf(finding, [thread("Low contrast: x", "t")]), undefined);
+        // wherever the thread landed and whatever its title says
+        assert.ok(
+            AuditComments.duplicateOf(finding, [
+                thread(`[Audit] Other words\nRef: ${finding.ref}`, "x", { x: 500, y: 9 }),
+            ])
+        );
+        assert.equal(
+            AuditComments.duplicateOf(finding, [thread("[Audit] Low contrast: Too light.", "t", { x: 100, y: 100 })]),
+            undefined
+        );
+        assert.equal(AuditComments.duplicateOf(finding, [thread("[Audit] x\nRef: A-00000000", "t")]), undefined);
+    });
+
+    test("keeps the ref when a long comment is cut", () => {
+        const long = AuditComments.content({ ...finding, message: "x".repeat(2000) });
+        assert.ok(long.length <= 750);
+        assert.ok(long.endsWith(`Ref: ${finding.ref}`));
     });
 });
 
@@ -442,5 +473,144 @@ describe("AuditReport", () => {
         assert.match(markdown, /- Result: 1 error, 1 warning\n/);
         assert.match(markdown, /### Errors\n\n- \*\*Low contrast\*\* — Login › Hint \(`text-hint`, contrast\)/);
         assert.equal(AuditReport.counts([]), "no findings");
+    });
+});
+
+describe("audit of selected nodes", () => {
+    const button = (labelColor: string) =>
+        node({
+            id: "btn",
+            name: "Buy button",
+            type: "board",
+            parentId: "card",
+            x: 20,
+            y: 20,
+            width: 120,
+            height: 40,
+            children: [text({ id: "label", content: "Buy", x: 40, y: 30, width: 60, height: 20, color: labelColor })],
+        });
+    const ancestors = new Map([
+        [
+            "btn",
+            [
+                node({
+                    id: "card",
+                    name: "Card",
+                    type: "board",
+                    parentId: "screen",
+                    width: 300,
+                    height: 200,
+                    fills: fill("#111827"),
+                }),
+                node({ id: "screen", name: "Screen", type: "board", width: 400, height: 800, fills: fill("#FFFFFF") }),
+            ],
+        ],
+    ]);
+
+    test("takes the background from ancestors outside the tree", () => {
+        const light = new DesignTree([button("#FFFFFF")], ancestors);
+        assert.equal(ContrastCheck.background(light, light.get("label")!)!.hex(), "#111827");
+        assert.deepEqual(new ContrastCheck().run(light), []);
+        const dark = new DesignTree([button("#1F2937")], ancestors);
+        assert.equal(new ContrastCheck().run(dark)[0]?.nodeId, "label");
+    });
+
+    test("does not assume white when nothing opaque is below the text", () => {
+        const check = new ContrastCheck();
+        assert.deepEqual(check.run(new DesignTree([button("#FFFFFF")])), []);
+        assert.deepEqual(check.unknownBackgrounds, ["label"]);
+        const auditor = new DesignAuditor();
+        auditor.audit(new DesignTree([button("#FFFFFF")]), WEB);
+        assert.deepEqual(auditor.unknownBackgrounds, ["label"]);
+    });
+
+    test("checks a selected target itself and hides nodes under hidden ancestors", () => {
+        const small = node({ id: "x", name: "Close button", parentId: "card", width: 16, height: 16 });
+        const tree = new DesignTree([small], new Map([["x", [node({ id: "card", visible: true })]]]));
+        assert.deepEqual(
+            new TouchTargetCheck().run(tree, WEB).map((f) => f.nodeId),
+            ["x"]
+        );
+        const hidden = new DesignTree([small], new Map([["x", [node({ id: "card", visible: false })]]]));
+        assert.equal(hidden.get("x")!.isVisible(), false);
+    });
+
+    test("TreeLoader loads the ancestor chain up to the page root", async () => {
+        const snapshots: Record<string, ReturnType<typeof node>> = {
+            card: node({ id: "card", parentId: "screen" }),
+            screen: node({ id: "screen", parentId: "00000000-0000-0000-0000-000000000000" }),
+        };
+        const calls: string[] = [];
+        const tools = {
+            list: async () => [],
+            call: async (_name: string, args: Record<string, unknown> = {}) => {
+                calls.push(String(args.nodeId));
+                return { isError: false, content: [], text: JSON.stringify(snapshots[String(args.nodeId)]) };
+            },
+        };
+        const loader = new TreeLoader(new DesignReader(tools));
+        const ancestry = await loader.ancestry([
+            node({ id: "btn", parentId: "card" }),
+            node({ id: "top", parentId: null }),
+        ]);
+        assert.deepEqual(
+            ancestry.get("btn")!.map((a) => a.id),
+            ["card", "screen"]
+        );
+        assert.deepEqual(ancestry.get("top"), []);
+        assert.deepEqual(calls, ["card", "screen"]);
+    });
+});
+
+describe("stable finding ids", () => {
+    test("do not depend on positions, order or Claude's wording", () => {
+        const tree = new DesignTree([loginBoard()]);
+        const ids = new DesignAuditor().audit(tree, WEB).map((f) => [f.id, f.ref]);
+        assert.deepEqual(
+            ids,
+            new DesignAuditor().audit(new DesignTree([loginBoard()]), WEB).map((f) => [f.id, f.ref])
+        );
+        const review = new AiReview(tree);
+        const first = review.parse(
+            '[{"nodeId":"text-title","category":"hierarchy","title":"Weak heading","message":"a"}]'
+        );
+        const second = review.parse(
+            '[{"nodeId":"text-title","category":"hierarchy","title":"Heading too quiet","message":"b"}]'
+        );
+        assert.equal(first[0].key, "ai-review:hierarchy:text-title");
+        assert.equal(first[0].key, second[0].key);
+        const other = review.parse('[{"nodeId":"text-title","category":"made-up","title":"T","message":"m"}]');
+        assert.equal(other[0].key, "ai-review:other:text-title");
+    });
+});
+
+describe("ReportCommitter", () => {
+    test("commits the report file only, leaving the user's other changes alone", async () => {
+        const repo = mkdtempSync(join(tmpdir(), "penforge-report-"));
+        try {
+            const git = (...args: string[]) =>
+                execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@localhost", ...args], {
+                    cwd: repo,
+                    encoding: "utf8",
+                });
+            git("init", "-q", "-b", "main");
+            writeFileSync(join(repo, "DESIGN.md"), "v1\n");
+            git("add", "DESIGN.md");
+            git("commit", "-q", "-m", "init");
+            // user edits: one staged, one not, one untracked file
+            writeFileSync(join(repo, "DESIGN.md"), "v2\n");
+            git("add", "DESIGN.md");
+            writeFileSync(join(repo, "notes.tmp"), "scratch\n");
+            mkdirSync(join(repo, "audits"));
+            writeFileSync(join(repo, "audits", "2026-11-17.md"), "# report\n");
+
+            const hash = await new ReportCommitter().commitFile(repo, "audits/2026-11-17.md", "penforge(audit): x");
+            assert.match(hash!, /^[0-9a-f]{40}$/);
+            assert.equal(git("show", "--name-only", "--format=", "HEAD").trim(), "audits/2026-11-17.md");
+            assert.equal(git("status", "--porcelain").trim().split("\n").sort().join("|"), "?? notes.tmp|M  DESIGN.md");
+            assert.equal(await new ReportCommitter().commitFile(repo, "audits/2026-11-17.md", "again"), null);
+        } finally {
+            rmSync(repo, { recursive: true, force: true });
+        }
     });
 });

@@ -139,6 +139,17 @@
   color: var(--color-foreground-secondary);
 }
 
+.finding-ai {
+  @include t.use-typography("body-small");
+
+  margin-inline-start: var(--sp-xs);
+  padding: 0 var(--sp-xs);
+  border-radius: $br-4;
+  background-color: var(--color-background-quaternary);
+  color: var(--color-foreground-secondary);
+  font-weight: 400;
+}
+
 .options {
   display: flex;
   align-items: center;

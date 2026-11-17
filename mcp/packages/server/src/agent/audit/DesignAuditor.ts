@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import type { AuditCheck } from "./AuditCheck";
 import type { AuditConfig } from "./AuditConfig";
 import { SEVERITIES } from "./AuditFinding";
@@ -19,6 +20,9 @@ import type { DesignTree } from "./DesignTree";
  */
 export class DesignAuditor {
     private readonly checks: AuditCheck[];
+
+    /** Texts whose contrast could not be checked in the last audit (background unknown). */
+    public unknownBackgrounds: string[] = [];
 
     /**
      * @param checks - the checks to run (default: all shipped checks)
@@ -45,16 +49,29 @@ export class DesignAuditor {
      */
     public audit(tree: DesignTree, config: AuditConfig): AuditFinding[] {
         const drafts: AuditFindingDraft[] = [];
+        this.unknownBackgrounds = [];
         for (const check of this.checks) {
             if (!config.disabledChecks.has(check.id)) {
                 drafts.push(...check.run(tree, config));
+                if (check instanceof ContrastCheck) {
+                    this.unknownBackgrounds = check.unknownBackgrounds;
+                }
             }
         }
         return DesignAuditor.finish(tree, drafts);
     }
 
     /**
-     * Assigns ids to drafts and sorts them.
+     * Short hash of a finding id, written into its canvas comment (`A-` and 8 hex digits).
+     *
+     * @param id - the finding id
+     */
+    public static ref(id: string): string {
+        return "A-" + createHash("sha1").update(id).digest("hex").slice(0, 8);
+    }
+
+    /**
+     * Assigns ids and refs to drafts and sorts them.
      *
      * @param tree - the tree the drafts refer to (for board and paint order)
      * @param drafts - the findings
@@ -72,14 +89,13 @@ export class DesignAuditor {
             return oa[0] - ob[0] || oa[1] - ob[1] || oa[2] - ob[2];
         });
         const taken = new Set<string>();
-        return sorted.map((draft) => {
-            const base = `${draft.check}:${draft.nodeId}`;
-            let id = base;
+        return sorted.map(({ key, ...draft }) => {
+            let id = key;
             for (let n = 2; taken.has(id); n++) {
-                id = `${base}:${n}`;
+                id = `${key}:${n}`;
             }
             taken.add(id);
-            return { id, ...draft };
+            return { id, ref: DesignAuditor.ref(id), ...draft };
         });
     }
 }
