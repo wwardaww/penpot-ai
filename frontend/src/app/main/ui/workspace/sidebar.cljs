@@ -30,7 +30,6 @@
    [app.main.ui.hooks :as hooks]
    [app.main.ui.hooks.resize :refer [use-resize-hook]]
    [app.main.ui.workspace.ai.chat.panel :refer [ai-chat-panel*]]
-   [app.main.ui.workspace.ai.chat.session :refer [ai-session*]]
    [app.main.ui.workspace.comments :refer [comments-sidebar*]]
    [app.main.ui.workspace.left-header :refer [left-header*]]
    [app.main.ui.workspace.right-header :refer [right-header*]]
@@ -415,8 +414,6 @@
 
     [:> (mf/provider ctx/tokens-lib) {:value tokens-lib}
      [:> (mf/provider ctx/tokens-status) {:value tokens-status}
-      (when (contains? cf/flags :ai)
-        [:> ai-session* {:file-id file-id}])
       (if (:collapse-left-sidebar layout)
         [:> collapsed-button*]
         [:> left-sidebar* {:layout layout

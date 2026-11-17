@@ -8,6 +8,7 @@
   (:require-macros [app.main.style :as stl])
   (:require
    [app.common.data.macros :as dm]
+   [app.config :as cf]
    [app.main.data.common :as dcm]
    [app.main.data.helpers :as dsh]
    [app.main.data.persistence :as dps]
@@ -23,6 +24,7 @@
    [app.main.ui.hooks :as hooks]
    [app.main.ui.hooks.resize :refer [use-resize-observer]]
    [app.main.ui.modal :refer [modal-container*]]
+   [app.main.ui.workspace.ai.chat.session :refer [ai-session*]]
    [app.main.ui.workspace.colorpicker]
    [app.main.ui.workspace.components-debugger :refer [components-debugger*]]
    [app.main.ui.workspace.context-menu :refer [context-menu*]]
@@ -280,6 +282,11 @@
                             :touch-action "none"
                             :position "relative"}}
           [:> context-menu*]
+          ;; Penforge: the AI session lives at file level. The content below
+          ;; is keyed by page id and remounts on every page change, which
+          ;; would close the agent connection and abort a running AI turn.
+          (when (contains? cf/flags :ai)
+            [:> ai-session* {:file-id file-id}])
           (when (and file-loaded? page-id)
             [:> workspace-inner*
              {:page-id page-id
