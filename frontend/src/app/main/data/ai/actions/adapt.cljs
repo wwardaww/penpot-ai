@@ -11,7 +11,12 @@
   board next to it as `<Board> / Mobile` (or `/ Desktop`), links both
   boards with shared plugin data (`penforge` `variantOf`) and reflows
   the copy. When it is done, the new board gets selected and both
-  boards are shown."
+  boards are shown.
+
+  The daemon sends codes with English fallback texts (progress `code`,
+  a `plan` `{code \"exists\"}` before its question, `result` `status`);
+  this namespace replaces the texts of the run's chat entries with
+  translated ones."
   (:require
    [app.common.files.helpers :as cfh]
    [app.common.uuid :as uuid]
@@ -25,6 +30,7 @@
    [app.main.ui.ds.foundations.assets.icon :as i]
    [app.util.i18n :refer [tr]]
    [beicon.v2.core :as rx]
+   [clojure.string :as str]
    [potok.v2.core :as ptk]))
 
 (def workflow-name
@@ -60,10 +66,122 @@
     (= target (target-for board))
     false))
 
+(defn can-edit?
+  "Whether the profile may change the open file."
+  [state]
+  (boolean
+   (and (get-in (dsh/lookup-team state) [:permissions :can-edit])
+        (not (get-in state [:workspace-global :read-only?])))))
+
 (defn workflow-params
   [board-id target]
   {:board-id (str board-id)
    :target (name target)})
+
+;; --- Translated texts of a run
+
+(defn- quote-names
+  [names]
+  (str/join ", " (map #(str "\"" % "\"") names)))
+
+(defn progress-text
+  "Translated text of a progress `code`, or nil for unknown codes."
+  [code]
+  (case code
+    "copy"   (tr "penforge.adapt.progress.copy")
+    "read"   (tr "penforge.adapt.progress.read")
+    "reflow" (tr "penforge.adapt.progress.reflow")
+    "check"  (tr "penforge.adapt.progress.check")
+    "fix"    (tr "penforge.adapt.progress.fix")
+    nil))
+
+(defn exists-question
+  "Translated question asked when the board already has a variant for
+  the target (`plan` payload `{:code \"exists\"}`)."
+  [{:keys [target source-name existing]}]
+  (let [names (quote-names existing)]
+    (if (= "desktop" target)
+      (tr "penforge.adapt.exists-desktop" source-name names)
+      (tr "penforge.adapt.exists-mobile" source-name names))))
+
+(defn option-label
+  "Translated label of a question option, or nil for unknown ids."
+  [id]
+  (case id
+    "create" (tr "penforge.adapt.option.create")
+    "cancel" (tr "penforge.adapt.option.cancel")
+    nil))
+
+(defn summary-text
+  "Translated run summary from the `result` payload, or nil."
+  [{:keys [status name width height issue-count existing]}]
+  (case status
+    "created" (if (pos? (or issue-count 0))
+                (tr "penforge.adapt.summary.issues" name width height issue-count)
+                (tr "penforge.adapt.summary.done" name width height))
+    "kept"    (tr "penforge.adapt.summary.kept" (quote-names existing))
+    nil))
+
+(defn- update-entries
+  "Update the chat entries matching `pred` with `f`."
+  [pred f]
+  (ptk/reify ::update-entries
+    ptk/UpdateEvent
+    (update [_ state]
+      (if (some? (get-in state [:penforge :chat :entries]))
+        (update-in state [:penforge :chat :entries]
+                   (fn [entries]
+                     (mapv #(if (pred %) (f %) %) entries)))
+        state))))
+
+(defn- run-entry?
+  [run-id entry]
+  (and (= :workflow (:kind entry))
+       (= run-id (:id entry))))
+
+(defn- translate-options
+  [options]
+  (mapv #(if-let [label (option-label (:id %))]
+           (assoc % :label label)
+           %)
+        options))
+
+(defn localize
+  "Event that translates the chat entry a daemon message of the run
+  changed, or nil. `plan` and `result` are the last payloads of those
+  kinds the run sent."
+  [{:keys [message plan result]}]
+  (let [{msg-type :type :keys [kind payload run-id ok]} message]
+    (cond
+      (and (= "workflow.event" msg-type) (= "progress" kind))
+      (when-let [text (progress-text (:code payload))]
+        (update-entries (partial run-entry? run-id)
+                        #(assoc % :progress {:text text})))
+
+      (and (= "workflow.event" msg-type) (= "question" kind) (= "exists" (:code plan)))
+      (let [question-id (:question-id payload)
+            text        (exists-question plan)]
+        (update-entries #(and (= :question (:kind %)) (= question-id (:id %)))
+                        #(-> %
+                             (assoc :text text)
+                             (update :options translate-options))))
+
+      (and (= "workflow.done" msg-type) ok)
+      (when-let [summary (summary-text result)]
+        (update-entries (partial run-entry? run-id)
+                        #(assoc % :summary summary)))
+
+      :else
+      nil)))
+
+(defn- collect-run
+  [acc message]
+  (let [kind (when (= "workflow.event" (:type message)) (:kind message))]
+    (cond-> (assoc acc :message message)
+      (= "plan" kind)   (assoc :plan (:payload message))
+      (= "result" kind) (assoc :result (:payload message)))))
+
+;; --- Run
 
 (defn show-boards
   "Select the new board and fit the view to it and its source, when
@@ -83,7 +201,8 @@
           (rx/empty))))))
 
 (defn result-payload?
-  "True for the `result` event of an `adapt-responsive` run."
+  "True for the `result` event of an `adapt-responsive` run that made
+  a board."
   [message]
   (and (= "workflow.event" (:type message))
        (= "result" (:kind message))
@@ -91,7 +210,8 @@
 
 (defn adapt-board
   "Start the `adapt-responsive` workflow for a board, show its
-  progress in the AI chat and show the new board when it is ready."
+  progress in the AI chat (translated) and show the new board when it
+  is ready."
   ([board-id target]
    (adapt-board board-id target (proto/next-rid)))
   ([board-id target rid]
@@ -99,6 +219,10 @@
      ptk/WatchEvent
      (watch [_ _ stream]
        (rx/merge
+        (->> (chat/workflow-messages stream rid)
+             (rx/scan collect-run {})
+             (rx/map localize)
+             (rx/filter some?))
         (->> (chat/workflow-messages stream rid)
              (rx/filter result-payload?)
              (rx/take 1)
@@ -121,6 +245,7 @@
   :order 40
   :scopes #{:context-menu :command-palette}
   :visible? #(can-adapt? % :mobile)
+  :enabled? can-edit?
   :run (run-adapt :mobile)})
 
 (actions/register-action!
@@ -130,4 +255,5 @@
   :order 40
   :scopes #{:context-menu :command-palette}
   :visible? #(can-adapt? % :desktop)
+  :enabled? can-edit?
   :run (run-adapt :desktop)})
