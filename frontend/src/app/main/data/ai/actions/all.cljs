@@ -12,4 +12,5 @@
    [app.main.data.ai.actions.chat]
    [app.main.data.ai.actions.ask]
    ;; W19: AI history dialog; requires app.main.data.ai.actions.checkpoints
-   [app.main.ui.workspace.ai.checkpoints.history]))
+   [app.main.ui.workspace.ai.checkpoints.history]
+   [app.main.data.ai.actions.auto-name]))

@@ -9,3 +9,4 @@ export { workflow as checkpointCreate } from "./checkpoint-create";
 export { workflow as checkpointRestore } from "./checkpoint-restore";
 export { workflow as checkpointList } from "./checkpoint-list";
 export { workflow as checkpointDiff } from "./checkpoint-diff";
+export { workflow as autoName } from "./auto-name";
