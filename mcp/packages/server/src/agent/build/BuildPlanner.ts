@@ -13,6 +13,7 @@ import {
     type Stack,
     StackSchema,
 } from "./BuildFiles";
+import { BuildError } from "./BuildError";
 import { BuildText } from "./BuildText";
 import { type DesignBoard, DesignReader, type DesignSnapshot } from "./DesignReader";
 import { JsonReply } from "./JsonReply";
@@ -88,7 +89,7 @@ export class BuildPlanner {
         const design = await this.reader.read();
         this.progress("read", "done");
         if (design.boards.length === 0) {
-            throw new Error(this.text.noBoards());
+            throw new BuildError(this.text.noBoards());
         }
         const map = await this.files.readMap();
         const stack = await this.files.readStack();
@@ -122,7 +123,7 @@ export class BuildPlanner {
             reply = JsonReply.parse(result.text, BuildPlanner.ReplySchema);
         }
         if (reply === null) {
-            throw new Error(this.text.planFailed());
+            throw new BuildError(this.text.planFailed());
         }
         this.progress("plan", "done");
 

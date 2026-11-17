@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { WorkflowContext, WorkflowResult } from "@penpot/mcp-common";
 import { AppSourceGit } from "./AppSourceGit";
 import { BuildFiles, type BuildMap, type Plan, type PlanScreen, type Stack, StackSchema } from "./BuildFiles";
+import { BuildError } from "./BuildError";
 import { type BuildStep, BuildText } from "./BuildText";
 import { type CommandExecutor, type CommandOutcome, ProcessCommandExecutor } from "./CommandExecutor";
 import { JsonReply } from "./JsonReply";
@@ -109,7 +110,7 @@ export class AppBuilder {
     public async build(params: BuildRunParams = {}): Promise<WorkflowResult> {
         const key = this.ctx.workspace.root;
         if (AppBuilder.running.has(key)) {
-            throw new Error(this.text.busy());
+            throw new BuildError(this.text.busy());
         }
         AppBuilder.running.add(key);
         try {
@@ -131,12 +132,12 @@ export class AppBuilder {
             plan.fileId !== this.ctx.context.fileId ||
             (params.planId !== undefined && plan.planId !== params.planId);
         if (stalePlan) {
-            throw new Error(this.text.stalePlan());
+            throw new BuildError(this.text.stalePlan());
         }
         const full = plan.mode === "full";
         const map = full ? null : await this.files.readMap();
         if (!full && map === null) {
-            throw new Error(this.text.stalePlan());
+            throw new BuildError(this.text.stalePlan());
         }
         const screens = AppBuilder.applyRoutes(plan.screens, overrides.data.routes);
 
@@ -283,7 +284,7 @@ export class AppBuilder {
                     BuildText.tail(failure.outcome.output, AppBuilder.MAX_PROMPT_OUTPUT_CHARS)
             );
             if (attempt >= this.maxFixAttempts) {
-                throw new Error(this.text.gaveUp(failure.command, failure.outcome, attempt));
+                throw new BuildError(this.text.gaveUp(failure.command, failure.outcome, attempt));
             }
             const fixId = String(attempt + 1);
             this.step("fix", "running", fixId, `fix-${fixId}`);

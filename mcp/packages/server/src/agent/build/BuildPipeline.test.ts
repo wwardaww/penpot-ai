@@ -415,3 +415,11 @@ test("Routes are unique and URL-safe", () => {
     assert.equal(routes.next("Ödeme Ekranı"), "/odeme-ekrani");
     assert.equal(routes.next("***"), "/screen");
 });
+
+test("the build-run workflow reports persona-safe failures as a failed event", async () => {
+    const { workflow } = await import("../workflows/build-run");
+    events = [];
+    await assert.rejects(workflow.run(context("designer"), { planId: "missing" }));
+    const failed = events.find((e) => e.kind === "failed");
+    assert.match(failed?.payload.message ?? "", /press Build again/);
+});

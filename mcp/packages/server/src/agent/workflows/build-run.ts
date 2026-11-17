@@ -1,3 +1,4 @@
+import { BuildError } from "../build/BuildError";
 import type { Workflow, WorkflowContext } from "@penpot/mcp-common";
 import { AppBuilder, type BuildRunParams, type PreBuildRunner } from "../build/AppBuilder";
 
@@ -25,5 +26,8 @@ class RegistryPreBuildRunner implements PreBuildRunner {
 export const workflow: Workflow<BuildRunParams> = {
     name: "build-run",
     description: "Builds the app in app-src from the confirmed plan, then checks and commits it.",
-    run: (ctx, params) => new AppBuilder(ctx, { preBuild: new RegistryPreBuildRunner() }).build(params ?? {}),
+    run: (ctx, params) =>
+        BuildError.report(ctx, () =>
+            new AppBuilder(ctx, { preBuild: new RegistryPreBuildRunner() }).build(params ?? {})
+        ),
 };

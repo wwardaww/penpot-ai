@@ -1,3 +1,4 @@
+import { BuildError } from "../build/BuildError";
 import type { Workflow } from "@penpot/mcp-common";
 import { type BuildPlanParams, BuildPlanner } from "../build/BuildPlanner";
 
@@ -9,5 +10,5 @@ import { type BuildPlanParams, BuildPlanner } from "../build/BuildPlanner";
 export const workflow: Workflow<BuildPlanParams> = {
     name: "build-plan",
     description: "Plans how to build the app from the design (stack, screens, routes).",
-    run: (ctx, params) => new BuildPlanner(ctx).plan(params ?? {}),
+    run: (ctx, params) => BuildError.report(ctx, () => new BuildPlanner(ctx).plan(params ?? {})),
 };
