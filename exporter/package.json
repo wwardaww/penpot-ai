@@ -29,7 +29,7 @@
     "ws": "^8.22.0"
   },
   "scripts": {
-    "clear:shadow-cache": "rm -rf .shadow-cljs && rm -rf target",
+    "clear:shadow-cache": "find .shadow-cljs target -mindepth 1 -delete 2>/dev/null || true",
     "watch:app": "pnpm run build:wasm && pnpm run clear:shadow-cache && clojure -M:dev:shadow-cljs watch main",
     "watch": "pnpm run watch:app",
     "build:app": "clojure -M:dev:shadow-cljs release main",

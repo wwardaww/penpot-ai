@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Penforge: run worktree builds/tests on the container's own disk.
+#
+# Agent worktrees live under .claude/worktrees/<name> in the source tree,
+# which the devenv container reaches through a slow host file-sharing
+# bridge. This script copies the source of one worktree (without
+# node_modules, caches or build output) to /home/penpot/worktrees/<name>
+# (a Docker volume, native speed) so installs, compiles and tests run fast.
+#
+# Run it INSIDE the devenv container, from anywhere:
+#   docker exec -u penpot penpot-devenv-ws0-main \
+#     bash -lc "~/penpot/scripts/penforge-worktree-sync <name>"
+# Then build/test in /home/penpot/worktrees/<name>/<module>.
+# Re-run after every edit on the host; only changed files are copied.
+
+set -euo pipefail
+
+if [[ $# -ne 1 ]]; then
+    echo "usage: penforge-worktree-sync <worktree-name>" >&2
+    echo "available:" >&2
+    ls -1 /home/penpot/penpot/.claude/worktrees/ >&2 || true
+    exit 2
+fi
+
+NAME="$1"
+SRC="/home/penpot/penpot/.claude/worktrees/$NAME"
+DST="/home/penpot/worktrees/$NAME"
+
+if [[ ! -d "$SRC" ]]; then
+    echo "worktree not found: $SRC" >&2
+    exit 1
+fi
+
+mkdir -p "$DST"
+
+# Copy everything except heavy, regenerable folders and git metadata.
+# Gitignored source artifacts (e.g. render_wasm shared.js, render-wasm.js)
+# are copied when present in the worktree.
+rsync -a --delete \
+    --exclude '.git' \
+    --exclude 'node_modules/' \
+    --exclude '.shadow-cljs/' \
+    --exclude '.cpcache/' \
+    --exclude '.pnpm-store/' \
+    --exclude 'cljs-runtime/' \
+    --exclude '/frontend/target/' \
+    --exclude '/exporter/target/' \
+    --exclude '/render-wasm/target/' \
+    --exclude '/docs/' \
+    --exclude '/sample_media/' \
+    "$SRC/" "$DST/"
+
+# Gitignored wasm artifacts are needed by the frontend build; fall back to
+# the main checkout when the worktree has none.
+MAIN="/home/penpot/penpot"
+for f in frontend/src/app/render_wasm/api/shared.js \
+         frontend/resources/public/js/render-wasm.js \
+         frontend/resources/public/js/render-wasm.wasm; do
+    if [[ ! -f "$DST/$f" && -f "$MAIN/$f" ]]; then
+        mkdir -p "$(dirname "$DST/$f")"
+        cp "$MAIN/$f" "$DST/$f"
+    fi
+done
+
+echo "synced $SRC -> $DST"
+echo "next: cd $DST/<module> && pnpm install (first time) && <build/test command>"

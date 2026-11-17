@@ -48,7 +48,7 @@
     "watch:app:assets": "node ./scripts/watch.js",
     "watch:app:libs": "node ./scripts/build-libs.js --watch",
     "watch:app:main": "clojure -M:dev:shadow-cljs watch main worker storybook",
-    "clear:shadow-cache": "rm -rf .shadow-cljs",
+    "clear:shadow-cache": "find .shadow-cljs -mindepth 1 -delete 2>/dev/null || true",
     "clear:wasm": "../render-wasm/clean frontend",
     "watch": "exit 0",
     "watch:app": "pnpm run clear:shadow-cache && pnpm run clear:wasm && pnpm run build:wasm && concurrently --kill-others-on-fail \"pnpm run watch:app:assets\" \"pnpm run watch:app:main\" \"pnpm run watch:app:libs\"",

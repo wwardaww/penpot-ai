@@ -23,6 +23,29 @@ services:
       # localhost-only local CA (see wiki runbook). Generated, never committed.
       - "./files/local-tls/localhost-fullchain.crt:/home/selfsigned.crt:ro"
       - "./files/local-tls/localhost.key:/home/selfsigned.key:ro"
+      # Penforge: heavy build folders live on the Linux side (WSL ext4 on
+      # Windows) instead of the slow host file-sharing bridge. Created by
+      # scripts/penforge-devenv-cache, which manage.sh run-devenv calls.
+      - "${HOME}/.penforge-devenv/ws0/pnpm-store:/home/penpot/penpot/.pnpm-store"
+      - "${HOME}/.penforge-devenv/ws0/frontend-node_modules:/home/penpot/penpot/frontend/node_modules"
+      - "${HOME}/.penforge-devenv/ws0/frontend-draft-js-node_modules:/home/penpot/penpot/frontend/packages/draft-js/node_modules"
+      - "${HOME}/.penforge-devenv/ws0/frontend-ui-node_modules:/home/penpot/penpot/frontend/packages/ui/node_modules"
+      - "${HOME}/.penforge-devenv/ws0/frontend-text-editor-node_modules:/home/penpot/penpot/frontend/text-editor/node_modules"
+      - "${HOME}/.penforge-devenv/ws0/frontend-shadow-cljs:/home/penpot/penpot/frontend/.shadow-cljs"
+      - "${HOME}/.penforge-devenv/ws0/frontend-target:/home/penpot/penpot/frontend/target"
+      - "${HOME}/.penforge-devenv/ws0/frontend-cpcache:/home/penpot/penpot/frontend/.cpcache"
+      - "${HOME}/.penforge-devenv/ws0/frontend-js-cljs-runtime:/home/penpot/penpot/frontend/resources/public/js/cljs-runtime"
+      - "${HOME}/.penforge-devenv/ws0/frontend-js-worker-cljs-runtime:/home/penpot/penpot/frontend/resources/public/js/worker/cljs-runtime"
+      - "${HOME}/.penforge-devenv/ws0/exporter-node_modules:/home/penpot/penpot/exporter/node_modules"
+      - "${HOME}/.penforge-devenv/ws0/exporter-target:/home/penpot/penpot/exporter/target"
+      - "${HOME}/.penforge-devenv/ws0/exporter-cpcache:/home/penpot/penpot/exporter/.cpcache"
+      - "${HOME}/.penforge-devenv/ws0/plugins-node_modules:/home/penpot/penpot/plugins/node_modules"
+      - "${HOME}/.penforge-devenv/ws0/plugins-runtime-node_modules:/home/penpot/penpot/plugins/libs/plugins-runtime/node_modules"
+      - "${HOME}/.penforge-devenv/ws0/plugins-composable-test-suite-node_modules:/home/penpot/penpot/plugins/apps/composable-test-suite/node_modules"
+      - "${HOME}/.penforge-devenv/ws0/plugins-plugin-api-test-suite-node_modules:/home/penpot/penpot/plugins/apps/plugin-api-test-suite/node_modules"
+      - "${HOME}/.penforge-devenv/ws0/render-wasm-node_modules:/home/penpot/penpot/render-wasm/node_modules"
+      - "${HOME}/.penforge-devenv/ws0/render-wasm-target:/home/penpot/penpot/render-wasm/target"
+      - "${HOME}/.penforge-devenv/ws0/backend-cpcache:/home/penpot/penpot/backend/.cpcache"
 
     ports:
       # Host ports are instance-specific; container ports stay fixed.

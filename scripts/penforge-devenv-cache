@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Penforge: create the host folders that hold the devenv's heavy build
+# folders (node_modules, shadow-cljs caches, target dirs, pnpm store).
+#
+# docker/devenv/docker-compose.main.yml bind-mounts them over the matching
+# paths of the source tree. On Windows/macOS the source tree reaches the
+# container through a slow file-sharing bridge (measured: ~100x slower for
+# small files); these folders live on the Linux side (WSL ext4) instead.
+#
+# They must exist and be owned by the current user before the container
+# starts, otherwise Docker creates them as root and pnpm/shadow-cljs fail.
+#
+# Usage: scripts/penforge-devenv-cache [--print]
+
+set -euo pipefail
+
+BASE="${HOME}/.penforge-devenv/ws0"
+
+PATHS=(
+    pnpm-store
+    frontend-node_modules
+    frontend-draft-js-node_modules
+    frontend-ui-node_modules
+    frontend-text-editor-node_modules
+    frontend-shadow-cljs
+    frontend-target
+    frontend-cpcache
+    frontend-js-cljs-runtime
+    frontend-js-worker-cljs-runtime
+    exporter-node_modules
+    exporter-target
+    exporter-cpcache
+    plugins-node_modules
+    plugins-runtime-node_modules
+    plugins-composable-test-suite-node_modules
+    plugins-plugin-api-test-suite-node_modules
+    render-wasm-node_modules
+    render-wasm-target
+    backend-cpcache
+)
+
+if [[ "${1:-}" == "--print" ]]; then
+    printf '%s\n' "$BASE"
+    exit 0
+fi
+
+for name in "${PATHS[@]}"; do
+    mkdir -p "$BASE/$name"
+done
