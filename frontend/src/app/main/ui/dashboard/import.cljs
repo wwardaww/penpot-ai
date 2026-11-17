@@ -65,7 +65,7 @@
   [{:keys [project-id on-finish-import]} external-ref]
   (let [on-file-selected (use-import-file project-id on-finish-import)]
     [:form {:aria-hidden "true"}
-     [:& file-uploader {:accept ".penpot,.zip"
+     [:& file-uploader {:accept (if (imp/fig-enabled?) ".penpot,.zip,.fig" ".penpot,.zip")
                         :multi true
                         :ref external-ref
                         :on-selected on-file-selected}]]))
@@ -120,7 +120,8 @@
                 (contains? message :progress) (assoc :progress (:progress message))
                 (not (contains? message :progress)) (dissoc :progress)
                 (contains? message :error) (assoc :error (:error message))
-                (not (contains? message :error)) (dissoc :error)))
+                (not (contains? message :error)) (dissoc :error)
+                (contains? message :report) (assoc :report (:report message))))
             entry))
         entries))
 
@@ -669,6 +670,31 @@
                  :style (when (some? pct)
                           #js {:width (str pct "%")})}]])])))
 
+(def ^:private max-fig-report-lines 8)
+
+(mf/defc fig-report*
+  "The compatibility summary of a Figma `.fig` import: what the import
+  could not keep exactly as it was, grouped by reason, and the fonts the
+  file uses, which must be available for the text to look the same."
+  {::mf/private true}
+  [{:keys [name report]}]
+  (let [{:keys [total summary fonts]} report]
+    (when (or (pos? total) (seq fonts))
+      [:div {:class (stl/css :import-error-disclaimer)}
+       (when (pos? total)
+         [:*
+          [:> context-notification* {:level :warning}
+           (tr "dashboard.import.fig-report.title" name total)]
+          [:ul {:class (stl/css :import-error-list)}
+           (for [{:keys [fig-type reason] n :count} (take max-fig-report-lines summary)]
+             [:li {:key (dm/str fig-type "/" reason)}
+              (tr "dashboard.import.fig-report.line" reason fig-type n)])
+           (when (> (count summary) max-fig-report-lines)
+             [:li (tr "dashboard.import.fig-report.more"
+                      (- (count summary) max-fig-report-lines))])]])
+       (when (seq fonts)
+         [:div (tr "dashboard.import.fig-report.fonts" (str/join ", " fonts))])])))
+
 (mf/defc import-files-stage*
   {::mf/private true}
   [{:keys [entries template status step errors? import-success-total auto-linked-count
@@ -695,7 +721,13 @@
        (when (pos? auto-linked-count)
          [:> context-notification*
           {:level :success}
-          (tr "dashboard.import.auto-linked-libraries" (i18n/c auto-linked-count))])])
+          (tr "dashboard.import.auto-linked-libraries" (i18n/c auto-linked-count))])
+       (for [entry entries
+             :let [report (:report entry)]
+             :when (some? report)]
+         [:> fig-report* {:key (dm/str "fig-report/" (:file-id entry))
+                          :name (:name entry)
+                          :report report}])])
 
     (when (= :import-error status)
       [:> context-notification*
