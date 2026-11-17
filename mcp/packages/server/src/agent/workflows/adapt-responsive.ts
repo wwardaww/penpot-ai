@@ -1,4 +1,4 @@
-import type { Attachment, Workflow, WorkflowContext, WorkflowResult } from "@penpot/mcp-common";
+import type { Attachment, Workflow, WorkflowContext, WorkflowEventKind, WorkflowResult } from "@penpot/mcp-common";
 
 /** Screen size a board is adapted to. */
 export type AdaptTarget = "mobile" | "desktop";
@@ -33,7 +33,8 @@ export interface BoardBox {
 
 /** Result of {@link AdaptPluginCode} `pfPrepare`. */
 export interface PrepareResult {
-    status: "created" | "exists";
+    /** `ready` answers a dry run: nothing was changed */
+    status: "created" | "exists" | "ready";
     pageId: string;
     /** id of the board the whole group is a variant of (the first source) */
     variantOf: string;
@@ -42,6 +43,8 @@ export interface PrepareResult {
     board?: BoardBox;
     /** boards of the same group that already have the target */
     existing: { id: string; name: string }[];
+    /** main components of the source replaced with instances in the copy */
+    replacedMains?: number;
 }
 
 /** Problem found by the self-check. */
@@ -75,8 +78,30 @@ export interface FitHeightResult {
     height: number;
 }
 
-/** Payload of the `result` event of a run. */
+/**
+ * Step of a run, sent as `code` in `progress` events (with an English `text` fallback); the
+ * frontend translates it.
+ */
+export type AdaptProgressCode = "copy" | "read" | "reflow" | "check" | "fix";
+
+/** Payload of the `plan` event sent before asking whether to make another variant. */
+export interface AdaptExistsPayload {
+    code: "exists";
+    target: AdaptTarget;
+    sourceName: string;
+    existing: string[];
+}
+
+/** Payload of the `result` event when the user kept the existing variant. */
+export interface AdaptKeptPayload {
+    status: "kept";
+    target: AdaptTarget;
+    existing: string[];
+}
+
+/** Payload of the `result` event of a run that made a board. */
 export interface AdaptResultPayload {
+    status: "created";
     target: AdaptTarget;
     pageId: string;
     sourceId: string;
@@ -89,7 +114,23 @@ export interface AdaptResultPayload {
     fixPass: boolean;
     /** issues left after the fix pass */
     issues: AdaptIssue[];
+    /** number of issues left, also those cut from `issues` */
+    issueCount: number;
 }
+
+/** Services of the workflow that tests replace. */
+export interface AdaptResponsiveDeps {
+    /** Gets a registered workflow by name. */
+    findWorkflow(name: string): Promise<Workflow<any> | undefined>;
+}
+
+const defaultDeps: AdaptResponsiveDeps = {
+    async findWorkflow(name) {
+        // lazy: `index.ts` imports this module
+        const shipped = (await import("./index")) as Record<string, Workflow<any>>;
+        return Object.values(shipped).find((workflow) => workflow?.name === name);
+    },
+};
 
 /**
  * Plugin-side code of the workflow.
@@ -158,22 +199,96 @@ async function pfLocate(id) {
     throw new Error("Board not found in the open file: " + id);
 }
 
-// Constraints of the direct children are set to left/top while the board is resized, so that a
-// resize keeps the children as they are; the caller restores them afterwards.
+// A child of a flex/grid board is placed by the layout, not by its constraints.
+function pfPlacedByLayout(shape) {
+    const parent = shape.parent;
+    const absolute = Boolean(shape.layoutChild && shape.layoutChild.absolute);
+    return Boolean(parent && (parent.flex || parent.grid) && !absolute);
+}
+
+// Constraints of every descendant not placed by a layout are set to left/top while the board is
+// resized (children of groups follow the board's constraints too), so that a resize keeps the
+// layers as they are; the caller restores them afterwards.
 function pfPin(board) {
     const saved = [];
-    for (const child of pfChildren(board)) {
-        const h = child.constraintsHorizontal;
-        const v = child.constraintsVertical;
-        saved.push({ child, h, v });
-        try {
-            if (h && h !== "left") child.constraintsHorizontal = "left";
-        } catch (e) {}
-        try {
-            if (v && v !== "top") child.constraintsVertical = "top";
-        } catch (e) {}
-    }
+    const visit = (shape) => {
+        for (const child of pfChildren(shape)) {
+            if (!pfPlacedByLayout(child)) {
+                const h = child.constraintsHorizontal;
+                const v = child.constraintsVertical;
+                saved.push({ child, h, v });
+                try {
+                    if (h && h !== "left") child.constraintsHorizontal = "left";
+                } catch (e) {}
+                try {
+                    if (v && v !== "top") child.constraintsVertical = "top";
+                } catch (e) {}
+            }
+            visit(child);
+        }
+    };
+    visit(board);
     return saved;
+}
+
+// Runs fn as one undo step.
+async function pfUndoBlock(fn) {
+    const history = penpot.history;
+    const block = history ? history.undoBlockBegin() : null;
+    try {
+        return await fn();
+    } finally {
+        if (block) history.undoBlockFinish(block);
+    }
+}
+
+function pfIsMain(shape) {
+    return typeof shape.isComponentMainInstance === "function" && shape.isComponentMainInstance();
+}
+
+// Child index paths of the main components inside shape (not inside other mains).
+function pfMainPaths(shape, path, out) {
+    pfChildren(shape).forEach((child, index) => {
+        const childPath = path.concat([index]);
+        if (pfIsMain(child)) {
+            out.push(childPath);
+        } else {
+            pfMainPaths(child, childPath, out);
+        }
+    });
+    return out;
+}
+
+function pfAtPath(shape, path) {
+    return path.reduce((node, index) => (node ? pfChildren(node)[index] : null), shape);
+}
+
+// Cloning a board duplicates the main components in it, which would add new components to the
+// library. Each duplicate is replaced with an instance of the original main.
+function pfReplaceMains(source, copy, paths) {
+    const pairs = paths.map((path) => ({ main: pfAtPath(source, path), duplicate: pfAtPath(copy, path) }));
+    for (const { main, duplicate } of pairs) {
+        if (!main || !duplicate) {
+            throw new Error("Could not match the components of the copy with the original");
+        }
+        const component = typeof main.component === "function" ? main.component() : null;
+        if (!component) {
+            throw new Error("Could not read the component of " + main.name);
+        }
+        const instance = component.instance();
+        const parent = duplicate.parent;
+        parent.insertChild(duplicate.parentIndex, instance);
+        if (!pfPlacedByLayout(instance)) {
+            instance.x = duplicate.x;
+            instance.y = duplicate.y;
+        }
+        try {
+            instance.constraintsHorizontal = duplicate.constraintsHorizontal;
+            instance.constraintsVertical = duplicate.constraintsVertical;
+        } catch (e) {}
+        duplicate.remove();
+    }
+    return pairs.length;
 }
 
 function pfRestore(saved) {
@@ -247,6 +362,9 @@ async function pfPrepare(p) {
     if (!page.root || !source.parent || source.parent.id !== page.root.id) {
         throw new Error("Only top-level boards can be adapted: " + source.name);
     }
+    if (pfIsMain(source)) {
+        throw new Error("The board is a main component; adapt a copy of it instead: " + source.name);
+    }
     const variantOf = pfVariantOf(source);
     const existing = pfChildren(page.root)
         .filter(
@@ -260,27 +378,42 @@ async function pfPrepare(p) {
     if (existing.length > 0 && !p.allowExisting) {
         return { status: "exists", pageId: page.id, variantOf, source: pfBox(source), existing };
     }
-
-    const copy = source.clone();
-    copy.name = pfBaseName(source.name) + " / " + p.label;
-    try {
-        if (copy.horizontalSizing === "auto") copy.horizontalSizing = "fix";
-    } catch (e) {}
-    pfResize(copy, p.width, Math.max(source.height, p.height));
-    copy.y = source.y;
-    copy.x = pfFreeX(
-        page,
-        { x: source.x + source.width + p.gap, y: source.y, width: copy.width, height: copy.height },
-        copy.id,
-        p.gap
-    );
-    copy.setSharedPluginData(PF_NS, "variantOf", variantOf);
-    copy.setSharedPluginData(PF_NS, "variantTarget", p.target);
-    copy.setSharedPluginData(PF_NS, "variantSource", source.id);
-    if (!source.getSharedPluginData(PF_NS, "variantTarget")) {
-        source.setSharedPluginData(PF_NS, "variantTarget", p.sourceTarget);
+    if (p.dryRun) {
+        return { status: "ready", pageId: page.id, variantOf, source: pfBox(source), existing };
     }
-    return { status: "created", pageId: page.id, variantOf, source: pfBox(source), board: pfBox(copy), existing };
+
+    const mainPaths = pfMainPaths(source, [], []);
+    return pfUndoBlock(() => {
+        const copy = source.clone();
+        const replacedMains = pfReplaceMains(source, copy, mainPaths);
+        copy.name = pfBaseName(source.name) + " / " + p.label;
+        try {
+            if (copy.horizontalSizing === "auto") copy.horizontalSizing = "fix";
+        } catch (e) {}
+        pfResize(copy, p.width, Math.max(source.height, p.height));
+        copy.y = source.y;
+        copy.x = pfFreeX(
+            page,
+            { x: source.x + source.width + p.gap, y: source.y, width: copy.width, height: copy.height },
+            copy.id,
+            p.gap
+        );
+        copy.setSharedPluginData(PF_NS, "variantOf", variantOf);
+        copy.setSharedPluginData(PF_NS, "variantTarget", p.target);
+        copy.setSharedPluginData(PF_NS, "variantSource", source.id);
+        if (!source.getSharedPluginData(PF_NS, "variantTarget")) {
+            source.setSharedPluginData(PF_NS, "variantTarget", p.sourceTarget);
+        }
+        return {
+            status: "created",
+            pageId: page.id,
+            variantOf,
+            source: pfBox(source),
+            board: pfBox(copy),
+            existing,
+            replacedMains,
+        };
+    });
 }
 
 async function pfCheck(p) {
@@ -341,7 +474,7 @@ async function pfFitHeight(p) {
     if (Math.abs(height - board.height) <= p.tolerance) {
         return { changed: false, height: pfRound(board.height) };
     }
-    pfResize(board, board.width, height);
+    await pfUndoBlock(() => pfResize(board, board.width, height));
     return { changed: true, height: pfRound(board.height) };
 }
 `;
@@ -371,7 +504,9 @@ interface LabelledImage {
 /**
  * Adapts a desktop board to mobile or back (W14).
  *
- * Steps: copy the board next to it and resize it to the target width (plugin code), link both
+ * Steps: ask first when the board already has a variant for the target, save a checkpoint (W19,
+ * when registered), copy the board next to it and resize it to the target width (plugin code, one
+ * undo step; main components in it become instances of the originals), link both
  * boards with shared plugin data, let Claude reflow the copy (flex/grid, type scale, spacing,
  * navigation) from the tree and screenshots, fit the height to the content, check for children
  * outside the board and too-small text, and let Claude fix what the check found once.
@@ -401,9 +536,22 @@ export class AdaptResponsive {
     /** longest side of a screenshot sent to Claude, in pixels */
     public static readonly MAX_IMAGE_SIDE = 1600;
 
+    /** name of the W19 workflow that saves a checkpoint, used when it is registered */
+    public static readonly CHECKPOINT_WORKFLOW = "checkpoint-create";
+
+    /** English fallback text of each progress step */
+    public static readonly PROGRESS_TEXT: Record<AdaptProgressCode, string> = {
+        copy: "Copying the board",
+        read: "Looking at the design",
+        reflow: "Reflowing the layout",
+        check: "Checking the result",
+        fix: "Fixing what sticks out",
+    };
+
     constructor(
         private readonly ctx: WorkflowContext,
-        private readonly params: Required<AdaptResponsiveParams>
+        private readonly params: Required<AdaptResponsiveParams>,
+        private readonly deps: AdaptResponsiveDeps = defaultDeps
     ) {}
 
     /**
@@ -434,49 +582,56 @@ export class AdaptResponsive {
         const { target, width } = this.params;
         const preset = AdaptResponsive.PRESETS[target];
 
-        this.progress(`Copying the board for ${preset.label.toLowerCase()}`);
-        let prepared = await this.prepare(false);
-        if (prepared.status === "exists") {
-            const existing = prepared.existing.map((b) => `"${b.name}"`).join(", ");
+        this.progress("copy");
+        const ready = await this.prepare({ dryRun: true, allowExisting: false });
+        if (ready.status === "exists") {
+            const existing = ready.existing.map((b) => b.name);
+            const quoted = existing.map((name) => `"${name}"`).join(", ");
+            const exists: AdaptExistsPayload = { code: "exists", target, sourceName: ready.source.name, existing };
+            this.ctx.emit("plan", exists);
             const answer = await this.ctx.ask({
-                text: `"${prepared.source.name}" already has a ${preset.label.toLowerCase()} version (${existing}). Make another one?`,
+                text: `"${ready.source.name}" already has a ${target} version (${quoted}). Make another one?`,
                 options: [
                     { id: "create", label: "Make another" },
                     { id: "cancel", label: "Cancel" },
                 ],
             });
             if (answer !== "create") {
-                return { summary: `Kept ${existing}` };
+                const kept: AdaptKeptPayload = { status: "kept", target, existing };
+                this.ctx.emit("result", kept);
+                return { summary: `Kept ${quoted}` };
             }
-            prepared = await this.prepare(true);
         }
+
+        await this.checkpoint(`Before adapting "${ready.source.name}" to ${target}`);
+        const prepared = await this.prepare({ dryRun: false, allowExisting: true });
         const source = prepared.source;
         const board = prepared.board;
         if (prepared.status !== "created" || !board) {
             throw new Error("The board could not be copied");
         }
 
-        this.progress("Looking at the design");
+        this.progress("read");
         const tree = await this.readTree(board.id);
         const images = [
             await this.screenshot(source, `the original board "${source.name}"`),
             await this.screenshot(board, `the copy "${board.name}" right after resizing, before your changes`),
         ].filter((image): image is LabelledImage => image !== null);
 
-        this.progress(`Reflowing the layout for ${preset.label.toLowerCase()}`);
+        this.progress("reflow");
         const first = await this.ctx.runner.run({
             prompt: AdaptResponsive.adaptPrompt(target, width, source, board, tree, images),
             attachments: images.map((image) => image.attachment),
         });
         this.checkCancelled();
 
-        this.progress("Checking the result");
+        this.progress("check");
         await this.fitHeight(board.id, preset.height);
         let check = await this.check(board.id);
         let fixPass = false;
         if (check.issueCount > 0) {
             fixPass = true;
-            this.progress("Fixing what sticks out");
+            this.progress("fix");
             const after = await this.screenshot(check.board, `the adapted board "${board.name}" now`);
             await this.ctx.runner.run({
                 prompt: AdaptResponsive.fixPrompt(target, check),
@@ -489,6 +644,7 @@ export class AdaptResponsive {
         }
 
         const payload: AdaptResultPayload = {
+            status: "created",
             target,
             pageId: prepared.pageId,
             sourceId: source.id,
@@ -499,9 +655,10 @@ export class AdaptResponsive {
             variantOf: prepared.variantOf,
             fixPass,
             issues: check.issues,
+            issueCount: check.issueCount,
         };
         this.ctx.emit("result", payload);
-        return { summary: AdaptResponsive.summary(payload, check.issueCount) };
+        return { summary: AdaptResponsive.summary(payload) };
     }
 
     /**
@@ -577,15 +734,15 @@ export class AdaptResponsive {
     /**
      * Builds the run summary shown in the chat.
      */
-    public static summary(payload: AdaptResultPayload, issueCount: number): string {
+    public static summary(payload: AdaptResultPayload): string {
         const made = `Made "${payload.name}" (${payload.width}×${payload.height})`;
-        if (issueCount === 0) {
+        if (payload.issueCount === 0) {
             return `${made}.`;
         }
-        return `${made}; ${issueCount} ${issueCount === 1 ? "layer needs" : "layers need"} a look.`;
+        return `${made}. Layers to check: ${payload.issueCount}.`;
     }
 
-    private async prepare(allowExisting: boolean): Promise<PrepareResult> {
+    private async prepare(options: { dryRun: boolean; allowExisting: boolean }): Promise<PrepareResult> {
         const { boardId, target, width } = this.params;
         const preset = AdaptResponsive.PRESETS[target];
         return this.plugin<PrepareResult>("pfPrepare", {
@@ -596,7 +753,7 @@ export class AdaptResponsive {
             width,
             height: preset.height,
             gap: AdaptResponsive.GAP,
-            allowExisting,
+            ...options,
         });
     }
 
@@ -666,8 +823,39 @@ export class AdaptResponsive {
         return data.result;
     }
 
-    private progress(text: string): void {
-        this.ctx.emit("progress", { text });
+    private progress(code: AdaptProgressCode): void {
+        this.ctx.emit("progress", { code, text: AdaptResponsive.PROGRESS_TEXT[code] });
+    }
+
+    /**
+     * Saves a checkpoint through the W19 workflow when it is registered. A failed checkpoint is
+     * logged and does not stop the run.
+     */
+    private async checkpoint(label: string): Promise<boolean> {
+        const create = await this.deps.findWorkflow(AdaptResponsive.CHECKPOINT_WORKFLOW);
+        if (!create) {
+            return false;
+        }
+        // the checkpoint's own `result` event would read as this run's result
+        const ctx: WorkflowContext = {
+            ...this.ctx,
+            emit: (kind: WorkflowEventKind, payload: unknown) => {
+                if (kind !== "result") {
+                    this.ctx.emit(kind, payload);
+                }
+            },
+        };
+        let saved = false;
+        try {
+            await create.run(ctx, { label, workflow: "adapt-responsive" });
+            saved = true;
+        } catch (error) {
+            this.ctx.emit("log", {
+                text: `Checkpoint failed: ${error instanceof Error ? error.message : String(error)}`,
+            });
+        }
+        this.checkCancelled();
+        return saved;
     }
 
     private checkCancelled(): void {
@@ -682,3 +870,15 @@ export const workflow: Workflow<AdaptResponsiveParams> = {
     description: "Copies a board as a mobile (or desktop) version next to it and reflows its layout.",
     run: (ctx, params) => new AdaptResponsive(ctx, AdaptResponsive.parseParams(params)).run(),
 };
+
+/**
+ * Creates the workflow with other services (tests).
+ *
+ * @param deps - the services
+ */
+export function createAdaptResponsiveWorkflow(deps: AdaptResponsiveDeps): Workflow<AdaptResponsiveParams> {
+    return {
+        ...workflow,
+        run: (ctx, params) => new AdaptResponsive(ctx, AdaptResponsive.parseParams(params), deps).run(),
+    };
+}

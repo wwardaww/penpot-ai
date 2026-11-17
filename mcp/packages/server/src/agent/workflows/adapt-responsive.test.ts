@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type {
+    Workflow,
     WorkflowClaudeRequest,
     WorkflowContext,
     WorkflowEventKind,
@@ -8,7 +9,13 @@ import type {
     WorkflowToolResult,
 } from "@penpot/mcp-common";
 import { PromptRegistry } from "../prompts/promptRegistry";
-import { AdaptPluginCode, AdaptResponsive, workflow, type CheckResult } from "./adapt-responsive";
+import {
+    AdaptPluginCode,
+    AdaptResponsive,
+    createAdaptResponsiveWorkflow,
+    workflow,
+    type CheckResult,
+} from "./adapt-responsive";
 
 const ROOT_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -30,6 +37,10 @@ class FakeShape {
     public flex: { bottomPadding: number } | null = null;
     public readonly pluginData = new Map<string, string>();
     public resizes = 0;
+    /** main component instance */
+    public main = false;
+    /** main this shape is an instance of */
+    public mainOf: FakeShape | null = null;
 
     constructor(
         public readonly type: string,
@@ -86,7 +97,7 @@ class FakeShape {
         const dh = height - this.height;
         const sx = width / this.width;
         const sy = height / this.height;
-        for (const child of this.children) {
+        for (const child of this.constrained()) {
             const rx = child.x - this.x;
             const ry = child.y - this.y;
             switch (child.constraintsHorizontal) {
@@ -119,6 +130,56 @@ class FakeShape {
         this.resizes++;
     }
 
+    /** direct children plus the descendants of groups, which follow this board's constraints */
+    private constrained(): FakeShape[] {
+        const out: FakeShape[] = [];
+        const visit = (shape: FakeShape) => {
+            for (const child of shape.children) {
+                out.push(child);
+                if (child.type === "group") {
+                    visit(child);
+                }
+            }
+        };
+        visit(this);
+        return out;
+    }
+
+    get parentIndex(): number {
+        return this.parent ? this.parent.children.indexOf(this) : 0;
+    }
+
+    isComponentMainInstance(): boolean {
+        return this.main;
+    }
+
+    component(): { instance(): FakeShape } | null {
+        if (!this.main) {
+            return null;
+        }
+        return {
+            instance: () => {
+                const instance = this.copyTree();
+                instance.main = false;
+                instance.mainOf = this;
+                return instance;
+            },
+        };
+    }
+
+    insertChild(index: number, child: FakeShape): void {
+        child.remove();
+        child.parent = this;
+        this.children.splice(index, 0, child);
+    }
+
+    remove(): void {
+        if (this.parent) {
+            this.parent.children = this.parent.children.filter((c) => c !== this);
+            this.parent = null;
+        }
+    }
+
     clone(): FakeShape {
         const copy = this.copyTree();
         copy.parent = this.parent;
@@ -135,6 +196,8 @@ class FakeShape {
         copy.fontSize = this.fontSize;
         copy.horizontalSizing = this.horizontalSizing;
         copy.verticalSizing = this.verticalSizing;
+        copy.main = this.main;
+        copy.mainOf = this.mainOf;
         this.pluginData.forEach((value, key) => copy.pluginData.set(key, value));
         copy.add(...this.children.map((child) => child.copyTree()));
         return copy;
@@ -159,6 +222,17 @@ class FakePenpot {
     public currentPage: { id: string; root: FakeShape; getShapeById(id: string): FakeShape | null };
     public readonly currentFile: { pages: FakePenpot["currentPage"][] };
     public opened: string[] = [];
+    public readonly undo = { open: 0, blocks: 0 };
+    public readonly history = {
+        undoBlockBegin: () => {
+            this.undo.open++;
+            this.undo.blocks++;
+            return Symbol("block");
+        },
+        undoBlockFinish: (_block: symbol) => {
+            this.undo.open--;
+        },
+    };
 
     constructor(...roots: FakeShape[]) {
         const pages = roots.map((root, index) => ({
@@ -365,6 +439,75 @@ describe("AdaptPluginCode", () => {
         );
     });
 
+    it("pfPrepare pins the children of groups and runs as one undo step", async () => {
+        const { page, board } = landingPage();
+        const group = new FakeShape("group", "Hero", 100, 100, 1240, 80);
+        const title = new FakeShape("text", "Hero title", 100, 100, 1240, 40);
+        title.constraintsHorizontal = "leftright";
+        const badge = new FakeShape("rect", "Badge", 1300, 140, 40, 40);
+        badge.constraintsHorizontal = "scale";
+        group.add(title, badge);
+        board.add(group);
+        const penpot = new FakePenpot(page);
+        await runCode(penpot, AdaptPluginCode.build("pfPrepare", prepareParams(board.id)));
+
+        const copy = page.children[1];
+        const copiedGroup = copy.children[5];
+        assert.equal(copiedGroup.children[0].width, 1240, "group child not squashed");
+        assert.equal(copiedGroup.children[1].x - copy.x, 1300);
+        assert.equal(copiedGroup.children[1].width, 40);
+        assert.equal(copiedGroup.children[0].constraintsHorizontal, "leftright");
+        assert.equal(copiedGroup.children[1].constraintsHorizontal, "scale");
+        assert.deepEqual(penpot.undo, { open: 0, blocks: 1 });
+    });
+
+    it("pfPrepare in a dry run changes nothing", async () => {
+        const { page, board } = landingPage();
+        const penpot = new FakePenpot(page);
+        const result = await runCode(
+            penpot,
+            AdaptPluginCode.build("pfPrepare", prepareParams(board.id, { dryRun: true }))
+        );
+        assert.equal(result.status, "ready");
+        assert.equal(page.children.length, 1);
+        assert.equal(board.getSharedPluginData("penforge", "variantTarget"), "");
+        assert.deepEqual(penpot.undo, { open: 0, blocks: 0 });
+    });
+
+    it("pfPrepare turns copied main components into instances of the originals", async () => {
+        const { page, board, columns } = landingPage();
+        const card = columns[1];
+        card.main = true;
+        const penpot = new FakePenpot(page);
+        const result = await runCode(penpot, AdaptPluginCode.build("pfPrepare", prepareParams(board.id)));
+
+        assert.equal(result.replacedMains, 1);
+        const copy = page.children[1];
+        assert.equal(copy.children.length, 5);
+        const instance = copy.children[2];
+        assert.equal(instance.main, false);
+        assert.equal(instance.mainOf, card);
+        assert.equal(instance.x - copy.x, card.x - board.x);
+        assert.equal(instance.y - copy.y, card.y - board.y);
+        assert.equal(instance.constraintsHorizontal, "scale");
+        const mains: FakeShape[] = [];
+        const collect = (shape: FakeShape) =>
+            shape.children.forEach((child) => (child.main ? mains.push(child) : collect(child)));
+        collect(page);
+        assert.deepEqual(mains, [card], "no new main component");
+    });
+
+    it("pfPrepare refuses a board that is a main component", async () => {
+        const { page, board } = landingPage();
+        board.main = true;
+        const penpot = new FakePenpot(page);
+        await assert.rejects(
+            runCode(penpot, AdaptPluginCode.build("pfPrepare", prepareParams(board.id))),
+            /main component/
+        );
+        assert.equal(page.children.length, 1);
+    });
+
     it("pfCheck lists the outermost overflowing layers and small text", async () => {
         const board = new FakeShape("board", "Mobile", 1000, 0, 390, 844);
         const row = new FakeShape("board", "Row", 1000, 100, 900, 200);
@@ -409,6 +552,7 @@ describe("AdaptPluginCode", () => {
             runCode(penpot, AdaptPluginCode.build("pfFitHeight", { boardId: board.id, minHeight, tolerance: 1 }));
 
         assert.deepEqual(await fit(844), { changed: true, height: 2000 });
+        assert.deepEqual(penpot.undo, { open: 0, blocks: 1 });
         assert.equal(content.height, 2000, "children are pinned while resizing");
         assert.equal(content.constraintsVertical, "scale");
 
@@ -550,7 +694,12 @@ describe("adapt-responsive workflow", () => {
         assert.equal(done.fixPass, false);
         assert.deepEqual(done.issues, []);
         assert.equal(result?.summary, `Made "Landing / Mobile" (390×${copy.height}).`);
-        assert.ok(events.some((e) => e.kind === "progress" && typeof e.payload.text === "string"));
+        assert.deepEqual(
+            events.filter((e) => e.kind === "progress").map((e) => e.payload.code),
+            ["copy", "read", "reflow", "check"]
+        );
+        assert.ok(events.every((e) => e.kind !== "progress" || typeof e.payload.text === "string"));
+        assert.equal(done.status, "created");
     });
 
     it("runs one fix turn on the same Claude session when layers stick out", async () => {
@@ -570,7 +719,8 @@ describe("adapt-responsive workflow", () => {
         const done = events.find((e) => e.kind === "result")!.payload;
         assert.equal(done.fixPass, true);
         assert.equal(done.issues.length, 1);
-        assert.match(result?.summary ?? "", /1 layer needs a look\.$/);
+        assert.match(result?.summary ?? "", /Layers to check: 1\.$/);
+        assert.equal(done.issueCount, 1);
     });
 
     it("asks before making a second variant and stops on cancel", async () => {
@@ -586,6 +736,17 @@ describe("adapt-responsive workflow", () => {
         assert.equal(second.turns.length, 0);
         assert.equal(page.children.length, 2);
         assert.equal(result?.summary, 'Kept "Landing / Mobile"');
+        assert.deepEqual(second.events.find((e) => e.kind === "plan")?.payload, {
+            code: "exists",
+            target: "mobile",
+            sourceName: "Landing",
+            existing: ["Landing / Mobile"],
+        });
+        assert.deepEqual(second.events.find((e) => e.kind === "result")?.payload, {
+            status: "kept",
+            target: "mobile",
+            existing: ["Landing / Mobile"],
+        });
 
         const third = fakeContext(penpot, { answer: "create", onTurn: stackColumns(page, 0) });
         await workflow.run(third.ctx, { boardId: board.id, target: "mobile" });
@@ -605,6 +766,49 @@ describe("adapt-responsive workflow", () => {
             workflow.run(bad.ctx, { boardId: columns[0].id, target: "mobile" }) as Promise<unknown>,
             /Only top-level boards/
         );
+    });
+
+    it("saves a checkpoint before changing the design when W19 is there", async () => {
+        const { page, board } = landingPage();
+        const penpot = new FakePenpot(page);
+        const calls: { params: any; boards: number }[] = [];
+        const checkpoint: Workflow<any> = {
+            name: "checkpoint-create",
+            description: "",
+            run: async (ctx, params) => {
+                calls.push({ params, boards: page.children.length });
+                ctx.emit("result", { checkpoint: { n: 1 } });
+                ctx.emit("log", { text: "saved" });
+                return { summary: "saved" };
+            },
+        };
+        const withCheckpoint = createAdaptResponsiveWorkflow({
+            findWorkflow: async (name) => (name === "checkpoint-create" ? checkpoint : undefined),
+        });
+        const run = fakeContext(penpot, { onTurn: stackColumns(page, 0) });
+        await withCheckpoint.run(run.ctx, { boardId: board.id, target: "mobile" });
+
+        assert.deepEqual(calls, [
+            { params: { label: 'Before adapting "Landing" to mobile', workflow: "adapt-responsive" }, boards: 1 },
+        ]);
+        const results = run.events.filter((e) => e.kind === "result");
+        assert.equal(results.length, 1, "the checkpoint's result is not this run's result");
+        assert.equal(results[0].payload.status, "created");
+        assert.ok(run.events.some((e) => e.kind === "log" && e.payload.text === "saved"));
+
+        // no checkpoint when the user keeps the existing variant; a failing one does not stop a run
+        calls.length = 0;
+        const kept = fakeContext(penpot, { answer: "cancel" });
+        await withCheckpoint.run(kept.ctx, { boardId: board.id, target: "mobile" });
+        assert.equal(calls.length, 0);
+
+        const failing = createAdaptResponsiveWorkflow({
+            findWorkflow: async () => ({ ...checkpoint, run: async () => Promise.reject(new Error("no git")) }),
+        });
+        const again = fakeContext(penpot, { answer: "create", onTurn: stackColumns(page, 0) });
+        await failing.run(again.ctx, { boardId: board.id, target: "mobile" });
+        assert.ok(again.events.some((e) => e.kind === "log" && /Checkpoint failed: no git/.test(e.payload.text)));
+        assert.equal(page.children.length, 3);
     });
 
     it("stops between steps when cancelled", async () => {
