@@ -1,6 +1,6 @@
 import type { PreviewLogMessage, PreviewReason, PreviewState } from "@penpot/mcp-common";
 import { createLogger } from "../../logger";
-import { ChildEnv } from "./ChildEnv";
+import { ChildEnvironment } from "../build/ChildEnvironment";
 import { CommandLauncher } from "./CommandLauncher";
 import { HttpProbe } from "./HttpProbe";
 import type { PortPool } from "./PortPool";
@@ -174,7 +174,7 @@ export class DevServer {
         this.log("system", `> ${argv.join(" ")}  (port ${this.port})`);
         this.logger.info("Starting dev server of project %s on port %d: %s", this.projectId, this.port, argv.join(" "));
 
-        const env = ChildEnv.scrub(this.options.baseEnv, {
+        const env = ChildEnvironment.scrub(this.options.baseEnv, {
             [this.stack.portEnv]: String(this.port),
             HOST: "127.0.0.1",
             BROWSER: "none",

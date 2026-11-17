@@ -324,7 +324,8 @@ test("the dev server gets no secrets and binds to loopback", async () => {
         assert.equal(env[name], undefined, name);
     }
     assert.equal(env.PENFORGE_TEST_PLAIN, undefined, "every PENFORGE_ variable is dropped");
-    assert.equal(env.NORMAL_SETTING, "kept");
+    assert.equal(env.NORMAL_SETTING, undefined, "only allowlisted variables pass");
+    assert.ok(env.PATH ?? env.Path, "PATH passes");
     assert.equal(env.HOST, "127.0.0.1");
     assert.equal(env.PORT, String(FIRST_PORT));
 });

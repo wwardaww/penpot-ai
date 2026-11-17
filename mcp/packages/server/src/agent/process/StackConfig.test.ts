@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { AgentError } from "../AgentClient";
 import { PathGuard } from "../workspace/pathGuard";
-import { ChildEnv } from "./ChildEnv";
+import { ChildEnvironment } from "../build/ChildEnvironment";
 import { CommandLauncher } from "./CommandLauncher";
 import { CommandPolicy } from "./CommandPolicy";
 import { PortPool } from "./PortPool";
@@ -74,6 +74,10 @@ test("the dev command is an argument vector of a package manager, without shell 
         "npm run `id`",
         "node server.js",
         "sh -c dev",
+        "npm run dev -- --host 0.0.0.0",
+        "npm run dev -- --host=example.test",
+        "npm exec evil-package",
+        "npm run %PATH%",
     ]) {
         assert.throws(() => policy.validate(unsafe), badRequest, unsafe);
     }
@@ -81,6 +85,16 @@ test("the dev command is an argument vector of a package manager, without shell 
     assert.throws(() => policy.validate(["npm", 'run"']), badRequest);
     assert.throws(() => policy.validate([]), badRequest);
     assert.throws(() => policy.validate(new Array(17).fill("npm")), badRequest);
+    assert.deepEqual(policy.validate("npm run dev -- --host 127.0.0.1 --port {port}"), [
+        "npm",
+        "run",
+        "dev",
+        "--",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "{port}",
+    ]);
 });
 
 test("posix programs are spawned directly", () => {
@@ -104,8 +118,8 @@ test("windows batch shims run through cmd.exe with quoted arguments", { skip: pr
     assert.throws(() => launcher.spawnSpec(["missing"]), /not found/);
 });
 
-test("secrets are dropped from the child environment", () => {
-    const env = ChildEnv.scrub(
+test("the dev server environment is the shared build allowlist without secrets", () => {
+    const env = ChildEnvironment.scrub(
         {
             PATH: "/bin",
             HOME: "/home/u",
