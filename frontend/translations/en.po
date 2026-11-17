@@ -10326,3 +10326,108 @@ msgstr "Copy the link again from the Penforge agent output."
 #: src/app/main/ui/workspace/sidebar.cljs:176
 msgid "penforge.sidebar.tab"
 msgstr "AI"
+
+# penforge:W16
+#: src/app/main/data/ai/actions/auto_name.cljs
+msgid "penforge.actions.auto-name"
+msgstr "Name layers with AI"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.apply"
+msgstr "Apply %s names"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.apply-all"
+msgstr "Rename all"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.convention"
+msgstr "Naming style"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.convention.bem"
+msgstr "BEM (block__element--modifier)"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.convention.kebab"
+msgstr "kebab-case"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.convention.title"
+msgstr "Title Case"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.description"
+msgstr "Gives layers with default names like “Board 4” or “Rectangle 12” names that say what they are. Layers you named stay as they are."
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.done"
+msgstr "Renamed %s layers. Press Ctrl+Z to undo."
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.error"
+msgstr "Could not name the layers: %s"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.include-components"
+msgstr "Also rename components and their copies"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.new-name"
+msgstr "New name for %s"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.none"
+msgstr "No layers with default names found."
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.not-connected"
+msgstr "The AI assistant is not connected. Open the AI tab to connect it."
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.open-ai"
+msgstr "Open AI tab"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.preview"
+msgstr "Suggest names"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.progress"
+msgstr "Naming layers: %s of %s"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.remaining"
+msgstr "%s more layers have default names. Run again to name them."
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.running"
+msgstr "Reading your layers…"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.scope"
+msgstr "Layers"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.scope.file"
+msgstr "Whole file"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.scope.page"
+msgstr "This page"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.scope.selection"
+msgstr "Selection"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.select-all"
+msgstr "All %s new names"
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.skipped-components"
+msgstr "%s layers in components were left alone. Turn on “Also rename components” to name them."
+
+#: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
+msgid "penforge.auto-name.title"
+msgstr "Name layers"

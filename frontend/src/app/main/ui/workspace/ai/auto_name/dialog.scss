@@ -1,0 +1,135 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+@use "ds/_utils.scss" as *;
+@use "ds/typography.scss" as *;
+
+// Only for the modal placeholders (%modal-overlay-base,
+// %modal-container-base), until the modals move to the DS modal.
+@use "refactor/common-refactor.scss" as deprecated;
+
+.modal-overlay {
+  @extend %modal-overlay-base;
+}
+
+.modal-dialog {
+  @extend %modal-container-base;
+
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr);
+  inline-size: px2rem(560);
+  max-inline-size: px2rem(560);
+  max-block-size: 80vh;
+}
+
+// Goes on the tooltip wrapper of the close icon button.
+.close-btn {
+  position: absolute;
+  inset-block-start: var(--sp-s);
+  inset-inline-end: var(--sp-xs);
+}
+
+.modal-title {
+  @include use-typography("headline-medium");
+
+  margin-block-end: var(--sp-xxl);
+  color: var(--color-foreground-primary);
+}
+
+.modal-content {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-s);
+  margin-block-start: var(--sp-xxl);
+}
+
+.setup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-l);
+}
+
+.description,
+.hint {
+  color: var(--color-foreground-secondary);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+}
+
+.label {
+  color: var(--color-foreground-secondary);
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-m);
+  color: var(--color-foreground-primary);
+}
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  min-block-size: 0;
+}
+
+.review-header {
+  padding-block-end: var(--sp-xs);
+  border-block-end: $b-1 solid var(--color-background-tertiary);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  max-block-size: px2rem(360);
+  overflow-y: auto;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1.4fr);
+  align-items: center;
+  gap: var(--sp-s);
+}
+
+.old-name {
+  @include use-typography("body-small");
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-foreground-secondary);
+  text-decoration: line-through;
+}
+
+.arrow {
+  color: var(--color-foreground-secondary);
+}
+
+.new-name {
+  min-inline-size: 0;
+}
+
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+}
