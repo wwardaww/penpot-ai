@@ -393,9 +393,30 @@ async function checkpoint(ctx: WorkflowContext, deps: GenerateScreenDeps, label:
         await create.run(ctx, { label, workflow: "generate-screen" });
         return true;
     } catch (error) {
-        ctx.emit("log", { text: `Checkpoint failed: ${error instanceof Error ? error.message : String(error)}` });
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.emit("log", { code: "checkpoint-failed", params: { message }, text: `Checkpoint failed: ${message}` });
         return false;
     }
+}
+
+/** Steps reported in `progress` events, with their English fallback text. */
+export const PROGRESS_STEPS = {
+    "design-system": "Reading the design system",
+    board: "Creating the board",
+    build: "Designing the screen",
+    check: "Checking the result",
+    review: "Polishing the screen",
+} as const;
+
+/** Step of a run, as sent in `progress` events. */
+export type ProgressStep = keyof typeof PROGRESS_STEPS;
+
+/**
+ * Reports a step: `step` is a stable code the frontend translates (`penforge.generate.step.<step>`),
+ * `text` the English fallback shown by clients that do not know the code.
+ */
+function progress(ctx: WorkflowContext, step: ProgressStep): void {
+    ctx.emit("progress", { step, text: PROGRESS_STEPS[step] });
 }
 
 function throwIfAborted(ctx: WorkflowContext): void {
@@ -419,7 +440,7 @@ export function createGenerateScreenWorkflow(deps: GenerateScreenDeps = defaultD
             const params = parseParams(raw, ctx.context.platform);
             const frame = SCREEN_FRAMES[params.platform];
 
-            ctx.emit("progress", { text: "Reading the design system" });
+            progress(ctx, "design-system");
             const snapshot = await executeCode<DesignSystemSnapshot>(
                 ctx,
                 readDesignSystemCode({
@@ -433,7 +454,7 @@ export function createGenerateScreenWorkflow(deps: GenerateScreenDeps = defaultD
             await checkpoint(ctx, deps, "Before generating a screen");
             throwIfAborted(ctx);
 
-            ctx.emit("progress", { text: "Creating the board" });
+            progress(ctx, "board");
             const name = provisionalName(params.prompt);
             const board = await executeCode<CreatedBoard>(
                 ctx,
@@ -449,7 +470,7 @@ export function createGenerateScreenWorkflow(deps: GenerateScreenDeps = defaultD
             ctx.emit("plan", { boardId: board.boardId, pageId: board.pageId, platform: params.platform });
             throwIfAborted(ctx);
 
-            ctx.emit("progress", { text: "Designing the screen" });
+            progress(ctx, "build");
             const attachments: Attachment[] = snapshot.references.map((ref) => ({
                 kind: "node",
                 fileId: snapshot.fileId ?? ctx.context.fileId,
@@ -471,7 +492,7 @@ export function createGenerateScreenWorkflow(deps: GenerateScreenDeps = defaultD
             });
             throwIfAborted(ctx);
 
-            ctx.emit("progress", { text: "Checking the result" });
+            progress(ctx, "check");
             const inspection = await executeCode<BoardInspection>(ctx, inspectBoardCode({ boardId: board.boardId }));
             if (!inspection.found) {
                 throw new Error("The screen board was removed while it was being designed");
@@ -480,7 +501,7 @@ export function createGenerateScreenWorkflow(deps: GenerateScreenDeps = defaultD
             const image = await screenshot(ctx, board.boardId);
             throwIfAborted(ctx);
 
-            ctx.emit("progress", { text: "Polishing the screen" });
+            progress(ctx, "review");
             const review = await ctx.runner.run({
                 prompt: buildReviewRequest(issues, image !== null),
                 resumeSessionId: build.sessionId,

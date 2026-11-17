@@ -8,7 +8,11 @@
   "Generate a screen from a prompt (W13): the `:ai/generate-screen`
   action opens the prompt dialog, which starts the daemon workflow
   `generate-screen`. When the run reports its result the new board is
-  selected and zoomed to."
+  selected and zoomed to.
+
+  The daemon sends step codes with English fallback texts
+  (architecture §7); the progress and the summary shown in the AI tab
+  are translated here."
   (:require
    [app.common.data :as d]
    [app.common.uuid :as uuid]
@@ -47,9 +51,50 @@
   [state]
   (= :connected (get-in state [:penforge :connection :status])))
 
-(defn- result-message?
-  [{:keys [type kind]}]
-  (and (= "workflow.event" type) (= "result" kind)))
+(defn step-text
+  "Translated text of a `progress` step code of the workflow, or nil
+  for an unknown code (the daemon's English `text` stays then)."
+  [step]
+  (case step
+    "design-system" (tr "penforge.generate.step.design-system")
+    "board"         (tr "penforge.generate.step.board")
+    "build"         (tr "penforge.generate.step.build")
+    "check"         (tr "penforge.generate.step.check")
+    "review"        (tr "penforge.generate.step.review")
+    nil))
+
+(defn summary-text
+  "Translated summary of a run from its `result` payload."
+  [{:keys [name width height inspection]}]
+  (let [size      (str (js/Math.round (or width 0)) "×" (js/Math.round (or height 0)))
+        instances (or (:instance-count inspection) 0)
+        tokens    (count (:token-names inspection))]
+    (if (or (pos? instances) (pos? tokens))
+      (tr "penforge.generate.summary-details" name size instances tokens)
+      (tr "penforge.generate.summary" name size))))
+
+(defn localize-run
+  "Replace the daemon's English texts of the run's chat entry: `attrs`
+  holds the translated `:progress` and/or `:summary`. Applied after the
+  chat stored the same daemon message."
+  [run-id attrs]
+  (ptk/reify ::localize-run
+    ptk/UpdateEvent
+    (update [_ state]
+      (update-in state [:penforge :chat]
+                 (fn [chat]
+                   (if (contains? (:runs chat) run-id)
+                     (-> chat
+                         (update-in [:runs run-id] merge attrs)
+                         (update :entries
+                                 (fn [entries]
+                                   (mapv (fn [entry]
+                                           (if (and (= :workflow (:kind entry))
+                                                    (= run-id (:id entry)))
+                                             (merge entry attrs)
+                                             entry))
+                                         entries))))
+                     chat))))))
 
 (defn show-result
   "Select the generated board and zoom to it when it is on the current
@@ -67,10 +112,31 @@
                  dwz/zoom-to-selected-shape)
           (rx/empty))))))
 
+(defn run-events
+  "Events for one daemon message of the run: translated progress, the
+  board selection on `result`, the translated summary on a successful
+  `workflow.done`. `result*` keeps the result payload between messages."
+  [result* {:keys [type kind run-id payload ok]}]
+  (cond
+    (and (= "workflow.event" type) (= "progress" kind))
+    (if-let [text (step-text (:step payload))]
+      [(localize-run run-id {:progress (assoc payload :text text)})]
+      [])
+
+    (and (= "workflow.event" type) (= "result" kind))
+    (do (vreset! result* payload)
+        [(show-result payload)])
+
+    (and (= "workflow.done" type) ok (some? @result*))
+    [(localize-run run-id {:summary (summary-text @result*)})]
+
+    :else
+    []))
+
 (defn generate-screen
   "Start the workflow for a dialog submission
   `{:prompt :platform :page-id :reference-ids}`, show its progress in
-  the AI tab and select the board once it is there."
+  the AI tab (translated) and select the board once it is there."
   [params]
   (ptk/reify ::generate-screen
     ptk/WatchEvent
@@ -79,10 +145,9 @@
         (rx/merge
          ;; subscribed before the run starts, so no reply is missed
          (if (connected? state)
-           (->> (chat/workflow-messages stream rid)
-                (rx/filter result-message?)
-                (rx/take 1)
-                (rx/map (comp show-result :payload)))
+           (let [result* (volatile! nil)]
+             (->> (chat/workflow-messages stream rid)
+                  (rx/mapcat #(rx/from (run-events result* %)))))
            (rx/empty))
          (rx/of (chat/open-chat)
                 (chat/run-workflow workflow-name

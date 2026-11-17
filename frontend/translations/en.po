@@ -10371,3 +10371,31 @@ msgstr "The screen is built next to your boards with this file's components, tok
 #: src/app/main/ui/workspace/ai/generate/dialog.cljs
 msgid "penforge.generate.submit"
 msgstr "Generate"
+
+#: src/app/main/data/ai/actions/generate.cljs
+msgid "penforge.generate.step.design-system"
+msgstr "Reading the design system"
+
+#: src/app/main/data/ai/actions/generate.cljs
+msgid "penforge.generate.step.board"
+msgstr "Creating the board"
+
+#: src/app/main/data/ai/actions/generate.cljs
+msgid "penforge.generate.step.build"
+msgstr "Designing the screen"
+
+#: src/app/main/data/ai/actions/generate.cljs
+msgid "penforge.generate.step.check"
+msgstr "Checking the result"
+
+#: src/app/main/data/ai/actions/generate.cljs
+msgid "penforge.generate.step.review"
+msgstr "Polishing the screen"
+
+#: src/app/main/data/ai/actions/generate.cljs
+msgid "penforge.generate.summary"
+msgstr "Created \"%s\" (%s)"
+
+#: src/app/main/data/ai/actions/generate.cljs
+msgid "penforge.generate.summary-details"
+msgstr "Created \"%s\" (%s) with %s component instances and %s tokens"

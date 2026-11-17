@@ -112,14 +112,65 @@
                                         :name "generate-screen"}))
       (rx/push! stream (ptk/data-event ::client/message
                                        {:type "workflow.event" :run-id "run-1" :kind "progress"
-                                        :payload {:text "Designing the screen"}}))
+                                        :payload {:step "build" :text "Designing the screen"}}))
+      (t/is (= ::gen/localize-run (ptk/type (last @events))))
       (rx/push! stream (ptk/data-event ::client/message
                                        {:type "workflow.event" :run-id "run-1" :kind "result"
                                         :payload {:board-id (str board-id)
-                                                  :page-id (str page-id)}}))
-      (let [shown (last @events)]
-        (t/is (= ::gen/show-result (ptk/type shown)))))
+                                                  :page-id (str page-id)
+                                                  :name "Login" :width 390 :height 844
+                                                  :inspection {:instance-count 1
+                                                               :token-names ["a" "b"]}}}))
+      (t/is (= ::gen/show-result (ptk/type (last @events))))
+      (rx/push! stream (ptk/data-event ::client/message
+                                       {:type "workflow.done" :run-id "run-1" :ok true
+                                        :summary "Created \"Login\" (390×844)"}))
+      (let [localized (last @events)
+            chat      {:runs {"run-1" {:run-id "run-1" :summary "English"}}
+                       :entries [{:kind :workflow :id "run-1" :summary "English"}
+                                 {:kind :workflow :id "run-2" :summary "Other"}]}
+            state''   (ptk/update localized {:penforge {:chat chat}})]
+        (t/is (= ::gen/localize-run (ptk/type localized)))
+        (t/is (not= "English" (get-in state'' [:penforge :chat :entries 0 :summary])))
+        (t/is (= "Other" (get-in state'' [:penforge :chat :entries 1 :summary])))))
     (rx/end! stream)))
+
+(defn- with-keys
+  "Call `f` with `tr` answering the key followed by its arguments."
+  [f]
+  (with-redefs [i18n/tr (fn ([key] key) ([key & args] (str/join " " (cons key args))))]
+    (f)))
+
+(t/deftest run-events-translate-known-steps-and-the-summary
+  (with-keys
+    (fn []
+      (let [result* (volatile! nil)
+            events  #(gen/run-events result* %)
+            update  (fn [event] (ptk/update event {:penforge {:chat {:runs {"r" {}}
+                                                                     :entries [{:kind :workflow :id "r"}]}}}))]
+        (let [[event] (events {:type "workflow.event" :run-id "r" :kind "progress"
+                               :payload {:step "check" :text "Checking the result"}})]
+          (t/is (= {:step "check" :text "penforge.generate.step.check"}
+                   (get-in (update event) [:penforge :chat :entries 0 :progress])))
+          (t/is (= {:step "check" :text "penforge.generate.step.check"}
+                   (get-in (update event) [:penforge :chat :runs "r" :progress]))))
+        ;; unknown codes and texts without a code keep the daemon text
+        (t/is (= [] (events {:type "workflow.event" :run-id "r" :kind "progress"
+                             :payload {:step "later" :text "Later"}})))
+        (t/is (= [] (events {:type "workflow.event" :run-id "r" :kind "progress"
+                             :payload {:summary "Reading the design" :status "running"}})))
+        ;; no summary without a result, nor for a failed run
+        (t/is (= [] (events {:type "workflow.done" :run-id "r" :ok true})))
+        (events {:type "workflow.event" :run-id "r" :kind "result"
+                 :payload {:name "Login" :width 1440 :height 1024 :inspection {}}})
+        (t/is (= [] (events {:type "workflow.done" :run-id "r" :ok false})))
+        (let [[event] (events {:type "workflow.done" :run-id "r" :ok true})]
+          (t/is (= "penforge.generate.summary Login 1440×1024"
+                   (get-in (update event) [:penforge :chat :entries 0 :summary]))))
+        ;; a run the chat does not know is left alone
+        (let [[event] (events {:type "workflow.done" :run-id "other" :ok true})]
+          (t/is (= {:penforge {:chat {:runs {}}}}
+                   (ptk/update event {:penforge {:chat {:runs {}}}}))))))))
 
 (t/deftest generate-screen-does-not-follow-a-run-when-disconnected
   (let [stream (rx/subject)

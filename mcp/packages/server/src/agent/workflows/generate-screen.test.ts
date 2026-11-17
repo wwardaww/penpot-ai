@@ -354,13 +354,13 @@ test("generates a screen: design system, board, build turn, review turn and resu
     const plan = h.events.find((event) => event.kind === "plan");
     assert.deepEqual(plan?.payload, { boardId: "board-1", pageId: "page-1", platform: "mobile" });
     assert.deepEqual(
-        h.events.filter((event) => event.kind === "progress").map((event) => event.payload.text),
+        h.events.filter((event) => event.kind === "progress").map((event) => event.payload),
         [
-            "Reading the design system",
-            "Creating the board",
-            "Designing the screen",
-            "Checking the result",
-            "Polishing the screen",
+            { step: "design-system", text: "Reading the design system" },
+            { step: "board", text: "Creating the board" },
+            { step: "build", text: "Designing the screen" },
+            { step: "check", text: "Checking the result" },
+            { step: "review", text: "Polishing the screen" },
         ]
     );
 });
@@ -425,7 +425,11 @@ test("a failing checkpoint is logged and the run goes on", async () => {
         }),
         readDesignMd: async () => null,
     }).run(h.ctx, { prompt: "login" });
-    assert.deepEqual(h.events.find((event) => event.kind === "log")?.payload, { text: "Checkpoint failed: disk full" });
+    assert.deepEqual(h.events.find((event) => event.kind === "log")?.payload, {
+        code: "checkpoint-failed",
+        params: { message: "disk full" },
+        text: "Checkpoint failed: disk full",
+    });
     assert.ok(h.events.some((event) => event.kind === "result"));
 });
 
