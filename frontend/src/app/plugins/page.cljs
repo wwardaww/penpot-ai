@@ -468,7 +468,7 @@
     :findCommentThreads
     (fn [criteria]
       (let [only-yours    (boolean (obj/get criteria "onlyYours" false))
-            show-resolved (boolean (obj/get criteria "showResolved" true))
+            show-resolved (boolean (obj/get criteria "showResolved" false))
             user-id       (:profile-id @st/state)]
         (js/Promise.
          (fn [resolve reject]
@@ -483,7 +483,7 @@
                   (rx/subs!
                    (fn [threads]
                      (let [threads
-                           (cond->> threads
+                           (cond->> (filter #(= id (:page-id %)) threads)
                              (not show-resolved)
                              (filter (comp not :is-resolved))
 
@@ -492,4 +492,32 @@
                        (resolve
                         (format/format-array
                          #(pc/comment-thread-proxy plugin-id file-id id %) threads))))
+                   reject)))))))
+
+    :findCommentThreadById
+    (fn [thread-id]
+      (js/Promise.
+       (fn [resolve reject]
+         (let [thread-id (uuid/parse* thread-id)]
+           (cond
+             (not (r/check-permission plugin-id "comment:read"))
+             (do
+               (u/not-valid plugin-id :findCommentThreadById "Plugin doesn't have 'comment:read' permission")
+               (reject "Plugin doesn't have 'comment:read' permission"))
+
+             (nil? thread-id)
+             (do
+               (u/not-valid plugin-id :findCommentThreadById "Thread id not valid")
+               (reject "Thread id not valid"))
+
+             :else
+             (->> (rp/cmd! :get-comment-threads {:file-id file-id})
+                  (rx/subs!
+                   (fn [threads]
+                     (resolve
+                      (some (fn [thread]
+                              (when (and (= thread-id (:id thread))
+                                         (= id (:page-id thread)))
+                                (pc/comment-thread-proxy plugin-id file-id id thread)))
+                            threads)))
                    reject)))))))))
