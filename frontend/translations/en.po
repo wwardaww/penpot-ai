@@ -10326,3 +10326,13 @@ msgstr "Copy the link again from the Penforge agent output."
 #: src/app/main/ui/workspace/sidebar.cljs:176
 msgid "penforge.sidebar.tab"
 msgstr "AI"
+
+# penforge:W06
+
+#: src/app/main/data/ai/actions/ask.cljs
+msgid "penforge.actions.ask"
+msgstr "Ask AI about selection"
+
+#: src/app/main/data/workspace/shortcuts.cljs
+msgid "shortcuts.ai-ask"
+msgstr "Ask AI about selection"
