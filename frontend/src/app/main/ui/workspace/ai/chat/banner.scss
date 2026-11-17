@@ -1,0 +1,106 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/typography.scss" as t;
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+
+.banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-m);
+  padding: var(--sp-m);
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+  color: var(--color-foreground-primary);
+}
+
+.banner-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sp-s);
+  padding: var(--sp-s) var(--sp-m);
+}
+
+.title {
+  margin: 0;
+}
+
+.description {
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-m);
+  margin: 0;
+  padding-inline-start: var(--sp-l);
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+}
+
+.command {
+  @include t.use-typography("code-font");
+
+  display: block;
+  padding: var(--sp-s);
+  border-radius: $br-8;
+  background-color: var(--color-background-primary);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.pair-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-s);
+}
+
+.pair-input {
+  @include t.use-typography("body-small");
+
+  flex: 1;
+  min-inline-size: 0;
+  block-size: $sz-32;
+  padding: 0 var(--sp-s);
+  border: $b-1 solid transparent;
+  border-radius: $br-8;
+  background-color: var(--color-background-primary);
+  color: var(--color-foreground-primary);
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-accent-primary);
+  }
+}
+
+.pair-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-foreground-error);
+}
+
+.spinner {
+  flex-shrink: 0;
+  inline-size: $sz-12;
+  block-size: $sz-12;
+  border: $b-2 solid var(--color-background-quaternary);
+  border-block-start-color: var(--color-accent-primary);
+  border-radius: $br-circle;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -114,7 +114,7 @@
     (watch [_ _ _]
       (if (and lname (contains? layout/presets lname))
         (rx/of (layout/ensure-layout lname))
-        (rx/of (layout/ensure-layout :layers))))))
+        (rx/of (layout/ensure-layout (layout/get-default-preset)))))))
 
 (defn- datauri->blob-uri
   [uri]

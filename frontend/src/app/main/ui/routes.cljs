@@ -67,6 +67,8 @@
         (concat
          (when (contains? cf/flags :admin-console)
            [:nitrate-entry])
+         (when (contains? cf/flags :ai)
+           [:penforge-pair])
          (when *assert*
            [:debug-icons-preview
             :debug-playground]))))
@@ -100,6 +102,11 @@
     ["/shortcuts"     :settings-shortcuts]]
 
    ["/frame-preview" :frame-preview]
+
+   ;; Penforge pairing link printed by the daemon; permanent, unlike
+   ;; the legacy entries of this table
+   (when (contains? cf/flags :ai)
+     ["/penforge/pair" :penforge-pair])
 
    ["/view" :viewer]
 

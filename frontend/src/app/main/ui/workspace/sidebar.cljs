@@ -29,6 +29,8 @@
    [app.main.ui.ds.layout.tab-switcher :refer [tab-switcher*]]
    [app.main.ui.hooks :as hooks]
    [app.main.ui.hooks.resize :refer [use-resize-hook]]
+   [app.main.ui.workspace.ai.chat.panel :refer [ai-chat-panel*]]
+   [app.main.ui.workspace.ai.chat.session :refer [ai-session*]]
    [app.main.ui.workspace.comments :refer [comments-sidebar*]]
    [app.main.ui.workspace.left-header :refer [left-header*]]
    [app.main.ui.workspace.right-header :refer [right-header*]]
@@ -125,12 +127,14 @@
         file-id        (get file :id)
 
         design-tokens? (features/use-feature "design-tokens/v1")
+        ai?            (contains? cf/flags :ai)
         mode-inspect?  (= options-mode :inspect)
         shortcuts?     (contains? layout :shortcuts)
         show-debug?    (contains? layout :debug-panel)
 
         section        (cond
                          (or mode-inspect? (contains? layout :layers)) :layers
+                         (and ai? (contains? layout :ai-chat)) :ai-chat
                          (contains? layout :assets) :assets
                          (contains? layout :tokens) :tokens)
 
@@ -148,7 +152,7 @@
            (when (= id "tokens")
              (st/emit! (ev/event {::ev/name "open-tokens-tab"})))))
 
-        tabs
+        base-tabs
         (mf/with-memo [mode-inspect? design-tokens?]
           (if ^boolean mode-inspect?
             [{:label (tr "workspace.sidebar.layers")
@@ -165,6 +169,12 @@
                 :id "layers"}
                {:label (tr "workspace.toolbar.assets")
                 :id "assets"}])))
+
+        tabs
+        (mf/with-memo [base-tabs ai? mode-inspect?]
+          (if (and ^boolean ai? (not ^boolean mode-inspect?))
+            (into [{:label (tr "penforge.sidebar.tab") :id "ai-chat"}] base-tabs)
+            base-tabs))
 
         aside-class
         (stl/css-case :left-sidebar      true
@@ -213,6 +223,9 @@
                             :action-button tabs-action-button}
 
           (case section
+            :ai-chat
+            [:> ai-chat-panel* {}]
+
             :assets
             [:> assets-toolbox* {:size (- width  58)
                                  :file-id file-id
@@ -402,6 +415,8 @@
 
     [:> (mf/provider ctx/tokens-lib) {:value tokens-lib}
      [:> (mf/provider ctx/tokens-status) {:value tokens-status}
+      (when (contains? cf/flags :ai)
+        [:> ai-session* {:file-id file-id}])
       (if (:collapse-left-sidebar layout)
         [:> collapsed-button*]
         [:> left-sidebar* {:layout layout

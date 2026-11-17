@@ -17,6 +17,7 @@
    [app.common.types.page :as ctp]
    [app.common.types.shape.layout :as ctl]
    [app.config :as cf]
+   [app.main.data.ai.actions :as ai-actions]
    [app.main.data.event :as ev]
    [app.main.data.modal :as modal]
    [app.main.data.shortcuts :as scd]
@@ -768,6 +769,29 @@
                       :shortcut-key :delete
                       :on-click do-delete}]]))
 
+(mf/defc context-menu-ai-entry*
+  {::mf/private true}
+  [{:keys [action]}]
+  (let [on-click (mf/use-fn
+                  (mf/deps action)
+                  #(ai-actions/run-action action :context-menu))]
+    [:> menu-entry* {:title (ai-actions/get-label action)
+                     :disabled (not (ai-actions/enabled? action @st/state))
+                     :on-click on-click}]))
+
+(mf/defc context-menu-ai*
+  "Penforge AI actions registered with the `:context-menu` scope."
+  {::mf/private true}
+  []
+  (let [registry (mf/deref ai-actions/registry)
+        actions  (ai-actions/get-actions registry :context-menu @st/state)]
+    (when (seq actions)
+      [:*
+       [:> menu-separator* {}]
+       (for [action actions]
+         [:> context-menu-ai-entry* {:key (str (:id action))
+                                     :action action}])])))
+
 (mf/defc shape-context-menu*
   {::mf/wrap [mf/memo]
    ::mf/private true}
@@ -799,6 +823,8 @@
          [:> context-menu-layout* props])
        [:> context-menu-component* props]
        [:> context-menu-guides* props]
+       (when (contains? cf/flags :ai)
+         [:> context-menu-ai* {}])
        [:> context-menu-delete* props]])))
 
 (mf/defc page-item-context-menu*
