@@ -95,16 +95,20 @@
         on-retry
         (mf/use-fn #(st/emit! (client/connect)))]
 
-    (case status
-      :connected
+    ;; `cond`, not `case`: the rumext compiler drops the literal `nil`
+    ;; branch inside `case`, which shifts the clause pairs and makes the
+    ;; component throw "No matching clause".
+    (cond
+      (= status :connected)
       nil
 
-      :pairing
+      (= status :pairing)
       [:div {:class (stl/css :banner :banner-inline)}
        [:span {:class (stl/css :spinner) :aria-hidden true}]
        [:> text* {:as "span" :typography t/body-small}
         (tr "penforge.chat.status.connecting")]]
 
+      :else
       [:section {:class (stl/css :banner)}
        [:> text* {:as "h3"
                   :typography t/headline-small
