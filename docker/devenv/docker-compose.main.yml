@@ -49,6 +49,11 @@ services:
       - COLORTERM=truecolor
       - TERM=xterm-256color
 
+      # Penforge: no Nitrate admin console locally (otherwise get-profile
+      # fails with nitrate-unavailable); enable the Penforge AI features.
+      # enable-mcp stays off: the MCP server runs on the host daemon.
+      - PENPOT_FLAGS=disable-admin-console enable-ai
+
       # SMTP setup (shared infra service; identical across instances)
       - PENPOT_SMTP_ENABLED=true
       - PENPOT_SMTP_DEFAULT_FROM=no-reply@example.com
