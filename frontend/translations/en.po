@@ -10333,9 +10333,6 @@ msgstr "AI"
 msgid "penforge.build"
 msgstr "Build"
 
-#: src/app/main/data/ai/preview.cljs:330
-msgid "penforge.build.coming-soon"
-msgstr "Building the app from your design is coming soon."
 
 #: src/app/main/ui/workspace/ai/preview/pane.cljs:134
 msgid "penforge.preview.close"
@@ -10467,9 +10464,6 @@ msgstr "The app did not start in time."
 
 # penforge:W08
 
-#: src/app/main/ui/workspace/ai/build/actions.cljs
-msgid "penforge.actions.build-app"
-msgstr "Build app"
 
 #: src/app/main/ui/workspace/ai/build/dialog.cljs
 msgid "penforge.build.title"

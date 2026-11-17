@@ -18,6 +18,7 @@
    [app.main.ui.ds.foundations.assets.icon :as i]
    [app.main.ui.ds.foundations.typography :as t]
    [app.main.ui.ds.foundations.typography.text :refer [text*]]
+   [app.main.ui.workspace.ai.build.events :as build]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
    [app.util.keyboard :as kbd]
@@ -187,7 +188,7 @@
         {:keys [status url code message device reload-key]} preview
         on-connect   (mf/use-fn #(st/emit! (chat/open-chat)))
         on-start     (mf/use-fn #(st/emit! (preview/start-preview)))
-        on-build     (mf/use-fn #(st/emit! (preview/build)))]
+        on-build     (mf/use-fn #(st/emit! (build/start)))]
     (cond
       (and (= status :ready) (some? url))
       [:> frame* {:url url

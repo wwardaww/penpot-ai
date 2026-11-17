@@ -6,17 +6,19 @@
 
 (ns app.main.data.ai.actions.build
   "AI actions of the build and preview flow (W09): the primary Build
-  button and the preview toggle."
+  button, which opens the Build dialog (W08), and the preview toggle."
   (:require
    [app.main.data.ai.actions :as actions]
    [app.main.data.ai.preview :as preview]
    [app.main.store :as st]
    [app.main.ui.ds.foundations.assets.icon :as i]
+   [app.main.ui.workspace.ai.build.events :as build]
    [app.util.i18n :refer [tr]]))
 
-(defn- building?
+(defn building?
+  "Whether a build (plan or generation) is running."
   [state]
-  (some? (get-in state [:penforge :preview :build])))
+  (build/running? (build/get-build state)))
 
 (actions/register-action!
  {:id :ai/build
@@ -27,7 +29,7 @@
   :scopes #{:header :main-menu :command-palette}
   :enabled? (fn [state] (not (building? state)))
   :run (fn [_]
-         (st/emit! (preview/build)))})
+         (st/emit! (build/start)))})
 
 (actions/register-action!
  {:id :ai/preview

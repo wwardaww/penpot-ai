@@ -10,7 +10,20 @@
    [app.main.data.ai.actions.build]
    [app.main.data.ai.preview :as preview]
    [app.main.data.ai.protocol :as proto]
-   [cljs.test :as t :include-macros true]))
+   [app.main.store :as st]
+   [app.main.ui.workspace.ai.build.events :as build]
+   [beicon.v2.core :as rx]
+   [cljs.test :as t :include-macros true]
+   [frontend-tests.helpers.mock :as mock]
+   [potok.v2.core :as ptk]))
+
+(defn- watched-types-run
+  "Types of the events an action's `:run` emits."
+  [action]
+  (let [types (atom [])]
+    (with-redefs [st/emit! (mock/stub (fn [event] (swap! types conj (ptk/type event))))]
+      ((:run action) {:scope :header :state {} :selected #{}}))
+    @types))
 
 (defn- json
   [data]
@@ -91,26 +104,55 @@
   (t/is (= 500 (preview/clamp-width 500 700)))
   (t/is (= preview/min-width (preview/clamp-width 500 100))))
 
-(t/deftest the-outcome-of-a-build-step
-  (let [started {:type "workflow.started" :rid "r" :run-id "x" :name "build-plan"}
-        done    (fn [ok] {:type "workflow.done" :run-id "x" :ok ok :summary "s"})
-        result  (fn [payload] {:type "workflow.event" :run-id "x" :kind "result" :payload payload})]
-    (t/is (= :ok (preview/run-outcome [started (done true)])))
-    (t/is (= :ok (preview/run-outcome [started (result {:confirmed true}) (done true)])))
-    (t/is (= :declined (preview/run-outcome [started (result {:confirmed false}) (done true)])))
-    (t/is (= :failed (preview/run-outcome [started (done false)])))
-    (t/is (= :failed (preview/run-outcome [started])))
-    (t/is (= :missing (preview/run-outcome [{:type "error" :rid "r" :code "unknown-workflow"
-                                             :message "Unknown workflow"}])))
-    (t/is (= :failed (preview/run-outcome [{:type "error" :rid "r" :code "no-context"
-                                            :message "no"}])))))
+(defn- watched-types
+  "Types of the events a potok event emits from its watch."
+  [event state]
+  (let [types (atom [])]
+    (rx/sub! (ptk/watch event state (rx/empty))
+             #(swap! types conj (ptk/type %)))
+    @types))
 
-(t/deftest build-is-a-primary-header-action
-  (let [build (get @actions/registry :ai/build)
-        toggle (get @actions/registry :ai/preview)]
+(t/deftest show-app-opens-the-pane-and-starts-or-reloads
+  (let [idle {:penforge {:preview preview/empty-preview}}
+        live {:penforge {:preview (assoc preview/empty-preview :status :ready :pane :overlay)}}]
+    (t/is (= [::preview/start-preview ::preview/open-pane]
+             (watched-types (preview/show-app) idle)))
+    (t/is (= [::preview/reload ::preview/open-pane]
+             (watched-types (preview/show-app) live)))
+    (t/testing "the build dialog's Open preview goes through it"
+      (t/is (= [:app.main.data.modal/hide-modal ::preview/show-app]
+               (watched-types (build/open-preview) idle))))))
+
+(t/deftest start-preview-sends-a-request-id
+  (let [state   {:current-project-id "p1"
+                 :penforge {:connection {:status :connected}
+                            :preview preview/empty-preview}}
+        updated (ptk/update (preview/start-preview) state)
+        preview (get-in updated [:penforge :preview])]
+    (t/is (= :starting (:status preview)))
+    (t/is (string? (:rid preview)))
+    (t/testing "a not-configured reply to that request shows as such"
+      (let [failed (preview/apply-message preview {:type "error" :rid (:rid preview)
+                                                   :code "not-configured" :message "no app"})]
+        (t/is (= :failed (:status failed)))
+        (t/is (= "not-configured" (:code failed)))))))
+
+(t/deftest build-is-one-primary-action-that-opens-the-dialog
+  (let [registry @actions/registry
+        build    (get registry :ai/build)
+        toggle   (get registry :ai/preview)]
     (t/is (true? (:primary build)))
     (t/is (contains? (:scopes build) :header))
     (t/is (contains? (:scopes toggle) :main-menu))
-    (t/testing "build is disabled while a build runs"
+    (t/is (nil? (get registry :ai/build-app)) "the dialog has no second Build entry")
+    (t/is (= [:ai/build]
+             (->> (actions/get-actions registry :main-menu {})
+                  (map :id)
+                  (filter #{:ai/build :ai/build-app})
+                  (vec))))
+    (t/is (= [::build/start] (watched-types-run build)))
+    (t/testing "build is disabled while any build runs"
       (t/is (actions/enabled? build {}))
-      (t/is (not (actions/enabled? build {:penforge {:preview {:build :planning}}}))))))
+      (t/is (not (actions/enabled? build {:penforge {:build {:stage :planning}}})))
+      (t/is (not (actions/enabled? build {:penforge {:build {:stage :building}}})))
+      (t/is (actions/enabled? build {:penforge {:build {:stage :done}}})))))

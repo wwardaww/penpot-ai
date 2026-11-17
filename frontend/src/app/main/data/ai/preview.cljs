@@ -26,20 +26,15 @@
   - `:width` width of the split pane in px
   - `:reload-key` bumped to reload the frame
   - `:logs` last dev server lines `{:stream :text}`
-  - `:build` `nil`, `:planning` or `:building` while the Build
-    action runs
 
   The pane, device and width are kept per tab in session storage, so a
   page reload shows the preview again; the daemon keeps the server
   running for a while after the tab goes away."
   (:require
-   [app.main.data.ai.chat :as chat]
    [app.main.data.ai.client :as client]
    [app.main.data.ai.protocol :as proto]
-   [app.main.data.notifications :as ntf]
    [app.main.data.penforge :as penforge]
    [app.main.store :as st]
-   [app.util.i18n :refer [tr]]
    [app.util.storage :as storage]
    [beicon.v2.core :as rx]
    [potok.v2.core :as ptk]))
@@ -55,8 +50,7 @@
    :device :desktop
    :width default-width
    :reload-key 0
-   :logs []
-   :build nil})
+   :logs []})
 
 (def live-statuses
   #{:starting :ready})
@@ -111,34 +105,6 @@
       preview)
 
     preview))
-
-(defn run-outcome
-  "Outcome of a finished workflow run from its messages (see
-  `chat/workflow-messages`): `:ok`, `:declined` (a `result` event said
-  `confirmed: false`), `:missing` (the daemon does not know the
-  workflow) or `:failed`."
-  [messages]
-  (let [final  (last messages)
-        result (->> messages
-                    (filter #(and (= "workflow.event" (:type %))
-                                  (= "result" (:kind %))))
-                    (last)
-                    (:payload))]
-    (cond
-      (= "error" (:type final))
-      (if (= "unknown-workflow" (:code final)) :missing :failed)
-
-      (not= "workflow.done" (:type final))
-      :failed
-
-      (not (:ok final))
-      :failed
-
-      (and (map? result) (false? (:confirmed result)))
-      :declined
-
-      :else
-      :ok)))
 
 (defn- get-preview
   [state]
@@ -300,84 +266,18 @@
     (update [_ state]
       (update-preview state update :reload-key (fnil inc 0)))))
 
-(defn- set-build
-  [stage]
-  (ptk/reify ::set-build
-    ptk/UpdateEvent
-    (update [_ state]
-      ;; the workspace may have closed meanwhile
-      (if (contains? (:penforge state) :preview)
-        (update-preview state assoc :build stage)
-        state))))
-
-(defn- show-built-app
+(defn show-app
+  "Show the generated app: open the pane (split unless the overlay is
+  shown) and start the dev server, or reload the frame when it is
+  already live (e.g. after a new build). Used by the Build dialog's
+  \"Open preview\" (W08)."
   []
-  (ptk/reify ::show-built-app
+  (ptk/reify ::show-app
     ptk/WatchEvent
     (watch [_ state _]
       (let [preview (get-preview state)]
         (rx/of (if (live? preview) (reload) (start-preview))
                (open-pane (or (:pane preview) :split)))))))
-
-(defn- run-step
-  "Run a workflow and emit `(on-done outcome)` once it finishes."
-  [stream name params on-done]
-  (let [rid (proto/next-rid)]
-    (rx/merge
-     ;; listen before the request goes out
-     (->> (chat/workflow-messages stream rid)
-          (rx/reduce conj [])
-          (rx/mapcat (comp on-done run-outcome)))
-     (rx/of (chat/run-workflow name params {:rid rid})))))
-
-(defn- finish-build
-  [outcome]
-  (rx/concat
-   (if (= :missing outcome)
-     (rx/of (ntf/info (tr "penforge.build.coming-soon")))
-     (rx/empty))
-   (rx/of (set-build nil))))
-
-(defn build
-  "The Build action: plan the app (`build-plan`, which asks the user
-  to confirm), generate it (`build-run`), then show the preview."
-  []
-  (ptk/reify ::build
-    ptk/WatchEvent
-    (watch [_ state stream]
-      (let [params  {:file-id (str (:current-file-id state))}
-            ;; a lost connection ends the runs on the daemon side too
-            stopper (rx/merge
-                     (rx/filter (ptk/type? ::finalize) stream)
-                     (rx/filter (ptk/type? ::client/disconnect) stream)
-                     (rx/filter (ptk/type? ::client/socket-closed) stream))]
-        (cond
-          (some? (:build (get-preview state)))
-          (rx/empty)
-
-          (not (connected? state))
-          (rx/of (chat/open-chat))
-
-          :else
-          (rx/concat
-           (->> (rx/concat
-                 (rx/of (set-build :planning) (chat/open-chat))
-                 (run-step
-                  stream "build-plan" params
-                  (fn [outcome]
-                    (if (= :ok outcome)
-                      (rx/concat
-                       (rx/of (set-build :building))
-                       (run-step
-                        stream "build-run" params
-                        (fn [outcome]
-                          (if (= :ok outcome)
-                            (rx/of (set-build nil) (show-built-app))
-                            (finish-build outcome)))))
-                      (finish-build outcome)))))
-                (rx/take-until stopper))
-           ;; always leave the building state
-           (rx/of (set-build nil))))))))
 
 (defn initialize
   "Start following the preview of the project of the open file; mounted
@@ -408,6 +308,13 @@
                                                     type)
                                          (= project-id (project-id*))))))
                    (rx/map receive))
+
+              ;; A finished build (W08 dialog) updates the app; reload a live
+              ;; frame. The keyword avoids a cyclic require of the dialog.
+              (->> stream
+                   (rx/filter (ptk/type? :app.main.ui.workspace.ai.build.events/built))
+                   (rx/filter (fn [_] (live? (get-preview @st/state))))
+                   (rx/map (fn [_] (reload))))
 
               ;; (Re)join the dev server on every connection while the
               ;; preview is shown or live, e.g. after a page reload.
