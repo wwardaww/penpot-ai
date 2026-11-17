@@ -5,11 +5,12 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build:server": "pnpm exec esbuild ./src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.js --external:@modelcontextprotocol/* --external:ws --external:express --external:class-transformer --external:class-validator --external:reflect-metadata --external:pino --external:pino-pretty --external:pino-loki --external:js-yaml --external:sharp --external:nrepl-client --external:ioredis",
-    "build": "pnpm run build:server && node ./scripts/copy-resources.js",
+    "build:server": "pnpm exec esbuild ./src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.js --external:@modelcontextprotocol/* --external:ws --external:express --external:class-transformer --external:class-validator --external:reflect-metadata --external:pino --external:pino-pretty --external:pino-loki --external:js-yaml --external:sharp --external:nrepl-client --external:ioredis --external:@anthropic-ai/claude-agent-sdk",
+    "build": "pnpm run build:server && node ./scripts/copy-resources.js && node ./src/agent/copy-assets.mjs",
     "build:types": "tsc --emitDeclarationOnly --outDir dist",
     "start": "node dist/index.js",
     "start:multi-user": "node dist/index.js --multi-user",
+    "start:penforge": "node dist/index.js --penforge",
     "start:dev": "node --import ts-node/register src/index.ts",
     "start:dev:multi-user": "node --loader ts-node/esm src/index.ts --multi-user",
     "test": "tsx --test \"src/**/*.test.ts\"",
@@ -29,6 +30,8 @@
   },
   "packageManager": "pnpm@12.21.0+sha512.66fd8278ee28935ce951792d34367ff3af5c432a2756445823029533835b8da529bbe0be5130afd56ed0713fb8789e47bad82d93bd5ae2fe54b15562d6276ef0",
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.318",
+    "@modelcontextprotocol/client": "^2.3.1",
     "@modelcontextprotocol/node": "^2.1.1",
     "@modelcontextprotocol/server": "^2.3.1",
     "class-transformer": "^0.5.1",
@@ -46,7 +49,6 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@modelcontextprotocol/client": "^2.3.1",
     "@penpot/mcp-common": "workspace:../common",
     "@types/express": "^5.0.6",
     "@types/js-yaml": "^4.0.9",
