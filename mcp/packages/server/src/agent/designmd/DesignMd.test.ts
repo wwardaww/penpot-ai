@@ -155,6 +155,26 @@ components:
             "Colors",
         ]);
         assert.deepEqual(warnings, ["colors.e", "components.card.shadow", "Overview"]);
+        assert.deepEqual(
+            issues.map((issue) => issue.code),
+            [
+                "not-color",
+                "reference-missing",
+                "reference-cycle",
+                "reference-cycle",
+                "not-dimension",
+                "font-weight",
+                "not-dimension",
+                "reference-group",
+                "reference-missing",
+                "duplicate-section",
+                "color-unsupported",
+                "unknown-property",
+                "section-order",
+            ]
+        );
+        assert.deepEqual(issues[0].params, { value: "#12" });
+        assert.deepEqual(issues[1].params, { reference: "{colors.missing}" });
     });
 });
 
@@ -243,8 +263,10 @@ describe("PenpotScripts against a fake Penpot", () => {
         const set = library.tokens.sets[0];
         assert.equal(set.name, "DESIGN.md");
         assert.equal(set.active, true);
-        assert.equal(library.tokens.themes[0].active, true);
-        assert.deepEqual(library.tokens.themes[0].activeSets, [set]);
+        assert.equal(first.activation, "set", "no themes in use: the set is turned on directly");
+        const theme = library.tokens.themes[0];
+        assert.deepEqual([theme.group, theme.name, theme.active], ["DESIGN.md", "DESIGN.md", false]);
+        assert.deepEqual(theme.activeSets, [set]);
 
         const second = (await penpot.execute(script)) as ImportReport;
 
@@ -253,6 +275,36 @@ describe("PenpotScripts against a fake Penpot", () => {
         assert.equal(second.tokens.unchanged.length, 17);
         assert.equal(library.colors.length, 8);
         assert.equal(library.tokens.themes.length, 1);
+        assert.equal(second.activation, "unchanged");
+    });
+
+    test("import keeps the user's active themes and sets", async () => {
+        const script = PenpotScripts.importScript(PenpotImportPlanner.plan(parsed()));
+
+        // the user works with an ungrouped theme
+        const themed = new FakePenpot();
+        const catalog = themed.library.local.tokens;
+        const core = catalog.addSet({ name: "core" });
+        const light = catalog.addTheme({ group: "", name: "Light" });
+        light.addSet(core);
+        light.active = true;
+
+        const report = (await themed.execute(script)) as ImportReport;
+
+        assert.equal(report.activation, "theme");
+        assert.equal(light.active, true, "the user's theme stays on");
+        assert.equal(core.active, true);
+        assert.equal(catalog.sets.find((set) => set.name === "DESIGN.md")!.active, true);
+
+        // the user turned sets on by hand, without themes
+        const manual = new FakePenpot();
+        const base = manual.library.local.tokens.addSet({ name: "base", active: true });
+
+        const manualReport = (await manual.execute(script)) as ImportReport;
+
+        assert.equal(manualReport.activation, "set");
+        assert.equal(base.active, true, "the user's set stays on");
+        assert.equal(manual.library.local.tokens.sets.find((set) => set.name === "DESIGN.md")!.active, true);
     });
 
     test("import updates changed values and reports missing fonts", async () => {
@@ -274,7 +326,7 @@ describe("PenpotScripts against a fake Penpot", () => {
 
         assert.deepEqual(report.colors.updated, ["primary"]);
         assert.equal(library.color("primary")?.color, "#2b59c3");
-        assert.deepEqual(report.warnings, ["typography body-md: font Nope Sans was not found"]);
+        assert.deepEqual(report.warnings, [{ code: "font-missing", name: "body-md", font: "Nope Sans" }]);
     });
 
     test("import leaves tokens alone when they come from a library", async () => {
@@ -286,7 +338,7 @@ describe("PenpotScripts against a fake Penpot", () => {
         )) as ImportReport;
 
         assert.equal(penpot.library.local.tokens.sets.length, 0);
-        assert.match(report.warnings[0], /^tokens: /);
+        assert.deepEqual(report.warnings, [{ code: "tokens-from-library" }]);
         assert.equal(report.colors.created.length, 8);
     });
 
@@ -388,6 +440,27 @@ describe("DesignMdFromPenpot", () => {
         assert.equal(exported.tokens.rounded.md, "12px");
         assert.deepEqual(exported.tokens.components.card, { backgroundColor: "{colors.surface}" });
         assert.equal(exported.tokens.components["button-primary"].rounded, "{rounded.md}");
+    });
+
+    test("values only DESIGN.md has are kept and reported, or dropped when pruning", async () => {
+        const { snapshot } = await importedFile();
+        const previous = parsed(
+            ACME_DESIGN_MD.replace(
+                '  link: "{colors.primary}"\n',
+                '  link: "{colors.primary}"\n  brand-only: "#123456"\n'
+            ).replace("  columns: 12\n", "  columns: 12\n  gutter: 20px\n")
+        );
+
+        const kept = DesignMdFromPenpot.merge(snapshot, previous);
+        const pruned = DesignMdFromPenpot.merge(snapshot, previous, true);
+
+        assert.deepEqual(kept.notInFile, ["colors.brand-only", "spacing.gutter"]);
+        assert.equal(kept.document.tokens.colors["brand-only"], "#123456");
+        assert.equal(kept.document.tokens.spacing.gutter, "20px");
+        assert.deepEqual(Object.keys(kept.document.tokens.colors).slice(-2), ["link", "brand-only"]);
+        assert.deepEqual(pruned.notInFile, ["colors.brand-only", "spacing.gutter"]);
+        assert.equal("brand-only" in pruned.document.tokens.colors, false);
+        assert.equal(DesignMdSerializer.serialize(pruned.document), ACME_DESIGN_MD);
     });
 });
 

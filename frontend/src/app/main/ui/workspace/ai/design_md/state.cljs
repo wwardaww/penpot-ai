@@ -10,9 +10,17 @@
   state in a component atom.
 
   Workflows (daemon, `agent/workflows/design-md-*.ts`):
-  `design-md-read {ref?}`, `design-md-save {content message?}`,
-  `design-md-draft {prompt}`, `design-md-import {content?}`,
-  `design-md-export {}`. Each reports its data in one `result` event."
+  `design-md-read {ref?}`, `design-md-save {content message? base}`,
+  `design-md-draft {prompt content?}`, `design-md-import {content? base}`,
+  `design-md-export {prune?}`. Each reports its data in one `result`
+  event; steps come as `progress {code}` and stops as `failure {code
+  params}`, which the panel translates.
+
+  The editor text is never replaced behind the user's back: a read keeps
+  unsaved text, and a draft or export that arrives while the text is
+  unsaved becomes a `:proposal` the user accepts or dismisses. Writes
+  carry `:base`, the hash of the version on disk the text started from;
+  when the file changed meanwhile the daemon answers with a `:conflict`."
   (:require
    [cuerdas.core :as str]))
 
@@ -31,6 +39,7 @@
    :exists false
    :content ""
    :saved ""
+   :base nil
    :history []
    :issues []
    :viewing nil
@@ -39,6 +48,10 @@
    :error nil
    :notice nil
    :report nil
+   :proposal nil
+   :conflict nil
+   :not-in-file []
+   :confirm-apply false
    :prompt ""})
 
 (defn busy?
@@ -60,50 +73,75 @@
   (assoc state
          :op {:name name :rid rid}
          :error nil
-         :notice nil))
+         :notice nil
+         :confirm-apply false))
+
+(defn- disk-version
+  "Record a version of the file on disk; the editor follows it only
+  when it holds no unsaved text."
+  [state content hash]
+  (cond-> (assoc state :saved content :base hash :exists true)
+    (not (dirty? state))
+    (assoc :content content)))
 
 (defn- apply-read-result
-  [state {:keys [exists content ref history issues]}]
+  [state {:keys [exists content hash ref history issues]}]
   (if (some? ref)
     (assoc state
            :viewing {:ref ref :content content :issues (vec issues)}
            :history (vec history))
-    (assoc state
-           :loaded true
-           :exists (boolean exists)
-           :content content
-           :saved content
-           :history (vec history)
-           :issues (vec issues)
-           :viewing nil)))
+    (let [dirty (dirty? state)]
+      (cond-> (assoc state
+                     :loaded true
+                     :exists (boolean exists)
+                     :saved content
+                     :base hash
+                     :history (vec history)
+                     :viewing nil)
+        (not dirty)
+        (assoc :content content :issues (vec issues))))))
+
+(defn- apply-new-file
+  "A draft or an export wrote a new file: show it, or offer it when the
+  editor has unsaved text."
+  [state name {:keys [content hash issues outcome]}]
+  (if (dirty? state)
+    (-> state
+        (disk-version content hash)
+        (assoc :proposal {:workflow name :content content :outcome outcome :issues (vec issues)}))
+    (-> state
+        (disk-version content hash)
+        (assoc :issues (vec issues) :proposal nil))))
 
 (defn- apply-result
-  [state name payload]
-  (cond
-    (= name read-workflow)
-    (apply-read-result state payload)
+  [state name {:keys [outcome conflict] :as payload}]
+  (let [state (assoc-in state [:op :outcome] outcome)]
+    (cond
+      (= name read-workflow)
+      (apply-read-result state payload)
 
-    (= name save-workflow)
-    (assoc state :issues (vec (:issues payload)))
+      (= outcome "conflict")
+      (assoc state :conflict conflict)
 
-    (= name import-workflow)
-    (assoc state :report payload)
+      (= name save-workflow)
+      (assoc state :issues (vec (:issues payload)) :conflict nil)
 
-    ;; draft and export return the new file; the read that follows
-    ;; refreshes the history
-    (contains? #{draft-workflow export-workflow} name)
-    (assoc state
-           :content (:content payload)
-           :saved (:content payload)
-           :exists true
-           :issues (vec (:issues payload)))
+      (= name import-workflow)
+      (assoc state :report payload :conflict nil)
 
-    :else
-    state))
+      (= name draft-workflow)
+      (apply-new-file state name payload)
+
+      (= name export-workflow)
+      (-> (apply-new-file state name payload)
+          (assoc :not-in-file (if (:pruned payload) [] (vec (:not-in-file payload)))))
+
+      :else
+      state)))
 
 (defn apply-message
   "Apply a daemon message of the run of workflow `name` to the state."
-  [state name {:keys [type kind payload ok summary error message run-id]}]
+  [state name {:keys [type kind payload ok error message run-id code]}]
   (cond
     (= type "workflow.started")
     (assoc-in state [:op :run-id] run-id)
@@ -112,32 +150,55 @@
     (apply-result state name payload)
 
     (and (= type "workflow.event") (= kind "progress"))
-    (cond-> state
-      (string? (:summary payload))
-      (assoc-in [:op :progress] (:summary payload)))
+    (assoc-in state [:op :progress] (select-keys payload [:code :summary]))
 
     (and (= type "workflow.event") (= kind "question"))
     (assoc-in state [:op :question] payload)
 
-    (= type "workflow.done")
-    (cond-> (assoc state :op nil)
-      ok
-      (assoc :notice (when (contains? mutating-workflows name) summary))
+    (and (= type "workflow.event") (= kind "failure"))
+    (assoc-in state [:op :failure] payload)
 
-      (not ok)
-      (assoc :error (or (not-empty error) summary)))
+    (= type "workflow.done")
+    (let [{:keys [failure outcome]} (:op state)]
+      (cond-> (assoc state :op nil)
+        (and ok (contains? mutating-workflows name) (not= outcome "conflict"))
+        (assoc :notice {:workflow name :outcome outcome})
+
+        (not ok)
+        (assoc :error (merge {:message error} failure))))
 
     (= type "error")
     (assoc state
            :op nil
-           :error (or (not-empty message) "error"))
+           :error {:code code :message message})
 
     :else
+    state))
+
+(defn connection-lost
+  "The daemon connection dropped: a run in flight will not report back."
+  [state]
+  (if (busy? state)
+    (assoc state :op nil :error {:code "connection-lost"})
     state))
 
 (defn clear-question
   [state]
   (update state :op #(some-> % (dissoc :question))))
+
+(defn accept-proposal
+  "Put the proposed file (already saved on disk) in the editor."
+  [state]
+  (if-let [{:keys [content issues]} (:proposal state)]
+    (assoc state :content content :issues issues :proposal nil)
+    state))
+
+(defn use-disk-version
+  "Resolve a conflict by loading the file found on disk."
+  [state]
+  (if-let [{:keys [content hash]} (:conflict state)]
+    (assoc state :content content :saved content :base hash :exists true :conflict nil)
+    state))
 
 (defn split-front-matter
   "Split DESIGN.md text into its YAML front matter (without the fences)
@@ -156,3 +217,12 @@
   "Number of added and updated elements of one kind of an import report."
   [counts]
   [(count (:created counts)) (count (:updated counts))])
+
+(def checkpoint-question-options
+  "Option ids of the question the import asks when it cannot save a
+  version of the file first."
+  #{"apply-without-checkpoint" "stop"})
+
+(defn checkpoint-question?
+  [question]
+  (= checkpoint-question-options (set (map :id (:options question)))))

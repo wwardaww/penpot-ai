@@ -7,10 +7,10 @@ Answer with one JSON object and nothing else:
 
 ```json
 {
-  "overview": "2 to 4 sentences on the brand and visual style (only when asked for)",
-  "components": {
-    "<component-key>": "1 to 3 sentences: what it is for, when to use it, what not to do"
-  }
+    "overview": "2 to 4 sentences on the brand and visual style (only when asked for)",
+    "components": {
+        "<component-key>": "1 to 3 sentences: what it is for, when to use it, what not to do"
+    }
 }
 ```
 

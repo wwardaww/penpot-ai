@@ -204,15 +204,26 @@
   color: var(--color-foreground-primary);
 }
 
-.viewing {
+.notice-box {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--sp-s);
   padding: var(--sp-s) var(--sp-m);
   border-radius: $br-8;
-  background-color: var(--color-background-warning);
+  background-color: var(--color-background-tertiary);
   color: var(--color-foreground-primary);
+
+  p {
+    flex: 1;
+    min-inline-size: px2rem(200);
+    margin: 0;
+  }
+}
+
+.notice-warning {
+  background-color: var(--color-background-warning);
 }
 
 .issues,
@@ -275,7 +286,6 @@
   color: var(--color-foreground-secondary);
 }
 
-.question,
 .report {
   display: flex;
   flex-direction: column;

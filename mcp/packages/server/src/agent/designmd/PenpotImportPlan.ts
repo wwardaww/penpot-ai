@@ -38,6 +38,8 @@ export interface PlannedToken {
 /** Everything an import writes into the Penpot file, except components. */
 export interface PenpotImportPlan {
     setName: string;
+    /** theme group of the DESIGN.md theme (its own, so it never turns off the user's themes) */
+    themeGroup: string;
     themeName: string;
     colors: PlannedColor[];
     typographies: PlannedTypography[];
@@ -68,6 +70,7 @@ export class PenpotImportPlanner {
         this.references = new DesignMdReferences(document.tokens);
         this.plan = {
             setName: PenpotImportPlanner.TOKEN_SET,
+            themeGroup: PenpotImportPlanner.TOKEN_SET,
             themeName: PenpotImportPlanner.TOKEN_SET,
             colors: [],
             typographies: [],

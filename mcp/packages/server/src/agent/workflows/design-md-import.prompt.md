@@ -6,6 +6,7 @@ are `radius.<name>` and `spacing.<name>` tokens (token set and theme "DESIGN.md"
 components the user message lists.
 
 Rules:
+
 - Work on the page named "Design System"; create it if it does not exist and open it. Do not
   change other pages.
 - One main component per key, named exactly as the key (for example `button-primary`). Variants

@@ -1,8 +1,10 @@
 import type { Workflow, WorkflowContext } from "@penpot/mcp-common";
 import {
     DesignMdBody,
+    DesignMdFailure,
     DesignMdReferences,
     DesignMdRepository,
+    DesignMdRun,
     DtcgTokens,
     parseDesignMd,
     PenpotImportPlanner,
@@ -13,8 +15,13 @@ import type { ImportReport, TagReport } from "../designmd/PenpotScripts";
 
 /** Params of the `design-md-import` workflow. */
 export interface DesignMdImportParams {
-    /** DESIGN.md text to apply (saved first); the saved file when missing */
+    /** DESIGN.md text to apply (saved first); the file on disk when missing */
     content?: string;
+    /**
+     * hash of the version `content` is based on (see `design-md-save`); when the file on disk is
+     * another version, nothing is written or applied (`outcome` `conflict`)
+     */
+    base?: string | null;
     /** let Claude build the components of the spec (default true) */
     components?: boolean;
 }
@@ -28,60 +35,81 @@ const CHECKPOINT_LABEL = "Before applying DESIGN.md";
  * Saves a version of the file first, then creates or updates library colors, typographies and
  * the `DESIGN.md` token set and theme (deterministic plugin code), then lets Claude build the
  * components of the spec on the "Design System" page and links them to their keys. Emits
- * `result` `{checkpoint, colors, typographies, tokens, warnings, skipped, components}`.
+ * `result` `{outcome: "applied", hash, checkpoint, colors, typographies, tokens, activation,
+ * warnings, skipped, components}`, or `{outcome: "conflict", conflict}` like `design-md-save`.
  */
 export const workflow: Workflow<DesignMdImportParams> = {
     name: "design-md-import",
     description: "Applies DESIGN.md to the open file: tokens, library colors, text styles and components.",
-    run: async (ctx, params) => {
-        const repository = new DesignMdRepository(ctx.workspace);
-        const saved = await repository.read();
-        const text = typeof params?.content === "string" ? params.content.replace(/\r\n?/g, "\n") : saved;
-        if (text === null) {
-            throw new Error("There is no DESIGN.md yet");
-        }
-        const { document, issues } = parseDesignMd(text);
-        const errors = issues.filter((issue) => issue.severity === "error");
-        if (errors.length > 0) {
-            throw new Error(
-                `DESIGN.md has errors: ${errors
-                    .slice(0, 5)
-                    .map((issue) => `${issue.path}: ${issue.message}`)
-                    .join("; ")}`
-            );
-        }
-        if (text !== saved) {
-            await repository.write(text, DtcgTokens.fromDocument(document));
-            await repository.commit("save before applying to the file");
-        }
+    run: (ctx, params) =>
+        new DesignMdRun(ctx).guard(async () => {
+            const run = new DesignMdRun(ctx);
+            const repository = new DesignMdRepository(ctx.workspace);
+            const given = typeof params?.content === "string" ? DesignMdRepository.normalize(params.content) : null;
+            const check = await repository.prepareWrite(given === null ? undefined : params?.base);
+            if (check.conflict) {
+                ctx.emit("result", {
+                    outcome: "conflict",
+                    hash: check.currentHash,
+                    conflict: {
+                        content: check.current ?? "",
+                        hash: check.currentHash,
+                        externalCommit: check.externalCommit,
+                    },
+                });
+                return { summary: "DESIGN.md changed outside this editor; nothing was applied" };
+            }
+            const text = given ?? check.current;
+            if (text === null) {
+                throw new DesignMdFailure("no-file", "There is no DESIGN.md yet");
+            }
+            const { document, issues } = parseDesignMd(text);
+            const errors = issues.filter((issue) => issue.severity === "error");
+            if (errors.length > 0) {
+                throw new DesignMdFailure(
+                    "has-errors",
+                    `DESIGN.md has errors: ${errors
+                        .slice(0, 5)
+                        .map((issue) => `${issue.path}: ${issue.message}`)
+                        .join("; ")}`,
+                    { count: errors.length, first: errors[0].path }
+                );
+            }
+            if (text !== check.current) {
+                await repository.write(text, DtcgTokens.fromDocument(document));
+                await repository.commit("save before applying to the file");
+            }
 
-        const scripts = new PenpotScripts(ctx.tools);
-        const checkpoint = await saveCheckpoint(ctx, scripts);
+            const scripts = new PenpotScripts(ctx.tools);
+            const checkpoint = await saveCheckpoint(ctx, run, scripts);
 
-        ctx.emit("progress", { summary: "Creating tokens, colors and text styles" });
-        const plan = PenpotImportPlanner.plan(document);
-        const report = await scripts.run<ImportReport>(PenpotScripts.importScript(plan));
+            run.progress("import-library", "Creating tokens, colors and text styles");
+            const plan = PenpotImportPlanner.plan(document);
+            const report = await scripts.run<ImportReport>(PenpotScripts.importScript(plan));
 
-        let components: TagReport | null = null;
-        const keys = Object.keys(document.tokens.components);
-        if (keys.length > 0 && params?.components !== false) {
-            ctx.emit("progress", { summary: "Building components" });
-            await ctx.runner.run({ prompt: componentBrief(document, keys) });
-            components = await scripts.run<TagReport>(PenpotScripts.tagComponentsScript(keys));
-        }
+            let components: TagReport | null = null;
+            const keys = Object.keys(document.tokens.components);
+            if (keys.length > 0 && params?.components !== false) {
+                run.progress("build-components", "Building components");
+                await ctx.runner.run({ prompt: componentBrief(document, keys) });
+                components = await scripts.run<TagReport>(PenpotScripts.tagComponentsScript(keys));
+            }
 
-        const result = {
-            checkpoint,
-            colors: report.colors,
-            typographies: report.typographies,
-            tokens: report.tokens,
-            warnings: report.warnings,
-            skipped: plan.skipped,
-            components,
-        };
-        ctx.emit("result", result);
-        return { summary: summarize(result) };
-    },
+            const result = {
+                outcome: "applied",
+                hash: DesignMdRepository.hash(text),
+                checkpoint,
+                colors: report.colors,
+                typographies: report.typographies,
+                tokens: report.tokens,
+                activation: report.activation,
+                warnings: report.warnings,
+                skipped: plan.skipped,
+                components,
+            };
+            ctx.emit("result", result);
+            return { summary: summarize(result) };
+        }),
 };
 
 /**
@@ -89,20 +117,21 @@ export const workflow: Workflow<DesignMdImportParams> = {
  *
  * @returns the version label, or null when the user chose to go on without one
  */
-async function saveCheckpoint(ctx: WorkflowContext, scripts: PenpotScripts): Promise<string | null> {
-    ctx.emit("progress", { summary: "Saving a version of the file" });
+async function saveCheckpoint(ctx: WorkflowContext, run: DesignMdRun, scripts: PenpotScripts): Promise<string | null> {
+    run.progress("checkpoint", "Saving a version of the file");
     try {
         return await scripts.run<string>(PenpotScripts.saveVersionScript(CHECKPOINT_LABEL));
     } catch {
+        // the panel recognizes this question by its option ids and shows it translated
         const choice = await ctx.ask({
             text: "Could not save a version of the file before applying DESIGN.md. Apply it anyway?",
             options: [
-                { id: "continue", label: "Apply anyway" },
-                { id: "stop", label: "Stop" },
+                { id: DesignMdRun.APPLY_WITHOUT_CHECKPOINT, label: "Apply anyway" },
+                { id: DesignMdRun.STOP, label: "Stop" },
             ],
         });
-        if (choice !== "continue") {
-            throw new Error("Stopped before changing the file");
+        if (choice !== DesignMdRun.APPLY_WITHOUT_CHECKPOINT) {
+            throw new DesignMdFailure("stopped", "Stopped before changing the file");
         }
         return null;
     }

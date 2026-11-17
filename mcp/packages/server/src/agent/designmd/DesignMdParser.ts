@@ -60,14 +60,24 @@ export class DesignMdParser {
         if (lines[0]?.trim() === "---") {
             const end = lines.findIndex((line, index) => index > 0 && (line.trim() === "---" || line.trim() === "..."));
             if (end < 0) {
-                this.issue("error", "front-matter", "The front matter has no closing --- line");
+                this.issue(
+                    "error",
+                    "front-matter",
+                    "The front matter has no closing --- line",
+                    "front-matter-unclosed"
+                );
                 bodyStart = lines.length;
             } else {
                 tokens = this.parseFrontMatter(lines.slice(1, end).join("\n"));
                 bodyStart = end + 1;
             }
         } else {
-            this.issue("error", "front-matter", "The file does not start with a --- front matter block");
+            this.issue(
+                "error",
+                "front-matter",
+                "The file does not start with a --- front matter block",
+                "front-matter-missing"
+            );
         }
         const { preamble, sections } = this.parseBody(lines.slice(bodyStart));
         return { document: { tokens, preamble, sections }, issues: this.issues };
@@ -79,14 +89,22 @@ export class DesignMdParser {
         try {
             data = yaml.load(source, { schema: yaml.CORE_SCHEMA });
         } catch (error) {
-            this.issue("error", "front-matter", `Invalid YAML: ${error instanceof Error ? error.message : error}`);
+            this.issue(
+                "error",
+                "front-matter",
+                `Invalid YAML: ${error instanceof Error ? error.message : error}`,
+                "yaml-invalid",
+                {
+                    detail: error instanceof Error ? error.message : String(error),
+                }
+            );
             return tokens;
         }
         if (data === null || data === undefined) {
             return tokens;
         }
         if (!DesignMdParser.isMap(data)) {
-            this.issue("error", "front-matter", "The front matter must be a map of keys");
+            this.issue("error", "front-matter", "The front matter must be a map of keys", "front-matter-not-map");
             return tokens;
         }
         for (const [key, value] of Object.entries(data)) {
@@ -97,7 +115,7 @@ export class DesignMdParser {
                     if (typeof value === "string" || typeof value === "number") {
                         tokens[key] = String(value);
                     } else if (value !== null) {
-                        this.issue("error", key, `${key} must be text`);
+                        this.issue("error", key, `${key} must be text`, "not-text");
                     }
                     break;
                 case "omitted":
@@ -118,7 +136,7 @@ export class DesignMdParser {
                     break;
                 default:
                     tokens.extra[key] = value;
-                    this.issue("warning", key, `Unknown front matter key "${key}" is kept as it is`);
+                    this.issue("warning", key, `Unknown front matter key "${key}" is kept as it is`, "unknown-key");
             }
         }
         return tokens;
@@ -129,7 +147,7 @@ export class DesignMdParser {
             return undefined;
         }
         if (!Array.isArray(value)) {
-            this.issue("error", "omitted", "omitted must be a list");
+            this.issue("error", "omitted", "omitted must be a list", "omitted-not-list");
             return undefined;
         }
         const result: DesignMdOmitted[] = [];
@@ -143,7 +161,12 @@ export class DesignMdParser {
                         : { section: entry.section }
                 );
             } else {
-                this.issue("error", "omitted", "Each omitted entry must be a section name or {section, reason}");
+                this.issue(
+                    "error",
+                    "omitted",
+                    "Each omitted entry must be a section name or {section, reason}",
+                    "omitted-entry"
+                );
             }
         }
         return result;
@@ -155,7 +178,7 @@ export class DesignMdParser {
             return result;
         }
         if (!DesignMdParser.isMap(value)) {
-            this.issue("error", group, `${group} must be a map of token names to values`);
+            this.issue("error", group, `${group} must be a map of token names to values`, "group-not-map");
             return result;
         }
         for (const [name, entry] of Object.entries(value)) {
@@ -167,7 +190,9 @@ export class DesignMdParser {
                 this.issue(
                     "error",
                     `${group}.${name}`,
-                    `${group}.${name} must be ${allowNumbers ? "a dimension or number" : "text"}`
+                    `${group}.${name} must be ${allowNumbers ? "a dimension or number" : "text"}`,
+                    allowNumbers ? "not-dimension" : "not-text",
+                    { value: String(entry) }
                 );
             }
         }
@@ -180,12 +205,17 @@ export class DesignMdParser {
             return result;
         }
         if (!DesignMdParser.isMap(value)) {
-            this.issue("error", group, `${group} must be a map of token names to property maps`);
+            this.issue("error", group, `${group} must be a map of token names to property maps`, "group-not-map");
             return result;
         }
         for (const [name, entry] of Object.entries(value)) {
             if (!DesignMdParser.isMap(entry)) {
-                this.issue("error", `${group}.${name}`, `${group}.${name} must be a map of properties`);
+                this.issue(
+                    "error",
+                    `${group}.${name}`,
+                    `${group}.${name} must be a map of properties`,
+                    "entry-not-map"
+                );
                 continue;
             }
             const properties: Record<string, unknown> = {};
@@ -196,7 +226,8 @@ export class DesignMdParser {
                     this.issue(
                         "error",
                         `${group}.${name}.${property}`,
-                        `${group}.${name}.${property} must be text or a number`
+                        `${group}.${name}.${property} must be text or a number`,
+                        "property-type"
                     );
                 }
             }
@@ -242,8 +273,14 @@ export class DesignMdParser {
         return { preamble, sections };
     }
 
-    private issue(severity: DesignMdIssue["severity"], path: string, message: string): void {
-        this.issues.push({ severity, path, message });
+    private issue(
+        severity: DesignMdIssue["severity"],
+        path: string,
+        message: string,
+        code: string,
+        params?: Record<string, string>
+    ): void {
+        this.issues.push(params ? { severity, path, message, code, params } : { severity, path, message, code });
     }
 
     private static trimBlankLines(lines: string[]): string {

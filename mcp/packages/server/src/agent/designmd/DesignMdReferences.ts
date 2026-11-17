@@ -7,7 +7,15 @@ export interface DesignMdReference {
 }
 
 /** Result of resolving a value. */
-export type ResolvedValue = { ok: true; value: unknown } | { ok: false; error: string };
+export type ResolvedValue =
+    | { ok: true; value: unknown }
+    | {
+          ok: false;
+          error: string;
+          /** `reference-cycle`, `reference-group` or `reference-missing` */
+          code: string;
+          params: Record<string, string>;
+      };
 
 /**
  * Token references of one DESIGN.md: parsing `{group.name}` and following them to literal values.
@@ -71,15 +79,30 @@ export class DesignMdReferences {
             }
             const key = `${reference.group}.${reference.name}`;
             if (seen.has(key)) {
-                return { ok: false, error: `Reference cycle through {${key}}` };
+                return {
+                    ok: false,
+                    error: `Reference cycle through {${key}}`,
+                    code: "reference-cycle",
+                    params: { reference: `{${key}}` },
+                };
             }
             seen.add(key);
             if (expectedGroup !== undefined && reference.group !== expectedGroup) {
-                return { ok: false, error: `{${key}} must point into ${expectedGroup}` };
+                return {
+                    ok: false,
+                    error: `{${key}} must point into ${expectedGroup}`,
+                    code: "reference-group",
+                    params: { reference: `{${key}}`, group: expectedGroup },
+                };
             }
             const target = this.lookup(reference);
             if (target === undefined) {
-                return { ok: false, error: `{${key}} points to a token that does not exist` };
+                return {
+                    ok: false,
+                    error: `{${key}} points to a token that does not exist`,
+                    code: "reference-missing",
+                    params: { reference: `{${key}}` },
+                };
             }
             current = target;
         }

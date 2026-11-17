@@ -1,4 +1,5 @@
 import type { WorkflowToolsApi } from "@penpot/mcp-common";
+import { DesignMdFailure } from "./DesignMdRun";
 import type { PenpotImportPlan } from "./PenpotImportPlan";
 
 /** Changes an import made to one kind of element. */
@@ -8,12 +9,35 @@ export interface ImportCounts {
     unchanged: string[];
 }
 
+/**
+ * Problem the import script met; `code` is one of `font-missing` (`name`, `font`),
+ * `weight-missing` (`name`, `font`, `weight`), `tokens-from-library`, `step-failed` (`step`,
+ * `detail`). The panel translates the code; `detail` is Penpot's own text.
+ */
+export interface ImportWarning {
+    code: "font-missing" | "weight-missing" | "tokens-from-library" | "step-failed";
+    name?: string;
+    font?: string;
+    weight?: string;
+    step?: string;
+    detail?: string;
+}
+
+/**
+ * How the import made the DESIGN.md tokens take effect: `theme` (the "DESIGN.md" theme of its own
+ * group was turned on, next to the user's active themes), `set` (the file uses no themes, so the
+ * set was turned on directly, next to the other active sets), `unchanged` (already active), or
+ * `none` (no tokens).
+ */
+export type TokenActivation = "theme" | "set" | "unchanged" | "none";
+
 /** Report of the import script. */
 export interface ImportReport {
     colors: ImportCounts;
     typographies: ImportCounts;
     tokens: ImportCounts;
-    warnings: string[];
+    activation: TokenActivation;
+    warnings: ImportWarning[];
 }
 
 /** Library color as read by the snapshot script. */
@@ -136,13 +160,15 @@ export class PenpotScripts {
     public async run<T>(code: string): Promise<T> {
         const result = await this.tools.call("execute_code", { code });
         if (result.isError) {
-            throw new Error(`Penpot refused the change: ${result.text}`);
+            throw new DesignMdFailure("penpot-refused", `Penpot refused the change: ${result.text}`, {
+                detail: result.text.slice(0, 500),
+            });
         }
         let parsed: unknown;
         try {
             parsed = JSON.parse(result.text);
         } catch {
-            throw new Error(`Unexpected answer from Penpot: ${result.text.slice(0, 200)}`);
+            throw new DesignMdFailure("penpot-answer", `Unexpected answer from Penpot: ${result.text.slice(0, 200)}`);
         }
         return (parsed as { result?: T }).result as T;
     }
@@ -150,14 +176,22 @@ export class PenpotScripts {
     /**
      * Code that creates or updates library colors, typographies, tokens and the DESIGN.md theme.
      * Returns an {@link ImportReport}.
+     *
+     * Activation follows Penpot's token rules (`app.common.files.tokens`): turning a theme on
+     * turns off the other themes of its group and recomputes the active sets from the active
+     * themes; turning a set on directly turns off every theme. So the DESIGN.md theme lives in its
+     * own group, and is turned on only when the user already works with themes; without active
+     * themes, the set itself is turned on, which keeps the user's active sets.
      */
     public static importScript(plan: PenpotImportPlan): string {
         return `const plan = ${JSON.stringify(plan)};
 const lib = penpot.library.local;
 const counts = () => ({ created: [], updated: [], unchanged: [] });
-const report = { colors: counts(), typographies: counts(), tokens: counts(), warnings: [] };
+const report = { colors: counts(), typographies: counts(), tokens: counts(), activation: "none", warnings: [] };
 const step = (label, fn) => {
-  try { fn(); } catch (e) { report.warnings.push(label + ": " + (e && e.message ? e.message : String(e))); }
+  try { fn(); } catch (e) {
+    report.warnings.push({ code: "step-failed", step: label, detail: e && e.message ? e.message : String(e) });
+  }
 };
 const sameName = (item, name) => item.name === name && !item.path;
 
@@ -201,12 +235,12 @@ for (const t of plan.typographies) {
       } else {
         item.setFont(font);
         item.fontWeight = t.fontWeight;
-        report.warnings.push("typography " + t.name + ": " + t.fontFamily + " has no weight " + t.fontWeight);
+        report.warnings.push({ code: "weight-missing", name: t.name, font: t.fontFamily, weight: t.fontWeight });
       }
     } else {
       item.fontFamily = t.fontFamily;
       item.fontWeight = t.fontWeight;
-      report.warnings.push("typography " + t.name + ": font " + t.fontFamily + " was not found");
+      report.warnings.push({ code: "font-missing", name: t.name, font: t.fontFamily });
     }
     item.fontSize = t.fontSize;
     item.lineHeight = t.lineHeight;
@@ -227,14 +261,12 @@ step("tokens", () => {
     return;
   }
   if (!catalog.isEditableTokens) {
-    report.warnings.push("tokens: this file takes its tokens from a library, so they were not changed");
+    report.warnings.push({ code: "tokens-from-library" });
     return;
   }
   let set = catalog.sets.find((s) => s.name === plan.setName);
   if (!set) {
-    set = catalog.addSet({ name: plan.setName, active: true });
-  } else if (!set.active) {
-    set.active = true;
+    set = catalog.addSet({ name: plan.setName });
   }
   for (const tok of plan.tokens) {
     step("token " + tok.name, () => {
@@ -255,15 +287,21 @@ step("tokens", () => {
       }
     });
   }
-  let theme = catalog.themes.find((th) => th.group === "" && th.name === plan.themeName);
+  let theme = catalog.themes.find((th) => th.group === plan.themeGroup && th.name === plan.themeName);
   if (!theme) {
-    theme = catalog.addTheme({ group: "", name: plan.themeName });
+    theme = catalog.addTheme({ group: plan.themeGroup, name: plan.themeName });
   }
   if (!theme.activeSets.some((s) => s.id === set.id)) {
     theme.addSet(set);
   }
-  if (!theme.active) {
+  if (set.active) {
+    report.activation = "unchanged";
+  } else if (catalog.themes.some((th) => th.active)) {
     theme.active = true;
+    report.activation = "theme";
+  } else {
+    set.active = true;
+    report.activation = "set";
   }
 });
 

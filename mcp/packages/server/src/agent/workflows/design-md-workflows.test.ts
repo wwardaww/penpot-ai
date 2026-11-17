@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
@@ -100,6 +101,14 @@ function designFile(name: string): string {
     return readFileSync(join(workspace.designDir, name), "utf8");
 }
 
+function git(...args: string[]): string {
+    return execFileSync("git", args, { cwd: workspace.designDir }).toString();
+}
+
+function subjects(): string[] {
+    return git("log", "--format=%s").trim().split("\n");
+}
+
 describe("design-md workflows", () => {
     test("are registered", () => {
         const names = WorkflowRegistry.withShippedWorkflows().names();
@@ -133,6 +142,8 @@ describe("design-md workflows", () => {
         );
 
         assert.match(saved.result.commit, /^[0-9a-f]{40}$/);
+        assert.equal(saved.result.outcome, "saved");
+        assert.match(saved.result.hash, /^[0-9a-f]{64}$/);
         assert.deepEqual(saved.result.issues, []);
         assert.equal(JSON.parse(designFile("tokens.json")).color.primary.$value, "#2B59C3");
 
@@ -154,6 +165,49 @@ describe("design-md workflows", () => {
             harness()
         );
         assert.equal(unchanged.result.commit, null);
+        assert.equal(unchanged.result.outcome, "unchanged");
+        assert.equal(result.hash, unchanged.result.hash);
+    });
+
+    test("save commits only its own files and keeps temporary files out of the repository", async () => {
+        writeFileSync(join(workspace.designDir, "audit.md"), "other workflow\n");
+
+        await run(saveWorkflow, { content: ACME_DESIGN_MD }, harness());
+
+        assert.equal(git("status", "--porcelain"), "?? audit.md\n");
+        assert.deepEqual(readdirSync(join(workspace.metaDir, "tmp")), []);
+    });
+
+    test("save with a stale base keeps the file on disk and reports a conflict", async () => {
+        const first = await run(saveWorkflow, { content: ACME_DESIGN_MD, base: null }, harness());
+        const external = ACME_DESIGN_MD.replace("Acme Design", "Edited in an IDE").replace(/\n/g, "\r\n");
+        writeFileSync(join(workspace.designDir, "DESIGN.md"), external);
+
+        const stale = await run(
+            saveWorkflow,
+            { content: ACME_DESIGN_MD.replace("Acme Design", "From the panel"), base: first.result.hash },
+            harness()
+        );
+
+        assert.equal(stale.result.outcome, "conflict");
+        assert.match(stale.result.conflict.content, /name: Edited in an IDE\n/);
+        assert.match(stale.result.conflict.externalCommit, /^[0-9a-f]{40}$/);
+        assert.match(designFile("DESIGN.md"), /Edited in an IDE/);
+        assert.deepEqual(subjects().slice(0, 2), [
+            "penforge(design-md): keep edit made outside Penforge",
+            "penforge(design-md): edit DESIGN.md",
+        ]);
+
+        const retried = await run(
+            saveWorkflow,
+            { content: ACME_DESIGN_MD.replace("Acme Design", "From the panel"), base: stale.result.conflict.hash },
+            harness()
+        );
+        assert.equal(retried.result.outcome, "saved");
+        assert.match(designFile("DESIGN.md"), /From the panel/);
+
+        const noFile = await run(saveWorkflow, { content: ACME_DESIGN_MD, base: null }, harness());
+        assert.equal(noFile.result.outcome, "conflict", "the editor saw no file, but there is one");
     });
 
     test("read refuses a ref that is not a commit hash", async () => {
@@ -189,15 +243,19 @@ describe("design-md workflows", () => {
         );
         assert.equal(designFile("DESIGN.md"), ACME_DESIGN_MD);
         assert.deepEqual(
-            h.events.filter((event) => event.kind === "progress").map((event) => event.payload.summary),
-            ["Saving a version of the file", "Creating tokens, colors and text styles", "Building components"]
+            h.events.filter((event) => event.kind === "progress").map((event) => event.payload.code),
+            ["checkpoint", "import-library", "build-components"]
         );
+        assert.equal(imported.result.outcome, "applied");
+        assert.equal(imported.result.activation, "set");
 
         // every component has notes and the overview has text: no Claude turn
         const exported = await run(exportWorkflow, {}, harness());
 
         assert.equal(exported.result.content, ACME_DESIGN_MD);
         assert.equal(exported.result.commit, null);
+        assert.equal(exported.result.outcome, "unchanged");
+        assert.deepEqual(exported.result.notInFile, []);
         assert.equal(exported.summary, "DESIGN.md already matches the file");
 
         penpot.library.local.tokens.sets[0].tokens.find((token) => token.name === "spacing.md")!.value = "20";
@@ -217,11 +275,40 @@ describe("design-md workflows", () => {
         assert.equal(penpot.library.local.colors.length, 8);
     });
 
+    test("import of a file with Windows line endings makes no extra commit", async () => {
+        writeFileSync(join(workspace.designDir, "DESIGN.md"), ACME_DESIGN_MD.replace(/\n/g, "\r\n"));
+        git("add", "DESIGN.md");
+        git("-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-q", "-m", "crlf");
+
+        await run(importWorkflow, { content: ACME_DESIGN_MD, components: false }, harness());
+
+        assert.equal(subjects()[0], "crlf");
+    });
+
+    test("import with a stale base applies nothing", async () => {
+        await run(saveWorkflow, { content: ACME_DESIGN_MD }, harness());
+
+        const imported = await run(
+            importWorkflow,
+            { content: ACME_DESIGN_MD.replace("Acme Design", "Other"), base: "0".repeat(64) },
+            harness()
+        );
+
+        assert.equal(imported.result.outcome, "conflict");
+        assert.equal(penpot.library.local.colors.length, 0);
+        assert.deepEqual(penpot.currentFile.versions, []);
+    });
+
     test("import refuses a DESIGN.md with errors and a missing one", async () => {
+        const broken = harness();
         await assert.rejects(
-            run(importWorkflow, { content: ACME_DESIGN_MD.replace('"#BA1A1A"', '"#BA1Z"') }, harness()),
+            run(importWorkflow, { content: ACME_DESIGN_MD.replace('"#BA1A1A"', '"#BA1Z"') }, broken),
             /DESIGN.md has errors: colors.error/
         );
+        assert.deepEqual(broken.events.find((event) => event.kind === "failure")?.payload, {
+            code: "has-errors",
+            params: { count: 1, first: "colors.error" },
+        });
         await assert.rejects(run(importWorkflow, {}, harness()), /There is no DESIGN.md yet/);
         assert.equal(penpot.library.local.colors.length, 0);
         assert.equal(existsSync(join(workspace.designDir, "DESIGN.md")), false);
@@ -235,10 +322,17 @@ describe("design-md workflows", () => {
             run(importWorkflow, { content: ACME_DESIGN_MD, components: false }, stopped),
             /Stopped before changing the file/
         );
-        assert.equal(stopped.questions.length, 1);
+        assert.deepEqual(
+            stopped.questions[0].options.map((option) => option.id),
+            ["apply-without-checkpoint", "stop"]
+        );
+        assert.deepEqual(stopped.events.find((event) => event.kind === "failure")?.payload, {
+            code: "stopped",
+            params: {},
+        });
         assert.equal(penpot.library.local.colors.length, 0);
 
-        const continued = harness([], ["continue"]);
+        const continued = harness([], ["apply-without-checkpoint"]);
         const imported = await run(importWorkflow, { content: ACME_DESIGN_MD, components: false }, continued);
         assert.equal(imported.result.checkpoint, null);
         assert.equal(penpot.library.local.colors.length, 8);
@@ -255,9 +349,15 @@ describe("design-md workflows", () => {
             },
         ]);
 
-        const drafted = await run(draftWorkflow, { prompt: "A calm banking app" }, h);
+        const drafted = await run(
+            draftWorkflow,
+            { prompt: "A calm banking app", content: "---\nname: Unsaved editor text\n---\n" },
+            h
+        );
 
         assert.match(h.requests[0].prompt, /Request: A calm banking app/);
+        assert.match(h.requests[0].prompt, /name: Unsaved editor text/);
+        assert.equal(drafted.result.outcome, "drafted");
         assert.equal(drafted.result.content, ACME_DESIGN_MD);
         assert.deepEqual(drafted.result.issues, []);
         assert.match(drafted.result.commit, /^[0-9a-f]{40}$/);
@@ -293,5 +393,35 @@ describe("design-md workflows", () => {
             []
         );
         assert.match(exported.summary, /DESIGN.md updated from the file/);
+        assert.equal(exported.result.outcome, "created");
+    });
+
+    test("export keeps values only DESIGN.md has and commits outside edits first", async () => {
+        await run(saveWorkflow, { content: ACME_DESIGN_MD }, harness());
+        await run(importWorkflow, { components: false }, harness());
+        buildButton(penpot);
+        await penpot.execute(
+            (await import("../designmd/PenpotScripts")).PenpotScripts.tagComponentsScript(["button-primary"])
+        );
+        writeFileSync(
+            join(workspace.designDir, "DESIGN.md"),
+            ACME_DESIGN_MD.replace(
+                '  link: "{colors.primary}"\n',
+                '  link: "{colors.primary}"\n  brand-only: "#123456"\n'
+            )
+        );
+
+        const exported = await run(exportWorkflow, {}, harness());
+
+        assert.deepEqual(exported.result.notInFile, ["colors.brand-only"]);
+        assert.match(exported.result.content, /brand-only: "#123456"/);
+        assert.deepEqual(subjects().slice(0, 2), [
+            "penforge(design-md): update from the file",
+            "penforge(design-md): keep edit made outside Penforge",
+        ]);
+
+        const pruned = await run(exportWorkflow, { prune: true }, harness());
+        assert.equal(pruned.result.content, ACME_DESIGN_MD);
+        assert.equal(pruned.result.outcome, "updated");
     });
 });

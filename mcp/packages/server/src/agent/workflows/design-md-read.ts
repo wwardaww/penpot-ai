@@ -3,15 +3,16 @@ import { DesignMdRepository, parseDesignMd } from "../designmd";
 
 /** Params of the `design-md-read` workflow. */
 export interface DesignMdReadParams {
-    /** commit to read DESIGN.md from; the working copy when missing */
+    /** commit to read DESIGN.md from; the file on disk when missing */
     ref?: string;
 }
 
 /**
- * Reads the project's DESIGN.md (current or at a commit) with its git history.
+ * Reads the project's DESIGN.md (on disk or at a commit) with its git history.
  *
- * Emits one `result` event `{exists, content, path, ref, issues, history}`; `history` lists the
- * commits that changed DESIGN.md, newest first, as `{commit, date, subject}`.
+ * Emits one `result` event `{exists, content, hash, path, ref, issues, history}`. `hash` identifies
+ * the version read (null when there is no file); writers take it back as `base`. `history` lists
+ * the commits that changed DESIGN.md, newest first, as `{commit, date, subject}`.
  */
 export const workflow: Workflow<DesignMdReadParams> = {
     name: "design-md-read",
@@ -25,6 +26,7 @@ export const workflow: Workflow<DesignMdReadParams> = {
         ctx.emit("result", {
             exists: text !== null,
             content: text ?? "",
+            hash: text === null ? null : DesignMdRepository.hash(text),
             path: repository.path,
             ref,
             issues,

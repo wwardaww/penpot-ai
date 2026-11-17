@@ -23,6 +23,7 @@
    [app.main.ui.ds.foundations.typography.heading :refer [heading*]]
    [app.main.ui.ds.foundations.typography.text :refer [text*]]
    [app.main.ui.workspace.ai.chat.markdown :refer [markdown*]]
+   [app.main.ui.workspace.ai.design-md.messages :as msg]
    [app.main.ui.workspace.ai.design-md.state :as dms]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
@@ -41,23 +42,25 @@
 
 (defn- run-workflow!
   "Start workflow `name` and fold its messages into the panel state.
-  After a run that changed DESIGN.md, the file and its history are read
-  again."
+  One run at a time: a request made while a run is in flight is
+  dropped, so a running save is never cut off. After a run that
+  changed DESIGN.md, the file and its history are read again."
   [state* subscription name params]
-  (let [rid (proto/next-rid)]
-    (some-> (mf/ref-val subscription) rx/dispose!)
-    (swap! state* dms/start-op name rid)
-    (mf/set-ref-val!
-     subscription
-     (->> (chat/workflow-messages st/stream rid)
-          (rx/subs!
-           (fn [message]
-             (swap! state* dms/apply-message name message)
-             (when (and (= "workflow.done" (:type message))
-                        (:ok message)
-                        (contains? dms/mutating-workflows name))
-               (run-workflow! state* subscription dms/read-workflow {}))))))
-    (st/emit! (chat/run-workflow name params {:rid rid :silent true}))))
+  (when-not (dms/busy? @state*)
+    (let [rid (proto/next-rid)]
+      (some-> (mf/ref-val subscription) rx/dispose!)
+      (swap! state* dms/start-op name rid)
+      (mf/set-ref-val!
+       subscription
+       (->> (chat/workflow-messages st/stream rid)
+            (rx/subs!
+             (fn [message]
+               (swap! state* dms/apply-message name message)
+               (when (and (= "workflow.done" (:type message))
+                          (:ok message)
+                          (contains? dms/mutating-workflows name))
+                 (run-workflow! state* subscription dms/read-workflow {}))))))
+      (st/emit! (chat/run-workflow name params {:rid rid :silent true})))))
 
 ;; --- Parts
 
@@ -82,13 +85,13 @@
      [:> heading* {:level 3 :typography t/headline-small :class (stl/css :side-title)}
       (tr "penforge.design-md.issues.title")]
      [:ul {:class (stl/css :issues)}
-      (for [[index {:keys [severity path message]}] (map-indexed vector issues)]
+      (for [[index {:keys [severity path] :as issue}] (map-indexed vector issues)]
         [:li {:key index
               :class (stl/css-case :issue true
                                    :issue-error (= severity "error"))}
          [:> icon* {:icon-id (if (= severity "error") i/msg-error i/msg-warning)
                     :size "s"}]
-         [:span [:code path] " " message]])]]))
+         [:span [:code path] " " (msg/issue-text issue)]])]]))
 
 (mf/defc history*
   {::mf/private true}
@@ -138,10 +141,11 @@
 (mf/defc report*
   {::mf/private true}
   [{:keys [report]}]
-  (let [{:keys [colors typographies tokens components checkpoint warnings]} report
+  (let [{:keys [colors typographies tokens components checkpoint warnings activation]} report
         [colors-added colors-updated] (dms/report-counts colors)
         [typos-added typos-updated] (dms/report-counts typographies)
-        [tokens-added tokens-updated] (dms/report-counts tokens)]
+        [tokens-added tokens-updated] (dms/report-counts tokens)
+        activation-text (msg/activation-text activation)]
     [:div {:class (stl/css :report) :role "status"}
      (when checkpoint
        [:> text* {:as "p" :typography t/body-small}
@@ -152,6 +156,8 @@
       (tr "penforge.design-md.report.typographies" typos-added typos-updated)]
      [:> text* {:as "p" :typography t/body-small}
       (tr "penforge.design-md.report.tokens" tokens-added tokens-updated)]
+     (when (seq activation-text)
+       [:> text* {:as "p" :typography t/body-small} activation-text])
      (when components
        [:> text* {:as "p" :typography t/body-small}
         (tr "penforge.design-md.report.components" (count (:tagged components)))])
@@ -160,23 +166,42 @@
         (tr "penforge.design-md.report.missing" (apply str (interpose ", " (:missing components))))])
      (for [[index warning] (map-indexed vector warnings)]
        [:> text* {:key index :as "p" :typography t/body-small :class (stl/css :muted)}
-        warning])]))
+        (msg/warning-text warning)])]))
 
 (mf/defc question*
   {::mf/private true}
   [{:keys [run-id question on-answered]}]
-  (let [{:keys [question-id text options]} question]
-    [:div {:class (stl/css :question) :role "alert"}
-     [:> text* {:as "p" :typography t/body-medium} text]
+  (let [{:keys [question-id text options]} question
+        known (dms/checkpoint-question? question)]
+    [:div {:class (stl/css :notice-box) :role "alert"}
+     [:> text* {:as "p" :typography t/body-medium}
+      (if known (tr "penforge.design-md.question.checkpoint") text)]
      [:div {:class (stl/css :actions)}
       (for [{:keys [id label]} options]
         [:> button* {:key id
-                     :variant "secondary"
+                     :variant (if (= id "stop") "secondary" "primary")
                      :type "button"
                      :on-click (fn []
                                  (st/emit! (chat/answer-question run-id question-id id))
                                  (on-answered))}
-         label])]]))
+         (cond
+           (not known) label
+           (= id "stop") (tr "penforge.design-md.question.stop")
+           :else (tr "penforge.design-md.question.apply-anyway"))])]]))
+
+(mf/defc banner*
+  "A message with up to two actions above the editor."
+  {::mf/private true}
+  [{:keys [text primary on-primary secondary on-secondary disabled warning]}]
+  [:div {:class (stl/css-case :notice-box true :notice-warning warning) :role "status"}
+   [:> text* {:as "p" :typography t/body-small} text]
+   [:div {:class (stl/css :actions)}
+    (when primary
+      [:> button* {:variant "primary" :type "button" :disabled disabled :on-click on-primary}
+       primary])
+    (when secondary
+      [:> button* {:variant "secondary" :type "button" :disabled disabled :on-click on-secondary}
+       secondary])]])
 
 (mf/defc status-line*
   {::mf/private true}
@@ -187,18 +212,18 @@
       [:div {:class (stl/css :status) :aria-live "polite"}
        [:span {:class (stl/css :spinner) :aria-hidden true}]
        [:> text* {:as "span" :typography t/body-small}
-        (or (:progress op) (tr "penforge.design-md.working"))]]
+        (msg/progress-text (:progress op))]]
 
       (some? error)
       [:div {:class (stl/css :status :status-error) :role "alert"}
        [:> icon* {:icon-id i/msg-error :size "s"}]
        [:> text* {:as "span" :typography t/body-small}
-        (tr "penforge.design-md.error" error)]]
+        (msg/error-text error)]]
 
       (some? notice)
       [:div {:class (stl/css :status) :role "status"}
        [:> icon* {:icon-id i/status-tick :size "s"}]
-       [:> text* {:as "span" :typography t/body-small} notice]]
+       [:> text* {:as "span" :typography t/body-small} (msg/notice-text notice)]]
 
       :else
       nil)))
@@ -208,8 +233,11 @@
 (mf/defc design-md-view*
   "The panel for a given state; every change goes through the handlers."
   [{:keys [state connected on-close on-mode on-content on-prompt on-save on-discard
-           on-apply on-export on-draft on-view on-current on-restore on-answered]}]
-  (let [{:keys [loaded exists content history issues viewing mode op prompt report]} state
+           on-apply on-confirm-apply on-cancel-apply on-export on-prune on-draft
+           on-view on-current on-restore on-answered on-accept-proposal on-dismiss-proposal
+           on-use-disk on-overwrite]}]
+  (let [{:keys [loaded exists content history issues viewing mode op prompt report
+                proposal conflict not-in-file confirm-apply]} state
         busy      (dms/busy? state)
         dirty     (dms/dirty? state)
         disabled  (or busy (not connected))
@@ -239,7 +267,7 @@
                          :on-click on-close}]]
 
       (cond
-        (not connected)
+        (and (not connected) (not loaded))
         [:div {:class (stl/css :empty)}
          [:> text* {:as "p" :typography t/body-medium}
           (tr "penforge.design-md.not-connected")]]
@@ -253,15 +281,51 @@
         :else
         [:div {:class (stl/css :body)}
          [:main {:class (stl/css :main)}
+          (when-not connected
+            [:> banner* {:text (tr "penforge.design-md.not-connected") :warning true}])
+
+          (when conflict
+            [:> banner* {:text (tr "penforge.design-md.conflict")
+                         :warning true
+                         :disabled disabled
+                         :primary (tr "penforge.design-md.conflict.use-disk")
+                         :on-primary on-use-disk
+                         :secondary (tr "penforge.design-md.conflict.overwrite")
+                         :on-secondary on-overwrite}])
+
+          (when proposal
+            [:> banner* {:text (if (= dms/export-workflow (:workflow proposal))
+                                 (tr "penforge.design-md.proposal.export")
+                                 (tr "penforge.design-md.proposal.draft"))
+                         :disabled busy
+                         :primary (tr "penforge.design-md.proposal.accept")
+                         :on-primary on-accept-proposal
+                         :secondary (tr "penforge.design-md.proposal.dismiss")
+                         :on-secondary on-dismiss-proposal}])
+
+          (when confirm-apply
+            [:> banner* {:text (tr "penforge.design-md.apply.confirm")
+                         :disabled disabled
+                         :primary (tr "penforge.design-md.apply")
+                         :on-primary on-confirm-apply
+                         :secondary (tr "penforge.design-md.apply.cancel")
+                         :on-secondary on-cancel-apply}])
+
+          (when (seq not-in-file)
+            [:> banner* {:text (tr "penforge.design-md.not-in-file"
+                                   (apply str (interpose ", " not-in-file)))
+                         :disabled disabled
+                         :secondary (tr "penforge.design-md.not-in-file.remove")
+                         :on-secondary on-prune}])
+
           (when viewing
-            [:div {:class (stl/css :viewing)}
-             [:> text* {:as "p" :typography t/body-small}
-              (tr "penforge.design-md.viewing" (dms/short-commit (:ref viewing)))]
-             [:div {:class (stl/css :actions)}
-              [:> button* {:variant "secondary" :type "button" :disabled disabled :on-click on-restore}
-               (tr "penforge.design-md.restore")]
-              [:> button* {:variant "ghost" :type "button" :disabled busy :on-click on-current}
-               (tr "penforge.design-md.back")]]])
+            [:> banner* {:text (tr "penforge.design-md.viewing" (dms/short-commit (:ref viewing)))
+                         :warning true
+                         :disabled disabled
+                         :primary (tr "penforge.design-md.restore")
+                         :on-primary on-restore
+                         :secondary (tr "penforge.design-md.back")
+                         :on-secondary on-current}])
 
           (if (and (not exists) (not dirty) (nil? viewing) (not editing))
             [:div {:class (stl/css :empty)}
@@ -296,7 +360,8 @@
                [:> button* {:variant "secondary" :type "button" :disabled disabled :on-click on-export}
                 (tr "penforge.design-md.update-from-file")]
                [:> button* {:variant "primary" :type "button"
-                            :disabled (or disabled (some? viewing) (pos? errors) (empty? content))
+                            :disabled (or disabled (some? viewing) (some? conflict) confirm-apply
+                                          (pos? errors) (empty? content))
                             :title (when (pos? errors) (tr "penforge.design-md.issues.errors" errors))
                             :on-click on-apply}
                 (tr "penforge.design-md.apply")]]]
@@ -338,7 +403,9 @@
            (tr "penforge.design-md.unsaved")])
         [:> button* {:variant "ghost" :type "button" :disabled (or busy (not dirty)) :on-click on-discard}
          (tr "penforge.design-md.discard")]
-        [:> button* {:variant "primary" :type "button" :disabled (or disabled (not dirty)) :on-click on-save}
+        [:> button* {:variant "primary" :type "button"
+                     :disabled (or disabled (not dirty) (some? conflict))
+                     :on-click on-save}
          (tr "penforge.design-md.save")]]]]]))
 
 #_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}
@@ -360,27 +427,42 @@
         on-mode      (mf/use-fn #(swap! state* assoc :mode %))
         on-content   (mf/use-fn #(swap! state* assoc :content (dom/get-target-val %)))
         on-prompt    (mf/use-fn #(swap! state* assoc :prompt (dom/get-target-val %)))
-        on-discard   (mf/use-fn #(swap! state* (fn [s] (assoc s :content (:saved s)))))
+        on-discard   (mf/use-fn #(swap! state* (fn [s] (assoc s :content (:saved s) :proposal nil))))
         on-answered  (mf/use-fn #(swap! state* dms/clear-question))
+
+        on-apply        (mf/use-fn #(swap! state* assoc :confirm-apply true))
+        on-cancel-apply (mf/use-fn #(swap! state* assoc :confirm-apply false))
+        on-accept-proposal  (mf/use-fn #(swap! state* dms/accept-proposal))
+        on-dismiss-proposal (mf/use-fn #(swap! state* assoc :proposal nil))
+        on-use-disk     (mf/use-fn #(swap! state* dms/use-disk-version))
 
         on-save
         (mf/use-fn
          (mf/deps run state)
-         #(run dms/save-workflow {:content (:content state)}))
+         #(run dms/save-workflow {:content (:content state) :base (:base state)}))
 
-        on-apply
+        on-overwrite
         (mf/use-fn
          (mf/deps run state)
-         #(run dms/import-workflow {:content (:content state)}))
+         #(run dms/save-workflow {:content (:content state)
+                                  :base (get-in state [:conflict :hash])}))
+
+        on-confirm-apply
+        (mf/use-fn
+         (mf/deps run state)
+         #(run dms/import-workflow {:content (:content state) :base (:base state)}))
 
         on-export
         (mf/use-fn (mf/deps run) #(run dms/export-workflow {}))
+
+        on-prune
+        (mf/use-fn (mf/deps run) #(run dms/export-workflow {:prune true}))
 
         on-draft
         (mf/use-fn
          (mf/deps run state)
          (fn []
-           (run dms/draft-workflow {:prompt (:prompt state)})
+           (run dms/draft-workflow {:prompt (:prompt state) :content (:content state)})
            (swap! state* assoc :prompt "")))
 
         on-view
@@ -395,11 +477,19 @@
          (fn []
            (when-let [{:keys [ref content]} (:viewing state)]
              (run dms/save-workflow {:content content
+                                     :base (:base state)
                                      :message (str "restore version " (dms/short-commit ref))}))))]
 
+    ;; Read on the first connection. After a reconnection, read again
+    ;; only when that cannot replace unsaved text; a run cut by the
+    ;; disconnection is reported as such.
     (mf/with-effect [connected]
-      (when connected
-        (run dms/read-workflow {})))
+      (if connected
+        (let [current @state*]
+          (when (or (not (:loaded current))
+                    (and (not (dms/dirty? current)) (not (dms/busy? current))))
+            (run dms/read-workflow {})))
+        (swap! state* dms/connection-lost)))
 
     (mf/with-effect []
       #(some-> (mf/ref-val subscription) rx/dispose!))
@@ -413,9 +503,16 @@
                          :on-save on-save
                          :on-discard on-discard
                          :on-apply on-apply
+                         :on-confirm-apply on-confirm-apply
+                         :on-cancel-apply on-cancel-apply
                          :on-export on-export
+                         :on-prune on-prune
                          :on-draft on-draft
                          :on-view on-view
                          :on-current on-current
                          :on-restore on-restore
-                         :on-answered on-answered}]))
+                         :on-answered on-answered
+                         :on-accept-proposal on-accept-proposal
+                         :on-dismiss-proposal on-dismiss-proposal
+                         :on-use-disk on-use-disk
+                         :on-overwrite on-overwrite}]))

@@ -37,10 +37,12 @@ export class DesignMdFromPenpot {
     private readonly previous: DesignMdTokens;
     private readonly tokens: DesignMdTokens;
     private readonly colorByLibraryId = new Map<string, string>();
+    private readonly notInFile: string[] = [];
 
     private constructor(
         private readonly snapshot: PenpotSnapshot,
-        private readonly previousDocument: DesignMdDocument | null
+        private readonly previousDocument: DesignMdDocument | null,
+        private readonly prune: boolean
     ) {
         this.previous = previousDocument?.tokens ?? emptyDesignMdTokens();
         this.tokens = emptyDesignMdTokens();
@@ -53,7 +55,27 @@ export class DesignMdFromPenpot {
      * @param previous - the current DESIGN.md, if any
      */
     public static build(snapshot: PenpotSnapshot, previous: DesignMdDocument | null): DesignMdDocument {
-        return new DesignMdFromPenpot(snapshot, previous).run();
+        return DesignMdFromPenpot.merge(snapshot, previous).document;
+    }
+
+    /**
+     * Builds the document and reports the values of the previous DESIGN.md that the file does not
+     * have (colors, text styles, radius and spacing without a matching token or library entry,
+     * component specs without a component).
+     *
+     * @param snapshot - the file's design system
+     * @param previous - the current DESIGN.md, if any
+     * @param prune - drop those values instead of keeping them
+     * @returns the document and the dotted paths of those values (`colors.brand`)
+     */
+    public static merge(
+        snapshot: PenpotSnapshot,
+        previous: DesignMdDocument | null,
+        prune: boolean = false
+    ): { document: DesignMdDocument; notInFile: string[] } {
+        const builder = new DesignMdFromPenpot(snapshot, previous, prune);
+        const document = builder.run();
+        return { document, notInFile: builder.notInFile };
     }
 
     /**
@@ -124,7 +146,7 @@ export class DesignMdFromPenpot {
                 found[key] = CssColor.format({ hex: color.color, opacity: color.opacity });
             }
         }
-        this.tokens.colors = this.ordered(found, this.previous.colors, (name, value, old) =>
+        this.tokens.colors = this.ordered("colors", found, this.previous.colors, (name, value, old) =>
             this.sameColor(value, old, found) ? old : value
         );
     }
@@ -135,7 +157,7 @@ export class DesignMdFromPenpot {
             const key = typography.path ? DesignMdFromPenpot.slug(typography.path, typography.name) : typography.name;
             found[key] = this.typography(typography, this.previous.typography[key]);
         }
-        this.tokens.typography = this.ordered(found, this.previous.typography, (_name, value) => value);
+        this.tokens.typography = this.ordered("typography", found, this.previous.typography, (_name, value) => value);
     }
 
     private typography(source: SnapshotTypography, previous: DesignMdTypography | undefined): DesignMdTypography {
@@ -195,7 +217,7 @@ export class DesignMdFromPenpot {
         const current = this.tokens[group];
         Object.assign(
             current,
-            this.ordered(found, this.previous[group], (_name, value, old) => {
+            this.ordered(group, found, this.previous[group], (_name, value, old) => {
                 if (DesignMdReferences.parse(value) !== null || DesignMdReferences.parse(old) !== null) {
                     return value === old ? old : value;
                 }
@@ -229,13 +251,8 @@ export class DesignMdFromPenpot {
         for (const [key, component] of byKey) {
             found[key] = this.component(component, previous[key]);
         }
-        // specs not built yet stay in the file
-        for (const [key, spec] of Object.entries(previous)) {
-            if (!(key in found)) {
-                found[key] = { ...spec };
-            }
-        }
-        this.tokens.components = this.ordered(found, previous, (_name, value) => value);
+        // specs not built yet stay, unless pruned
+        this.tokens.components = this.ordered("components", found, previous, (_name, value) => value);
     }
 
     private component(source: SnapshotComponent, previous: DesignMdComponent | undefined): DesignMdComponent {
@@ -413,9 +430,11 @@ export class DesignMdFromPenpot {
 
     /**
      * Orders found values: keys of the previous document first (in its order), then new keys in
-     * file order; `pick` chooses between a found value and the previous one.
+     * file order; `pick` chooses between a found value and the previous one. Previous keys the
+     * file lacks are kept (copied) and listed in {@link notInFile}, or dropped when pruning.
      */
     private ordered<T>(
+        group: string,
         found: Record<string, T>,
         previous: Record<string, T>,
         pick: (name: string, value: T, old: T) => T
@@ -424,6 +443,11 @@ export class DesignMdFromPenpot {
         for (const [name, old] of Object.entries(previous)) {
             if (name in found) {
                 result[name] = pick(name, found[name], old);
+            } else {
+                this.notInFile.push(`${group}.${name}`);
+                if (!this.prune) {
+                    result[name] = typeof old === "object" && old !== null ? ({ ...old } as T) : old;
+                }
             }
         }
         for (const [name, value] of Object.entries(found)) {

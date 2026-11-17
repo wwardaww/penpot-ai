@@ -80,7 +80,7 @@ export class DesignMdValidator {
     private run(): void {
         const { tokens } = this.document;
         if (!tokens.name || tokens.name.trim().length === 0) {
-            this.warning("name", "The design system has no name");
+            this.warning("name", "The design system has no name", "no-name");
         }
         for (const [name, value] of Object.entries(tokens.colors)) {
             this.checkColor(`colors.${name}`, value);
@@ -105,7 +105,7 @@ export class DesignMdValidator {
     private checkColor(path: string, value: string): void {
         const resolved = this.references.resolve(value, "colors");
         if (!resolved.ok) {
-            this.error(path, resolved.error);
+            this.error(path, resolved.error, resolved.code, resolved.params);
             return;
         }
         if (DesignMdReferences.parse(value) !== null) {
@@ -115,9 +115,14 @@ export class DesignMdValidator {
             return;
         }
         if (DesignMdValidator.CSS_FUNCTION_PATTERN.test(value.trim())) {
-            this.warning(path, `${value} is kept as a token, but Penpot library colors need hex, rgb() or hsl()`);
+            this.warning(
+                path,
+                `${value} is kept as a token, but Penpot library colors need hex, rgb() or hsl()`,
+                "color-unsupported",
+                { value }
+            );
         } else {
-            this.error(path, `${value} is not a CSS color`);
+            this.error(path, `${value} is not a CSS color`, "not-color", { value });
         }
     }
 
@@ -126,7 +131,7 @@ export class DesignMdValidator {
             const propertyPath = `${path}.${property}`;
             const resolved = this.references.resolve(value);
             if (!resolved.ok) {
-                this.error(propertyPath, resolved.error);
+                this.error(propertyPath, resolved.error, resolved.code, resolved.params);
                 continue;
             }
             const literal = resolved.value;
@@ -135,45 +140,52 @@ export class DesignMdValidator {
                 case "fontFeature":
                 case "fontVariation":
                     if (typeof literal !== "string" || literal.trim().length === 0) {
-                        this.error(propertyPath, `${property} must be text`);
+                        this.error(propertyPath, `${property} must be text`, "not-text");
                     }
                     break;
                 case "fontSize":
                 case "letterSpacing":
                     if (CssValues.parseDimension(literal) === null && literal !== 0) {
-                        this.error(propertyPath, `${property} must be a dimension such as 16px or 1rem`);
+                        this.error(
+                            propertyPath,
+                            `${property} must be a dimension such as 16px or 1rem`,
+                            "not-dimension",
+                            {
+                                value: String(literal),
+                            }
+                        );
                     }
                     break;
                 case "fontWeight": {
                     const weight = CssValues.parseNumber(literal);
                     if (weight === null || weight < 1 || weight > 1000) {
-                        this.error(propertyPath, "fontWeight must be a number from 1 to 1000");
+                        this.error(propertyPath, "fontWeight must be a number from 1 to 1000", "font-weight");
                     }
                     break;
                 }
                 case "lineHeight":
                     if (CssValues.parseNumber(literal) === null && CssValues.parseDimension(literal) === null) {
-                        this.error(propertyPath, "lineHeight must be a number or a dimension");
+                        this.error(propertyPath, "lineHeight must be a number or a dimension", "line-height");
                     }
                     break;
                 default:
                     if (!DesignMdValidator.TYPOGRAPHY_PROPERTIES.includes(property)) {
-                        this.warning(propertyPath, `Unknown typography property "${property}"`);
+                        this.warning(propertyPath, `Unknown typography property "${property}"`, "unknown-property");
                     }
             }
         }
         if (typography.fontFamily === undefined) {
-            this.warning(path, "No fontFamily: the default font will be used");
+            this.warning(path, "No fontFamily: the default font will be used", "no-font-family");
         }
         if (typography.fontSize === undefined) {
-            this.warning(path, "No fontSize: 14px will be used");
+            this.warning(path, "No fontSize: 14px will be used", "no-font-size");
         }
     }
 
     private checkDimension(path: string, value: string | number, group: string, allowUnitless: boolean): void {
         const resolved = this.references.resolve(value, group);
         if (!resolved.ok) {
-            this.error(path, resolved.error);
+            this.error(path, resolved.error, resolved.code, resolved.params);
             return;
         }
         const literal = resolved.value;
@@ -184,13 +196,15 @@ export class DesignMdValidator {
         if (number !== null && (allowUnitless || number === 0)) {
             return;
         }
-        this.error(path, `${String(literal)} must be a dimension such as 8px`);
+        this.error(path, `${String(literal)} must be a dimension such as 8px`, "not-dimension", {
+            value: String(literal),
+        });
     }
 
     private checkComponentProperty(path: string, property: string, value: string | number): void {
         const resolved = this.references.resolve(value);
         if (!resolved.ok) {
-            this.error(path, resolved.error);
+            this.error(path, resolved.error, resolved.code, resolved.params);
             return;
         }
         const literal = resolved.value;
@@ -198,12 +212,18 @@ export class DesignMdValidator {
             case "backgroundColor":
             case "textColor":
                 if (typeof literal !== "string" || CssColor.parse(literal) === null) {
-                    this.warning(path, `${String(value)} is not a color Penpot can use`);
+                    this.warning(path, `${String(value)} is not a color Penpot can use`, "not-color", {
+                        value: String(value),
+                    });
                 }
                 break;
             case "typography":
                 if (DesignMdReferences.parse(value)?.group !== "typography") {
-                    this.warning(path, "typography should reference a typography token, e.g. {typography.label-md}");
+                    this.warning(
+                        path,
+                        "typography should reference a typography token, e.g. {typography.label-md}",
+                        "typography-reference"
+                    );
                 }
                 break;
             case "rounded":
@@ -211,16 +231,20 @@ export class DesignMdValidator {
             case "width":
             case "size":
                 if (CssValues.toPx(literal) === null) {
-                    this.warning(path, `${String(value)} is not a dimension`);
+                    this.warning(path, `${String(value)} is not a dimension`, "not-dimension", {
+                        value: String(value),
+                    });
                 }
                 break;
             case "padding":
                 if (!DesignMdValidator.isPadding(literal)) {
-                    this.warning(path, `${String(value)} is not 1 to 4 dimensions`);
+                    this.warning(path, `${String(value)} is not 1 to 4 dimensions`, "not-padding", {
+                        value: String(value),
+                    });
                 }
                 break;
             default:
-                this.warning(path, `Unknown component property "${property}"`);
+                this.warning(path, `Unknown component property "${property}"`, "unknown-property");
         }
     }
 
@@ -230,7 +254,7 @@ export class DesignMdValidator {
         for (const section of this.document.sections) {
             const key = section.heading.trim().toLowerCase();
             if (seen.has(key)) {
-                this.error(section.heading, `The section "${section.heading}" appears twice`);
+                this.error(section.heading, `The section "${section.heading}" appears twice`, "duplicate-section");
             }
             seen.add(key);
             const index = DesignMdValidator.sectionIndex(section.heading);
@@ -238,7 +262,11 @@ export class DesignMdValidator {
                 continue;
             }
             if (index < lastIndex) {
-                this.warning(section.heading, `The section "${section.heading}" is out of the usual order`);
+                this.warning(
+                    section.heading,
+                    `The section "${section.heading}" is out of the usual order`,
+                    "section-order"
+                );
             }
             lastIndex = Math.max(lastIndex, index);
         }
@@ -255,11 +283,11 @@ export class DesignMdValidator {
         return parts.length >= 1 && parts.length <= 4 && parts.every((part) => CssValues.toPx(part) !== null);
     }
 
-    private error(path: string, message: string): void {
-        this.issues.push({ severity: "error", path, message });
+    private error(path: string, message: string, code: string, params?: Record<string, string>): void {
+        this.issues.push({ severity: "error", path, message, code, ...(params ? { params } : {}) });
     }
 
-    private warning(path: string, message: string): void {
-        this.issues.push({ severity: "warning", path, message });
+    private warning(path: string, message: string, code: string, params?: Record<string, string>): void {
+        this.issues.push({ severity: "warning", path, message, code, ...(params ? { params } : {}) });
     }
 }

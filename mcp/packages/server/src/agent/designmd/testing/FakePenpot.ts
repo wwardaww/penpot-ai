@@ -156,9 +156,17 @@ export class FakeTokenSet {
     public readonly tokens: FakeToken[] = [];
 
     constructor(
-        public name: string,
-        public active: boolean
+        private readonly catalog: FakeTokenCatalog,
+        public name: string
     ) {}
+
+    get active(): boolean {
+        return this.catalog.activeSetIds.has(this.id);
+    }
+
+    set active(value: boolean) {
+        this.catalog.setSetActive(this, value);
+    }
 
     addToken({ type, name, value }: { type: string; name: string; value: unknown }): FakeToken {
         if (this.tokens.some((token) => token.name === name)) {
@@ -177,34 +185,88 @@ export class FakeTokenSet {
 export class FakeTokenTheme {
     public readonly id = newId();
     public readonly externalId = undefined;
-    public active = false;
     public readonly activeSets: FakeTokenSet[] = [];
 
     constructor(
+        private readonly catalog: FakeTokenCatalog,
         public group: string,
         public name: string
     ) {}
+
+    get active(): boolean {
+        return this.catalog.activeThemeIds.has(this.id);
+    }
+
+    set active(value: boolean) {
+        this.catalog.setThemeActive(this, value);
+    }
 
     addSet(set: FakeTokenSet): void {
         this.activeSets.push(set);
     }
 }
 
+/**
+ * Token catalog with Penpot's activation rules (`app.common.files.tokens`): a theme turned on
+ * turns off the other themes of its group and the active sets become the sets of the active
+ * themes; a set turned on or off directly turns off every theme.
+ */
 export class FakeTokenCatalog {
     public isEditableTokens = true;
     public readonly sets: FakeTokenSet[] = [];
     public readonly themes: FakeTokenTheme[] = [];
+    public readonly activeSetIds = new Set<string>();
+    public readonly activeThemeIds = new Set<string>();
 
     addSet({ name, active }: { name: string; active?: boolean }): FakeTokenSet {
-        const set = new FakeTokenSet(name, active ?? false);
+        const set = new FakeTokenSet(this, name);
         this.sets.push(set);
+        if (active) {
+            set.active = true;
+        }
         return set;
     }
 
     addTheme({ group, name }: { group: string; name: string }): FakeTokenTheme {
-        const theme = new FakeTokenTheme(group, name);
+        const theme = new FakeTokenTheme(this, group, name);
         this.themes.push(theme);
         return theme;
+    }
+
+    setSetActive(set: FakeTokenSet, active: boolean): void {
+        if (set.active === active) {
+            return;
+        }
+        this.activeThemeIds.clear();
+        if (active) {
+            this.activeSetIds.add(set.id);
+        } else {
+            this.activeSetIds.delete(set.id);
+        }
+    }
+
+    setThemeActive(theme: FakeTokenTheme, active: boolean): void {
+        if (theme.active === active) {
+            return;
+        }
+        if (active) {
+            for (const other of this.themes) {
+                if (other.group === theme.group) {
+                    this.activeThemeIds.delete(other.id);
+                }
+            }
+            this.activeThemeIds.add(theme.id);
+        } else {
+            this.activeThemeIds.delete(theme.id);
+        }
+        this.activeSetIds.clear();
+        for (const other of this.themes) {
+            if (other.active) {
+                for (const set of other.activeSets) {
+                    this.activeSetIds.add(set.id);
+                }
+            }
+        }
     }
 }
 

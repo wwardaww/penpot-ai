@@ -62,7 +62,12 @@ export interface DesignMdIssue {
     severity: "error" | "warning";
     /** dotted path of the offending value (`colors.primary`), or a section name */
     path: string;
+    /** English description (developers, logs) */
     message: string;
+    /** stable code the panel translates; see `wiki/research/design-md-format.md` */
+    code: string;
+    /** values the translated text needs (`value`, `reference`…) */
+    params?: Record<string, string>;
 }
 
 /** Token groups of the front matter that hold scalar or composite tokens. */

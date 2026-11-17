@@ -17,6 +17,8 @@ export { DtcgTokens } from "./DtcgTokens";
 export { PenpotImportPlanner } from "./PenpotImportPlan";
 export { PenpotScripts } from "./PenpotScripts";
 export { ClaudeAnswer } from "./ClaudeAnswer";
+export { DesignMdFailure, DesignMdRun } from "./DesignMdRun";
+export type { DesignMdFailureCode, DesignMdProgressCode } from "./DesignMdRun";
 
 /** DESIGN.md of a project as loaded by {@link loadDesignMd}. */
 export interface LoadedDesignMd {
