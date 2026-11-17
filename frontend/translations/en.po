@@ -10326,3 +10326,12 @@ msgstr "Copy the link again from the Penforge agent output."
 #: src/app/main/ui/workspace/sidebar.cljs:176
 msgid "penforge.sidebar.tab"
 msgstr "AI"
+
+# penforge:W14
+#: src/app/main/data/ai/actions/adapt.cljs:128
+msgid "penforge.actions.adapt-desktop"
+msgstr "Adapt to desktop with AI"
+
+#: src/app/main/data/ai/actions/adapt.cljs:119
+msgid "penforge.actions.adapt-mobile"
+msgstr "Adapt to mobile with AI"
