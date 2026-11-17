@@ -198,7 +198,7 @@
   [chat {:keys [rid code message]}]
   (cond
     ;; A failed history request only means there is nothing to restore.
-    (= rid (:history-rid chat))
+    (and (some? rid) (= rid (:history-rid chat)))
     (assoc chat :history-status :error)
 
     (contains? (:pending-runs chat) rid)
@@ -249,10 +249,13 @@
   [chat attachments]
   (update chat :attachments
           (fn [current]
-            (let [ids (into #{} (keep :node-id) current)]
-              (into (vec current)
-                    (remove #(contains? ids (:node-id %)))
-                    attachments)))))
+            (first
+             (reduce (fn [[result ids :as acc] {:keys [node-id] :as attachment}]
+                       (if (contains? ids node-id)
+                         acc
+                         [(conj result attachment) (conj ids node-id)]))
+                     [(vec current) (into #{} (map :node-id) current)]
+                     attachments)))))
 
 (defn end-turn
   "Close a running turn whose `chat.done` will never come (lost
