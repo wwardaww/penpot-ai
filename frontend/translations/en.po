@@ -10326,3 +10326,220 @@ msgstr "Copy the link again from the Penforge agent output."
 #: src/app/main/ui/workspace/sidebar.cljs:176
 msgid "penforge.sidebar.tab"
 msgstr "AI"
+
+# penforge:W19
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.actions.checkpoints"
+msgstr "AI history"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.actions.undo-last"
+msgstr "Undo last AI change"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.badge.code-only"
+msgstr "Code only"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.badge.other-file"
+msgstr "Other file: %s"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.badge.restored"
+msgstr "Gone back to"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.badge.undo-target"
+msgstr "Undo goes here"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.compare"
+msgstr "Compare"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.compare.hide"
+msgstr "Hide changes"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.connection-lost"
+msgstr "Lost the connection to the Penforge agent. Open AI history to see where things stand."
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.create"
+msgstr "Save checkpoint now"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.create-failed"
+msgstr "Could not save the checkpoint."
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.created"
+msgstr "Checkpoint saved."
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.creating"
+msgstr "Saving…"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.diff.app-src"
+msgstr "App code (app-src)"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.diff.design"
+msgstr "Design files (design)"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.diff.failed"
+msgstr "Could not load the changes: %s"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.diff.hint"
+msgstr "Changes since the checkpoint. In a terminal: git diff %s"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.diff.loading"
+msgstr "Loading changes…"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.diff.none"
+msgstr "No changes."
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.diff.truncated"
+msgstr "The changes are too long to show in full."
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.diff.untracked"
+msgstr "New files git does not track yet:"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.empty"
+msgstr "No checkpoints yet. Penforge saves one before each AI change."
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.intro"
+msgstr "Penforge saves your design and code before each AI change. Go back to any of these points."
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs, src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.load-failed"
+msgstr "Could not load the AI history."
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.loading"
+msgstr "Loading AI history…"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.manual-label"
+msgstr "Saved by hand"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs, src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.not-connected"
+msgstr "Connect the Penforge agent to use the AI history."
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.reload"
+msgstr "Reload"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.restore"
+msgstr "Go back"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.restore.accept"
+msgstr "Go back"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs, src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.restore.cancel"
+msgstr "Keep current"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.restore.question"
+msgstr "Go back to “%s”?"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs, src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.restore.warning"
+msgstr "The design and the code return to how they were then. Every change made after it, by the AI or by hand, is undone. Penforge saves the current state first, so you can come back to it."
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.restore-failed"
+msgstr "Could not go back: %s"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.restored"
+msgstr "Went back to “%s”."
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.restored-code-only"
+msgstr "Went back to “%s” for the code. The design version was not found in the version history, so the design did not change."
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.restoring"
+msgstr "Going back…"
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs
+msgid "penforge.checkpoints.title"
+msgstr "AI history"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.undo.accept"
+msgstr "Undo"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.undo.message"
+msgstr "Undo the last AI change and go back to “%s”?"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.undo.nothing"
+msgstr "There is no AI change to undo."
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.undo.other-file"
+msgstr "The last AI change was made in the file “%s”. Open it to undo the change."
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.undo.title"
+msgstr "Undo last AI change"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.workflow.adapt-responsive"
+msgstr "Before adapting to screen sizes"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.workflow.auto-name"
+msgstr "Before naming layers"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.workflow.build"
+msgstr "Before building the app"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.workflow.cleanup-import"
+msgstr "Before cleaning up an import"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.workflow.design-md"
+msgstr "Before importing DESIGN.md"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.workflow.fix-comments"
+msgstr "Before fixing comments"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.workflow.generate-screen"
+msgstr "Before generating a screen"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.workflow.manual"
+msgstr "Saved by hand"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.workflow.other"
+msgstr "Before an AI action (%s)"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.workflow.restore"
+msgstr "Before going back"
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.workflow.token-sync"
+msgstr "Before syncing tokens"
