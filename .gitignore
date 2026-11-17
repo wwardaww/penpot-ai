@@ -129,3 +129,6 @@ opencode.json
 
 # Local AI working notes
 /wiki/
+
+# Penforge: per-machine devenv TLS (local CA key must never be committed)
+/docker/devenv/files/local-tls/

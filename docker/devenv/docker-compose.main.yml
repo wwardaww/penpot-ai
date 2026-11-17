@@ -19,6 +19,10 @@ services:
     volumes:
       - "user_data:/home/penpot/"
       - "${PENPOT_SOURCE_PATH}:/home/penpot/penpot:z"
+      # Penforge: per-machine TLS cert for https://localhost:3449 signed by a
+      # localhost-only local CA (see wiki runbook). Generated, never committed.
+      - "./files/local-tls/localhost-fullchain.crt:/home/selfsigned.crt:ro"
+      - "./files/local-tls/localhost.key:/home/selfsigned.key:ro"
 
     ports:
       # Host ports are instance-specific; container ports stay fixed.
