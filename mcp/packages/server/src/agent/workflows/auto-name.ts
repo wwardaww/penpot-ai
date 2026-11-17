@@ -28,10 +28,15 @@ export interface AutoNameParams {
     pageId?: string;
     /** default `title` */
     convention?: NamingConvention;
-    /** also rename component main roots and layers of component copies (default false) */
+    /**
+     * also rename main components and the layers inside them (default false); copies follow their
+     * main component, so layers inside copies are never renamed
+     */
     includeComponents?: boolean;
     /** apply the names in the design as well (default false: only report them) */
     apply?: boolean;
+    /** with `apply`, also apply names of layers whose default name is a real word (default false) */
+    applyAmbiguous?: boolean;
     /** layers per Claude turn (default 50, max 80) */
     batchSize?: number;
     /** most layers named in one run (default 400) */
@@ -71,6 +76,22 @@ export interface AutoNameRename {
     type: string;
     oldName: string;
     newName: string;
+    /** the old name is a real word ("Text", "Image"): review it, never apply it blindly */
+    ambiguous: boolean;
+}
+
+/**
+ * Error of an auto-name run. The message starts with a code the browser translates
+ * (`auto-name/<code>`), optionally followed by `: <detail>`.
+ */
+export class AutoNameError extends Error {
+    constructor(
+        public readonly code: "bad-scope" | "no-selection" | "read-failed" | "apply-failed",
+        detail?: string
+    ) {
+        super(detail ? `auto-name/${code}: ${detail}` : `auto-name/${code}`);
+        this.name = "AutoNameError";
+    }
 }
 
 /** Outcome of {@link autoName}. */
@@ -79,9 +100,14 @@ export interface AutoNameResult {
     convention: NamingConvention;
     /** layers looked at */
     scanned: number;
+    /** true when the scan stopped at its limit and later layers were not looked at */
+    truncated: boolean;
     /** layers with a default name that may be renamed */
     candidates: number;
-    /** default-named layers left alone because they belong to components */
+    /**
+     * default-named layers of main components left alone (`includeComponents` off); layers inside
+     * copies are never counted, they follow their main
+     */
     skippedComponents: number;
     /** candidates beyond `maxNodes`, not named in this run */
     remaining: number;
@@ -92,284 +118,347 @@ export interface AutoNameResult {
     appliedCount: number;
 }
 
+/** Kind of match of {@link DefaultNames.match}. */
+export type DefaultNameMatch = "default" | "ambiguous";
+
+/** Default base names that apply to some layer types. */
+interface BaseNameGroup {
+    /** layer types (`frame`, `rect`, `circle`, `group`, `bool`, `path`, `text`, `image`, `svg-raw`) */
+    types: readonly string[];
+    names: readonly string[];
+    /**
+     * Real words people also pick on purpose ("Text", "Image", "Section"): matched only as the bare
+     * word or the word plus ` <number>`, as Penpot generates them, and never applied without review.
+     */
+    ambiguous?: boolean;
+}
+
 /**
  * Detection of default layer names, as given by Penpot, Figma, Sketch and Adobe XD, in English and
- * in the languages Penpot's UI is translated to.
+ * in the languages Penpot's UI is translated to. A name is a default name only for the layer types
+ * that get it (`Rectangle 4` on a text layer is a choice, not a default).
  */
 export class DefaultNames {
-    /** Base default names per shape type; the union is checked for every layer. */
-    public static readonly BASE_NAMES: Readonly<Record<string, readonly string[]>> = {
-        frame: [
-            "Board",
-            "Frame",
-            "Artboard",
-            "Section",
-            "Slice",
-            "Bord",
-            "Mesa de trabajo",
-            "Obszar kompozycji",
-            "Papan",
-            "Plan de travail",
-            "Planșă de lucru",
-            "Ploča",
-            "Plātne",
-            "Prancheta",
-            "Quadro",
-            "Tableau",
-            "Tablero",
-            "Tablă",
-            "Taboleiro",
-            "Tabule",
-            "Tauler",
-            "Tavla",
-            "Tavola da disegno",
-            "Zeichenfläche",
-            "Çalışma yüzeyi",
-            "Τραπέζι εργασίας",
-            "Доска",
-            "Кадр",
-            "Рамка",
-            "Табла",
-            "לוח",
-            "آرت‌برد",
-            "آرت‌بورد",
-            "لوح الرسم",
-            "لوحة",
-            "बोर्ड",
-            "บอร์ด",
-            "ボード",
-            "フレーム",
-            "画板",
-            "畫板",
-            "보드",
-            "프레임",
-            "Marco",
-        ],
-        rect: [
-            "Rectangle",
-            "Rect",
-            "Dikdörtgen",
-            "Dreptunghi",
-            "Obdélník",
-            "Persegi Panjang",
-            "Pravokutnik",
-            "Prostokąt",
-            "Rechteck",
-            "Rechthoek",
-            "Rectángulo",
-            "Rectângulo",
-            "Rektangel",
-            "Rettangolo",
-            "Retângulo",
-            "Taisnstūris",
-            "Ορθογώνιο",
-            "Ορθωγώνιο",
-            "Правоугаоник",
-            "Прямокутник",
-            "Прямоугольник",
-            "מרובע",
-            "مستطيل",
-            "مستطیل",
-            "आयत",
-            "矩形",
-            "長方形",
-            "사각형",
-        ],
-        circle: [
-            "Ellipse",
-            "Oval",
-            "Circle",
-            "Cerc",
-            "Cerchio",
-            "Cercle",
-            "Cirkel",
-            "Círculo",
-            "Daire",
-            "Elips",
-            "Elipsa",
-            "Elipse",
-            "Elipsă",
-            "Ellips",
-            "Ellisse",
-            "Kreis",
-            "Krug",
-            "Kruh",
-            "Lingkaran",
-            "Okrąg",
-            "Κύκλος",
-            "Елипса",
-            "Еліпс",
-            "Коло",
-            "Круг",
-            "Эллипс",
-            "אליפסה",
-            "עיגול",
-            "دائرة",
-            "دایره",
-            "بیضی",
-            "चक्र",
-            "अंडाकार",
-            "円",
-            "楕円",
-            "圆",
-            "椭圆",
-            "圓形",
-            "橢圓",
-            "원",
-            "타원",
-        ],
-        group: [
-            "Group",
-            "Groep",
-            "Groupe",
-            "Grup",
-            "Grupa",
-            "Grupo",
-            "Grupp",
-            "Gruppe",
-            "Gruppo",
-            "Kelompok",
-            "Skupina",
-            "Ομάδα",
-            "Група",
-            "Группа",
-            "קבוצה",
-            "مجموعة",
-            "گروه",
-            "समूह",
-            "グループ",
-            "编组",
-            "群組",
-            "그룹",
-            "Mask",
-            "Maschera",
-            "Mască",
-            "Maska",
-            "Maske",
-            "Masker",
-            "Masque",
-            "Màscara",
-            "Máscara",
-            "Маска",
-            "מסכה",
-            "قناع",
-            "ماسک",
-            "मास्क",
-            "マスク",
-            "蒙版",
-            "遮罩",
-            "마스크",
-        ],
-        path: [
-            "Path",
-            "Vector",
-            "Line",
-            "Arrow",
-            "Polygon",
-            "Star",
-            "Shape",
-            "Combined Shape",
-            "Caminho",
-            "Chemin",
-            "Cesta",
-            "Pfad",
-            "Pad",
-            "Ruta",
-            "Trazado",
-            "Tracciato",
-            "Tracé",
-            "Ścieżka",
-            "Контур",
-            "Путања",
-            "נתיב",
-            "مسار",
-            "مسیر",
-            "पथ",
-            "パス",
-            "路径",
-            "路徑",
-            "경로",
-        ],
-        bool: [
-            "Bool",
-            "Boolean",
-            "Union",
-            "Subtract",
-            "Difference",
-            "Intersect",
-            "Intersection",
-            "Exclude",
-            "Exclusion",
-            "Flatten",
-        ],
-        image: [
-            "Image",
-            "Bitmap",
-            "Afbeelding",
-            "Bild",
-            "Gambar",
-            "Görsel",
-            "Imagem",
-            "Imagen",
-            "Imagine",
-            "Imatge",
-            "Immagine",
-            "Obraz",
-            "Obrázek",
-            "Slika",
-            "Εικόνα",
-            "Зображення",
-            "Изображение",
-            "Слика",
-            "תמונה",
-            "تصویر",
-            "صورة",
-            "छवि",
-            "图片",
-            "影像",
-            "画像",
-            "이미지",
-        ],
-        text: [
-            "Text",
-            "Metin",
-            "Teks",
-            "Tekst",
-            "Testo",
-            "Texte",
-            "Texto",
-            "Κείμενο",
-            "Текст",
-            "טקסט",
-            "متن",
-            "نص",
-            "पाठ",
-            "テキスト",
-            "文字",
-            "文本",
-            "텍스트",
-        ],
-        other: ["Layer", "Component", "Instance", "Svg", "SVG", "Untitled"],
-    };
+    public static readonly GROUPS: readonly BaseNameGroup[] = [
+        {
+            types: ["frame"],
+            names: [
+                "Board",
+                "Frame",
+                "Artboard",
+                "Mesa de trabajo",
+                "Obszar kompozycji",
+                "Papan",
+                "Plan de travail",
+                "Planșă de lucru",
+                "Ploča",
+                "Plātne",
+                "Prancheta",
+                "Tablero",
+                "Tablă",
+                "Taboleiro",
+                "Tabule",
+                "Tauler",
+                "Tavla",
+                "Tavola da disegno",
+                "Zeichenfläche",
+                "Çalışma yüzeyi",
+                "Τραπέζι εργασίας",
+                "Доска",
+                "Кадр",
+                "Рамка",
+                "Табла",
+                "לוח",
+                "آرت‌برد",
+                "آرت‌بورد",
+                "لوح الرسم",
+                "لوحة",
+                "बोर्ड",
+                "บอร์ด",
+                "ボード",
+                "フレーム",
+                "画板",
+                "畫板",
+                "보드",
+                "프레임",
+            ],
+        },
+        { types: ["frame"], names: ["Section", "Slice", "Marco", "Bord", "Quadro", "Tableau"], ambiguous: true },
+        {
+            types: ["rect", "path"],
+            names: [
+                "Rectangle",
+                "Rect",
+                "Dikdörtgen",
+                "Dreptunghi",
+                "Obdélník",
+                "Persegi Panjang",
+                "Pravokutnik",
+                "Prostokąt",
+                "Rechteck",
+                "Rechthoek",
+                "Rectángulo",
+                "Rectângulo",
+                "Rektangel",
+                "Rettangolo",
+                "Retângulo",
+                "Taisnstūris",
+                "Ορθογώνιο",
+                "Ορθωγώνιο",
+                "Правоугаоник",
+                "Прямокутник",
+                "Прямоугольник",
+                "מרובע",
+                "مستطيل",
+                "مستطیل",
+                "आयत",
+                "矩形",
+                "長方形",
+                "사각형",
+            ],
+        },
+        {
+            types: ["circle", "path"],
+            names: [
+                "Ellipse",
+                "Oval",
+                "Cerc",
+                "Cerchio",
+                "Cercle",
+                "Cirkel",
+                "Círculo",
+                "Daire",
+                "Elips",
+                "Elipsa",
+                "Elipse",
+                "Elipsă",
+                "Ellips",
+                "Ellisse",
+                "Kreis",
+                "Krug",
+                "Kruh",
+                "Lingkaran",
+                "Okrąg",
+                "Κύκλος",
+                "Елипса",
+                "Еліпс",
+                "Коло",
+                "Круг",
+                "Эллипс",
+                "אליפסה",
+                "עיגול",
+                "دائرة",
+                "دایره",
+                "بیضی",
+                "चक्र",
+                "अंडाकार",
+                "円",
+                "楕円",
+                "圆",
+                "椭圆",
+                "圓形",
+                "橢圓",
+                "원",
+                "타원",
+            ],
+        },
+        { types: ["circle", "path"], names: ["Circle"], ambiguous: true },
+        {
+            types: ["group"],
+            names: [
+                "Group",
+                "Groep",
+                "Groupe",
+                "Grup",
+                "Grupa",
+                "Grupo",
+                "Grupp",
+                "Gruppe",
+                "Gruppo",
+                "Kelompok",
+                "Skupina",
+                "Ομάδα",
+                "Група",
+                "Группа",
+                "קבוצה",
+                "مجموعة",
+                "گروه",
+                "समूह",
+                "グループ",
+                "编组",
+                "群組",
+                "그룹",
+            ],
+        },
+        {
+            types: ["group"],
+            names: [
+                "Mask",
+                "Maschera",
+                "Mască",
+                "Maska",
+                "Maske",
+                "Masker",
+                "Masque",
+                "Màscara",
+                "Máscara",
+                "Маска",
+                "מסכה",
+                "قناع",
+                "ماسک",
+                "मास्क",
+                "マスク",
+                "蒙版",
+                "遮罩",
+                "마스크",
+            ],
+            ambiguous: true,
+        },
+        {
+            types: ["path", "bool", "svg-raw"],
+            names: [
+                "Path",
+                "Vector",
+                "Polygon",
+                "Combined Shape",
+                "Caminho",
+                "Chemin",
+                "Cesta",
+                "Pfad",
+                "Ruta",
+                "Trazado",
+                "Tracciato",
+                "Tracé",
+                "Ścieżka",
+                "Контур",
+                "Путања",
+                "נתיב",
+                "مسار",
+                "مسیر",
+                "पथ",
+                "パス",
+                "路径",
+                "路徑",
+                "경로",
+            ],
+        },
+        { types: ["path", "rect", "bool"], names: ["Line", "Arrow", "Star", "Shape", "Pad"], ambiguous: true },
+        { types: ["bool", "path", "group"], names: ["Bool", "Boolean"] },
+        {
+            types: ["bool", "path", "group"],
+            names: ["Union", "Subtract", "Difference", "Intersect", "Intersection", "Exclude", "Exclusion", "Flatten"],
+            ambiguous: true,
+        },
+        { types: ["image", "rect", "frame"], names: ["Bitmap"] },
+        {
+            types: ["image", "rect", "frame"],
+            names: [
+                "Image",
+                "Afbeelding",
+                "Bild",
+                "Gambar",
+                "Görsel",
+                "Imagem",
+                "Imagen",
+                "Imagine",
+                "Imatge",
+                "Immagine",
+                "Obraz",
+                "Obrázek",
+                "Slika",
+                "Εικόνα",
+                "Зображення",
+                "Изображение",
+                "Слика",
+                "תמונה",
+                "تصویر",
+                "صورة",
+                "छवि",
+                "图片",
+                "影像",
+                "画像",
+                "이미지",
+            ],
+            ambiguous: true,
+        },
+        {
+            types: ["text"],
+            names: [
+                "Text",
+                "Metin",
+                "Teks",
+                "Tekst",
+                "Testo",
+                "Texte",
+                "Texto",
+                "Κείμενο",
+                "Текст",
+                "טקסט",
+                "متن",
+                "نص",
+                "पाठ",
+                "テキスト",
+                "文字",
+                "文本",
+                "텍스트",
+            ],
+            ambiguous: true,
+        },
+        { types: ["svg-raw", "group", "frame"], names: ["Svg", "SVG"] },
+        {
+            types: ["frame", "group", "rect", "circle", "path", "bool", "image", "svg-raw", "text"],
+            names: ["Layer", "Untitled"],
+        },
+        { types: ["frame", "group"], names: ["Component", "Instance"], ambiguous: true },
+    ];
 
-    private static readonly PATTERN = DefaultNames.buildPattern();
+    private static readonly PATTERNS = DefaultNames.GROUPS.map((group) => ({
+        group,
+        pattern: DefaultNames.buildPattern(group),
+    }));
 
     /**
-     * Tells whether a layer name is a default name: a base name, optionally followed by a number
-     * (`Board 4`, `Rectangle-12`, `Artboard – 1`) and a copy suffix (`Frame 5 copy 2`).
+     * Tells whether a layer name is a default name for the layer type, and how sure that is.
+     *
+     * Plain default names may carry a number (`Board 4`, `Rectangle-12`, `Artboard – 1`) and a copy
+     * suffix (`Frame 5 copy 2`). Ambiguous ones match only as `<word>` or `<word> <number>`.
      *
      * @param name - the layer name
+     * @param type - the layer type; omitted, any type matches
+     * @returns `default`, `ambiguous`, or null for a chosen name
      */
-    public static isDefault(name: string | null | undefined): boolean {
+    public static match(name: string | null | undefined, type?: string): DefaultNameMatch | null {
         if (typeof name !== "string") {
-            return true;
+            return "default";
         }
         const trimmed = name.normalize("NFC").trim();
-        return trimmed.length === 0 || DefaultNames.PATTERN.test(trimmed);
+        if (trimmed.length === 0) {
+            return "default";
+        }
+        let result: DefaultNameMatch | null = null;
+        for (const { group, pattern } of DefaultNames.PATTERNS) {
+            if ((type === undefined || group.types.includes(type)) && pattern.test(trimmed)) {
+                if (!group.ambiguous) {
+                    return "default";
+                }
+                result = "ambiguous";
+            }
+        }
+        return result;
     }
 
-    private static buildPattern(): RegExp {
-        const bases = [...new Set(Object.values(DefaultNames.BASE_NAMES).flat())]
+    /**
+     * Tells whether a layer name is a default name (plain or ambiguous) for the layer type.
+     *
+     * @param name - the layer name
+     * @param type - the layer type; omitted, any type matches
+     */
+    public static isDefault(name: string | null | undefined, type?: string): boolean {
+        return DefaultNames.match(name, type) !== null;
+    }
+
+    private static buildPattern(group: BaseNameGroup): RegExp {
+        const bases = [...group.names]
             .sort((a, b) => b.length - a.length)
             .map((base) =>
                 base
@@ -377,6 +466,9 @@ export class DefaultNames {
                     .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
                     .replace(/ /g, "\\s+")
             );
+        if (group.ambiguous) {
+            return new RegExp(`^(?:${bases.join("|")})(?: \\d+)?$`, "iu");
+        }
         const number = "(?:[\\s_\\-–—#.]*\\d+)?";
         const copy = "(?:[\\s_\\-]*\\(?(?:copy|copia|copie|kopie|cópia)\\)?(?:[\\s_\\-]*\\d+)?)*";
         return new RegExp(`^(?:${bases.join("|")})${number}${copy}$`, "iu");
@@ -496,7 +588,10 @@ export class AutoNamer {
     public static readonly DEFAULT_BATCH_SIZE = 50;
     public static readonly MAX_BATCH_SIZE = 80;
     public static readonly DEFAULT_MAX_NODES = 400;
-    private static readonly SCAN_LIMIT = 20000;
+    /** most layers read in one run; the result says `truncated` beyond it */
+    public static readonly MAX_SCAN = 50000;
+    /** layers read per `execute_code` call */
+    public static readonly SCAN_CHUNK = 2000;
     private static readonly SCREENSHOT_WIDTH = 768;
     private static readonly SCREENSHOTS_PER_BATCH = 2;
     private static readonly MAX_CHILD_ITEMS = 8;
@@ -535,11 +630,11 @@ export class AutoNamer {
     public async run(): Promise<AutoNameResult> {
         this.validate();
         this.progress("scan", 0, 0);
-        const layers = await this.readLayers();
+        const { layers, truncated } = await this.readLayers();
         for (const layer of layers) {
             this.records.set(layer.id, layer);
         }
-        const { candidates, skippedComponents } = AutoNamer.selectCandidates(layers, {
+        const { candidates, ambiguous, skippedComponents } = AutoNamer.selectCandidates(layers, {
             includeComponents: this.params.includeComponents === true,
         });
         const maxNodes = Math.max(1, Math.floor(this.params.maxNodes ?? AutoNamer.DEFAULT_MAX_NODES));
@@ -565,6 +660,7 @@ export class AutoNamer {
                         type: layer.type,
                         oldName: layer.name,
                         newName,
+                        ambiguous: ambiguous.has(layer.id),
                     });
                 }
             }
@@ -572,17 +668,19 @@ export class AutoNamer {
         }
 
         let appliedCount = 0;
-        if (this.params.apply === true && renames.length > 0) {
+        const toApply = renames.filter((rename) => !rename.ambiguous || this.params.applyAmbiguous === true);
+        if (this.params.apply === true && toApply.length > 0) {
             this.checkAborted();
-            this.progress("apply", 0, renames.length);
-            appliedCount = await this.applyRenames(renames);
-            this.progress("apply", appliedCount, renames.length);
+            this.progress("apply", 0, toApply.length);
+            appliedCount = await this.applyRenames(toApply);
+            this.progress("apply", appliedCount, toApply.length);
         }
 
         return {
             scope: this.scope,
             convention: this.convention,
             scanned: layers.length,
+            truncated,
             candidates: candidates.length,
             skippedComponents,
             remaining: candidates.length - ordered.length,
@@ -593,33 +691,41 @@ export class AutoNamer {
     }
 
     /**
-     * Picks the layers that may be renamed: default-named, not variants, and (unless
-     * `includeComponents`) neither component main roots nor layers of component copies.
+     * Picks the layers that may be renamed: default-named for their type, not variants, never
+     * inside a component copy (copies follow their main), and inside main components only with
+     * `includeComponents`.
      *
      * @param layers - layers in scope
      * @param options - selection options
+     * @returns the candidates, the ids of those whose default name is a real word, and how many
+     *   main-component layers were left alone
      */
     public static selectCandidates(
         layers: LayerRecord[],
         options: { includeComponents: boolean }
-    ): { candidates: LayerRecord[]; skippedComponents: number } {
+    ): { candidates: LayerRecord[]; ambiguous: Set<string>; skippedComponents: number } {
         const candidates: LayerRecord[] = [];
+        const ambiguous = new Set<string>();
         let skippedComponents = 0;
         for (const layer of layers) {
-            if (layer.variant || !DefaultNames.isDefault(layer.name)) {
+            const match = DefaultNames.match(layer.name, layer.type);
+            if (layer.variant || match === null || layer.component === "copy") {
                 continue;
             }
             // a text layer named after its own content ("Image" saying "Image") is named
             if (layer.type === "text" && layer.text && layer.text.trim() === layer.name.trim()) {
                 continue;
             }
-            if (!options.includeComponents && (layer.component === "main" || layer.component === "copy")) {
+            if (!options.includeComponents && (layer.component === "main" || layer.component === "main-child")) {
                 skippedComponents++;
                 continue;
             }
+            if (match === "ambiguous") {
+                ambiguous.add(layer.id);
+            }
             candidates.push(layer);
         }
-        return { candidates, skippedComponents };
+        return { candidates, ambiguous, skippedComponents };
     }
 
     /**
@@ -696,29 +802,80 @@ export class AutoNamer {
     private validate(): void {
         const scope = this.params.scope;
         if (scope !== undefined && scope !== "selection" && scope !== "page" && scope !== "file") {
-            throw new Error(`Unknown scope ${JSON.stringify(scope)}`);
+            throw new AutoNameError("bad-scope", JSON.stringify(scope));
         }
         if (this.scope === "selection") {
             const ids = this.params.nodeIds;
             if (!Array.isArray(ids) || ids.length === 0 || ids.some((id) => typeof id !== "string")) {
-                throw new Error("The selection scope needs nodeIds");
+                throw new AutoNameError("no-selection");
             }
         }
     }
 
-    private async readLayers(): Promise<LayerRecord[]> {
-        const params = {
-            scope: this.scope,
-            nodeIds: this.scope === "selection" ? this.params.nodeIds : [],
-            pageId: this.params.pageId ?? this.ctx.context.pageId ?? null,
-            limit: AutoNamer.SCAN_LIMIT,
-        };
-        const result = await this.ctx.tools.call("execute_code", { code: AutoNamer.readScript(params) });
-        const data = AutoNamer.codeResult(result) as { layers?: LayerRecord[] } | null;
-        if (!data || !Array.isArray(data.layers)) {
-            throw new Error("Could not read the layers of the design");
+    /**
+     * Reads the layers in scope page by page, in chunks of {@link AutoNamer.SCAN_CHUNK}, so each
+     * `execute_code` call stays small and fast; stops at {@link AutoNamer.MAX_SCAN} layers.
+     */
+    private async readLayers(): Promise<{ layers: LayerRecord[]; truncated: boolean }> {
+        const plan = (await this.runCode(
+            AutoNamer.planScript({
+                scope: this.scope,
+                nodeIds: this.scope === "selection" ? (this.params.nodeIds ?? []) : [],
+                pageId: this.params.pageId ?? this.ctx.context.pageId ?? null,
+            }),
+            "read-failed"
+        )) as { pageId: string; pageName: string; nodeIds: string[] | null }[] | null;
+        if (!Array.isArray(plan)) {
+            throw new AutoNameError("read-failed", "no scan plan");
         }
-        return data.layers;
+        const layers: LayerRecord[] = [];
+        for (const entry of plan) {
+            let start = 0;
+            for (;;) {
+                this.checkAborted();
+                const limit = Math.min(AutoNamer.SCAN_CHUNK, AutoNamer.MAX_SCAN - layers.length);
+                if (limit <= 0) {
+                    return { layers, truncated: true };
+                }
+                const chunk = (await this.runCode(AutoNamer.readScript({ ...entry, start, limit }), "read-failed")) as {
+                    layers?: LayerRecord[];
+                    more?: boolean;
+                } | null;
+                if (!chunk || !Array.isArray(chunk.layers)) {
+                    throw new AutoNameError("read-failed", "unexpected layer data");
+                }
+                layers.push(
+                    ...chunk.layers.map((layer) => ({ ...layer, pageId: entry.pageId, pageName: entry.pageName }))
+                );
+                this.progress("scan", layers.length, 0);
+                if (!chunk.more) {
+                    break;
+                }
+                start += chunk.layers.length;
+            }
+        }
+        return { layers, truncated: false };
+    }
+
+    /**
+     * Runs plugin code that returns a JSON string, and parses it.
+     */
+    private async runCode(code: string, errorCode: AutoNameError["code"]): Promise<unknown> {
+        let result: WorkflowToolResult;
+        try {
+            result = await this.ctx.tools.call("execute_code", { code });
+        } catch (error) {
+            throw new AutoNameError(errorCode, error instanceof Error ? error.message : String(error));
+        }
+        const value = AutoNamer.codeResult(result, errorCode);
+        if (typeof value !== "string") {
+            return value;
+        }
+        try {
+            return JSON.parse(value);
+        } catch {
+            throw new AutoNameError(errorCode, `unexpected output: ${value.slice(0, 200)}`);
+        }
     }
 
     private async applyRenames(renames: AutoNameRename[]): Promise<number> {
@@ -729,8 +886,9 @@ export class AutoNamer {
             byPage.set(rename.pageId, items);
         }
         const groups = [...byPage.entries()].map(([pageId, items]) => ({ pageId, items }));
-        const result = await this.ctx.tools.call("execute_code", { code: AutoNamer.applyScript(groups) });
-        const data = AutoNamer.codeResult(result) as { applied?: number } | null;
+        const data = (await this.runCode(AutoNamer.applyScript(groups), "apply-failed")) as {
+            applied?: number;
+        } | null;
         return typeof data?.applied === "number" ? data.applied : 0;
     }
 
@@ -750,7 +908,7 @@ export class AutoNamer {
                 continue;
             }
             const formatted = NameFormatter.format(cleaned, this.convention);
-            if (!DefaultNames.isDefault(formatted)) {
+            if (!DefaultNames.isDefault(formatted, layer.type)) {
                 names.set(layer.id, formatted);
             }
         }
@@ -887,7 +1045,7 @@ export class AutoNamer {
                 return `${type} ${JSON.stringify(child.text.slice(0, 40))}`;
             }
             const name = this.currentName(child.id);
-            return DefaultNames.isDefault(name) ? type : `${type} ${JSON.stringify(name)}`;
+            return DefaultNames.isDefault(name, child.type) ? type : `${type} ${JSON.stringify(name)}`;
         });
         if (children.length > AutoNamer.MAX_CHILD_ITEMS) {
             items.push(`${children.length - AutoNamer.MAX_CHILD_ITEMS} more`);
@@ -912,98 +1070,117 @@ export class AutoNamer {
     /**
      * Gets the value returned by `execute_code` code from the tool result.
      */
-    private static codeResult(result: WorkflowToolResult): unknown {
+    private static codeResult(result: WorkflowToolResult, errorCode: AutoNameError["code"]): unknown {
         if (result.isError) {
-            throw new Error(result.text || "execute_code failed");
+            throw new AutoNameError(errorCode, result.text || "execute_code failed");
         }
         let parsed: any;
         try {
             parsed = JSON.parse(result.text);
         } catch {
-            throw new Error(`Unexpected execute_code output: ${result.text.slice(0, 200)}`);
+            throw new AutoNameError(errorCode, `unexpected execute_code output: ${result.text.slice(0, 200)}`);
         }
         return parsed && typeof parsed === "object" && "result" in parsed ? parsed.result : parsed;
     }
 
     /**
-     * Plugin code reading the layers of a scope (runs in the browser through `execute_code`).
+     * Plugin code listing what to scan: `[{pageId, pageName, nodeIds}]` (`nodeIds` null = the
+     * whole page), as a JSON string.
      */
-    public static readScript(params: {
-        scope: AutoNameScope;
-        nodeIds?: string[];
-        pageId: string | null;
-        limit: number;
-    }): string {
+    public static planScript(params: { scope: AutoNameScope; nodeIds: string[]; pageId: string | null }): string {
         return `
 const P = ${JSON.stringify(params)};
+const file = penpot.currentFile;
+if (!file) { throw new Error("No Penpot file is open"); }
+const pages = file.pages;
+const entry = (page, nodeIds) => ({ pageId: page.id, pageName: page.name, nodeIds });
+if (P.scope === "file") { return JSON.stringify(pages.map((page) => entry(page, null))); }
+if (P.scope === "page") {
+  const page = pages.find((p) => p.id === P.pageId) || penpot.currentPage;
+  if (!page) { throw new Error("Page not found"); }
+  return JSON.stringify([entry(page, null)]);
+}
+const current = penpot.currentPage;
+const ordered = current ? [current, ...pages.filter((p) => p.id !== current.id)] : pages;
+const byPage = new Map();
+for (const id of P.nodeIds) {
+  for (const page of ordered) {
+    if (page.getShapeById(id)) {
+      if (!byPage.has(page.id)) { byPage.set(page.id, entry(page, [])); }
+      byPage.get(page.id).nodeIds.push(id);
+      break;
+    }
+  }
+}
+return JSON.stringify([...byPage.values()]);
+`;
+    }
+
+    /**
+     * Plugin code reading one chunk of the layers of a page (or of some layers of it and their
+     * descendants), depth first: the layers at positions `start` to `start + limit - 1`, as a JSON
+     * string `{layers, more}`. Records leave out `pageId`/`pageName`; the caller adds them.
+     */
+    public static readScript(params: {
+        pageId: string;
+        nodeIds: string[] | null;
+        start: number;
+        limit: number;
+    }): string {
+        const { pageId, nodeIds, start, limit } = params;
+        return `
+const P = ${JSON.stringify({ pageId, nodeIds, start, limit })};
 const ZERO = "00000000-0000-0000-0000-000000000000";
 const file = penpot.currentFile;
 if (!file) { throw new Error("No Penpot file is open"); }
+const page = file.pages.find((p) => p.id === P.pageId);
+if (!page) { throw new Error("Page not found: " + P.pageId); }
 const safe = (fn, fallback) => { try { const v = fn(); return v === undefined ? fallback : v; } catch (e) { return fallback; } };
-const pages = file.pages;
-let roots = [];
-if (P.scope === "file") {
-  roots = pages.map((page) => ({ page, shapes: [page.root] }));
-} else if (P.scope === "page") {
-  const page = pages.find((p) => p.id === P.pageId) || penpot.currentPage;
-  if (!page) { throw new Error("Page not found"); }
-  roots = [{ page, shapes: [page.root] }];
-} else {
-  const current = penpot.currentPage;
-  const ordered = current ? [current, ...pages.filter((p) => p.id !== current.id)] : pages;
-  const byPage = new Map();
-  for (const id of P.nodeIds) {
-    for (const page of ordered) {
-      const shape = page.getShapeById(id);
-      if (shape) {
-        if (!byPage.has(page.id)) { byPage.set(page.id, { page, shapes: [] }); }
-        byPage.get(page.id).shapes.push(shape);
-        break;
-      }
-    }
-  }
-  roots = [...byPage.values()];
-}
+const TYPES = { board: "frame", rectangle: "rect", ellipse: "circle", boolean: "bool" };
+const record = (shape, children) => {
+  const parent = safe(() => shape.parent, null);
+  const copy = safe(() => shape.isComponentCopyInstance(), false);
+  const main = safe(() => shape.isComponentMainInstance(), false);
+  const head = safe(() => shape.isComponentHead(), false);
+  const variant = safe(() => shape.isVariantContainer(), false) || safe(() => shape.isVariantHead(), false);
+  const flex = shape.type === "board" ? safe(() => shape.flex, null) : null;
+  const grid = shape.type === "board" ? safe(() => shape.grid, null) : null;
+  return {
+    id: shape.id,
+    name: shape.name,
+    type: TYPES[shape.type] || shape.type,
+    parentId: parent && parent.id !== ZERO ? parent.id : null,
+    x: Math.round(safe(() => shape.x, 0)),
+    y: Math.round(safe(() => shape.y, 0)),
+    width: Math.round(safe(() => shape.width, 0)),
+    height: Math.round(safe(() => shape.height, 0)),
+    visible: safe(() => shape.visible, true) !== false,
+    text: shape.type === "text" ? String(safe(() => shape.characters, "")).slice(0, 120) : undefined,
+    component: copy ? "copy" : (main && head ? "main" : (main ? "main-child" : null)),
+    variant: !!variant,
+    layout: flex ? "flex-" + flex.dir : (grid ? "grid" : null),
+    children: children.map((child) => child.id),
+  };
+};
+const roots = P.nodeIds ? P.nodeIds.map((id) => page.getShapeById(id)).filter(Boolean) : [page.root];
 const layers = [];
 const seen = new Set();
-const visit = (shape, page) => {
-  if (!shape || seen.has(shape.id) || layers.length >= P.limit) { return; }
+const stack = roots.slice().reverse();
+let index = 0;
+let more = false;
+while (stack.length > 0) {
+  const shape = stack.pop();
+  if (!shape || seen.has(shape.id)) { continue; }
   seen.add(shape.id);
   const children = safe(() => shape.children, []) || [];
   if (shape.id !== ZERO) {
-    const parent = safe(() => shape.parent, null);
-    const copy = safe(() => shape.isComponentCopyInstance(), false);
-    const main = safe(() => shape.isComponentMainInstance(), false);
-    const head = safe(() => shape.isComponentHead(), false);
-    const variant = safe(() => shape.isVariantContainer(), false) || safe(() => shape.isVariantHead(), false);
-    const flex = shape.type === "board" ? safe(() => shape.flex, null) : null;
-    const grid = shape.type === "board" ? safe(() => shape.grid, null) : null;
-    const type = ({ board: "frame", rectangle: "rect", ellipse: "circle", boolean: "bool" })[shape.type] || shape.type;
-    layers.push({
-      id: shape.id,
-      pageId: page.id,
-      pageName: page.name,
-      name: shape.name,
-      type,
-      parentId: parent && parent.id !== ZERO ? parent.id : null,
-      x: Math.round(safe(() => shape.x, 0)),
-      y: Math.round(safe(() => shape.y, 0)),
-      width: Math.round(safe(() => shape.width, 0)),
-      height: Math.round(safe(() => shape.height, 0)),
-      visible: safe(() => shape.visible, true) !== false,
-      text: shape.type === "text" ? String(safe(() => shape.characters, "")).slice(0, 120) : undefined,
-      component: copy ? "copy" : (main && head ? "main" : (main ? "main-child" : null)),
-      variant: !!variant,
-      layout: flex ? "flex-" + flex.dir : (grid ? "grid" : null),
-      children: children.map((child) => child.id),
-    });
+    if (index >= P.start + P.limit) { more = true; break; }
+    if (index >= P.start) { layers.push(record(shape, children)); }
+    index++;
   }
-  for (const child of children) { visit(child, page); }
-};
-for (const { page, shapes } of roots) {
-  for (const shape of shapes) { visit(shape, page); }
+  for (let i = children.length - 1; i >= 0; i--) { stack.push(children[i]); }
 }
-return { layers };
+return JSON.stringify({ layers, more });
 `;
     }
 

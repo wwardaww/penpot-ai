@@ -75,7 +75,24 @@ function fakeContext(layers: LayerRecord[], answer: (request: WorkflowClaudeRequ
                     const applied = groups.reduce((sum: number, group: any) => sum + group.items.length, 0);
                     return text({ applied, skipped: [] });
                 }
-                return text({ layers });
+                const params = JSON.parse(/const P = (.*);/.exec(code)![1]);
+                if (code.includes("const entry = (page, nodeIds)")) {
+                    const pageIds = [...new Set(layers.map((l) => l.pageId))];
+                    return text(
+                        JSON.stringify(
+                            (pageIds.length > 0 ? pageIds : ["page-1"]).map((pageId) => ({
+                                pageId,
+                                pageName: pageId,
+                                nodeIds: params.scope === "selection" ? params.nodeIds : null,
+                            }))
+                        )
+                    );
+                }
+                const page = layers
+                    .filter((l) => l.pageId === params.pageId)
+                    .map(({ pageId: _pageId, pageName: _pageName, ...rest }) => rest);
+                const chunk = page.slice(params.start, params.start + params.limit);
+                return text(JSON.stringify({ layers: chunk, more: params.start + params.limit < page.length }));
             },
             list: async () => ["execute_code", "capture_node_screenshot"],
         },
@@ -103,48 +120,74 @@ function namesFromPrompt(names: Record<string, string>) {
 }
 
 describe("DefaultNames", () => {
-    test("detects Penpot, Figma and Sketch default names", () => {
-        for (const name of [
-            "Board",
-            "Board 4",
-            "Rectangle 12",
-            "Frame 5",
-            "Frame 1171275887",
-            "Group 7",
-            "Ellipse",
-            "Vector 3",
-            "Path",
-            "Mask",
-            "Union",
-            "Subtract 2",
-            "Image 3",
-            "Text",
-            "Artboard – 1",
-            "Rectangle-2",
-            "Rectangle copy",
-            "Rectangle copy 3",
-            "Combined Shape",
-            "rectangle 9",
-            "  Group 1  ",
-            "",
+    test("detects Penpot, Figma and Sketch default names for the layer type", () => {
+        for (const [name, type] of [
+            ["Board", "frame"],
+            ["Board 4", "frame"],
+            ["Rectangle 12", "rect"],
+            ["Frame 5", "frame"],
+            ["Frame 1171275887", "frame"],
+            ["Group 7", "group"],
+            ["Ellipse", "circle"],
+            ["Vector 3", "path"],
+            ["Path", "path"],
+            ["Artboard – 1", "frame"],
+            ["Rectangle-2", "rect"],
+            ["Rectangle copy", "rect"],
+            ["Rectangle copy 3", "rect"],
+            ["Combined Shape", "path"],
+            ["rectangle 9", "rect"],
+            ["  Group 1  ", "group"],
+            ["", "rect"],
         ]) {
-            assert.equal(DefaultNames.isDefault(name), true, name);
+            assert.equal(DefaultNames.match(name, type), "default", name);
         }
     });
 
     test("detects localized default names", () => {
-        for (const name of [
-            "Tablero 3",
-            "Rectángulo 2",
-            "Zeichenfläche 1",
-            "Gruppe 4",
-            "Прямоугольник 5",
-            "長方形 2",
-            "그룹 1",
-            "Grupo",
+        for (const [name, type] of [
+            ["Tablero 3", "frame"],
+            ["Rectángulo 2", "rect"],
+            ["Zeichenfläche 1", "frame"],
+            ["Gruppe 4", "group"],
+            ["Прямоугольник 5", "rect"],
+            ["長方形 2", "rect"],
+            ["그룹 1", "group"],
+            ["Grupo", "group"],
         ]) {
-            assert.equal(DefaultNames.isDefault(name), true, name);
+            assert.equal(DefaultNames.isDefault(name, type), true, name);
         }
+    });
+
+    test("real words are ambiguous and match only the Penpot pattern", () => {
+        for (const [name, type] of [
+            ["Text", "text"],
+            ["Text 3", "text"],
+            ["Image 3", "image"],
+            ["Image", "rect"],
+            ["Mask", "group"],
+            ["Union", "bool"],
+            ["Subtract 2", "bool"],
+            ["Section", "frame"],
+            ["Line 2", "path"],
+            ["Star", "path"],
+            ["Component 1", "frame"],
+        ]) {
+            assert.equal(DefaultNames.match(name, type), "ambiguous", name);
+        }
+        // not the generated pattern
+        assert.equal(DefaultNames.match("Text-3", "text"), null);
+        assert.equal(DefaultNames.match("Image copy", "image"), null);
+    });
+
+    test("a default name of another layer type is a choice", () => {
+        assert.equal(DefaultNames.isDefault("Rectangle 4", "text"), false);
+        assert.equal(DefaultNames.isDefault("Text", "frame"), false);
+        assert.equal(DefaultNames.isDefault("Image", "text"), false);
+        assert.equal(DefaultNames.isDefault("Section", "group"), false);
+        assert.equal(DefaultNames.isDefault("Board 2", "rect"), false);
+        // without a type, any type counts
+        assert.equal(DefaultNames.isDefault("Board 2"), true);
     });
 
     test("leaves meaningful names alone", () => {
@@ -213,35 +256,75 @@ describe("AutoNamer", () => {
         assert.equal(AutoNamer.parseAnswer("{broken").size, 0);
     });
 
-    test("selects default-named layers and skips components, variants and named text", () => {
+    test("selects default-named layers; mains only on request, copies never", () => {
         const layers = [
             layer("1", "Rectangle 1"),
             layer("2", "Header"),
-            layer("3", "Board 2", { component: "main" }),
-            layer("4", "Group 3", { component: "copy" }),
+            layer("3", "Board 2", { type: "frame", component: "main" }),
+            layer("4", "Group 3", { type: "group", component: "copy" }),
             layer("5", "Rectangle 4", { component: "main-child" }),
-            layer("6", "Board", { variant: true }),
+            layer("6", "Board", { type: "frame", variant: true }),
             layer("7", "Text", { type: "text", text: "Text" }),
             layer("8", "Text 2", { type: "text", text: "Sign in" }),
+            layer("9", "Rectangle 9", { component: "copy" }),
         ];
         const plain = AutoNamer.selectCandidates(layers, { includeComponents: false });
         assert.deepEqual(
             plain.candidates.map((l) => l.id),
-            ["1", "5", "8"]
+            ["1", "8"]
         );
         assert.equal(plain.skippedComponents, 2);
+        assert.deepEqual([...plain.ambiguous], ["8"]);
         const all = AutoNamer.selectCandidates(layers, { includeComponents: true });
         assert.deepEqual(
             all.candidates.map((l) => l.id),
-            ["1", "3", "4", "5", "8"]
+            ["1", "3", "5", "8"]
         );
+        assert.equal(all.skippedComponents, 0);
     });
 
-    test("read script is valid JavaScript", () => {
-        const body = AutoNamer.readScript({ scope: "page", pageId: "p", limit: 10 });
-        assert.doesNotThrow(() => new Function(`return (async () => { ${body} })`));
-        const apply = AutoNamer.applyScript([{ pageId: "p", items: [["a", "Board 1", "Header"]] }]);
-        assert.doesNotThrow(() => new Function(`return (async () => { ${apply} })`));
+    test("scripts are valid JavaScript", () => {
+        for (const body of [
+            AutoNamer.planScript({ scope: "page", nodeIds: [], pageId: "p" }),
+            AutoNamer.readScript({ pageId: "p", nodeIds: null, start: 0, limit: 10 }),
+            AutoNamer.applyScript([{ pageId: "p", items: [["a", "Board 1", "Header"]] }]),
+        ]) {
+            assert.doesNotThrow(() => new Function(`return (async () => { ${body} })`));
+        }
+    });
+
+    test("reads big pages in chunks", async () => {
+        const many = Array.from({ length: AutoNamer.SCAN_CHUNK * 2 + 5 }, (_, i) => layer(`n${i}`, "Header"));
+        const { ctx, toolCalls } = fakeContext(many, () => "{}");
+        const result = await autoName(ctx, { screenshots: false });
+        assert.equal(result.scanned, many.length);
+        assert.equal(result.truncated, false);
+        // one plan call and three chunk calls
+        assert.equal(toolCalls.filter((call) => call.name === "execute_code").length, 4);
+    });
+
+    test("does not apply real-word names without review", async () => {
+        const layers = [layer("a", "Rectangle 1"), layer("t", "Text 1", { type: "text", text: "Buy now" })];
+        const { ctx, toolCalls } = fakeContext(layers, namesFromPrompt({ a: "card", t: "cta label" }));
+        const result = await autoName(ctx, { apply: true, screenshots: false });
+        assert.equal(result.renames.length, 2);
+        assert.equal(result.renames.find((r) => r.nodeId === "t")?.ambiguous, true);
+        assert.equal(result.appliedCount, 1);
+        const applyCall = toolCalls.find((call) => String(call.args.code).includes("undoBlockBegin"));
+        const groups = JSON.parse(/const G = (.*);/.exec(String(applyCall!.args.code))![1]);
+        assert.deepEqual(groups, [{ pageId: "page-1", items: [["a", "Rectangle 1", "Card"]] }]);
+    });
+
+    test("reports errors with codes", async () => {
+        const { ctx } = fakeContext([], () => "{}");
+        await assert.rejects(autoName(ctx, { scope: "selection" }), /auto-name\/no-selection/);
+        await assert.rejects(autoName(ctx, { scope: "nope" as any }), /auto-name\/bad-scope/);
+        const failing = fakeContext([], () => "{}");
+        (failing.ctx as any).tools = {
+            call: async () => ({ isError: true, content: [], text: "No Penpot file is open" }),
+            list: async () => [],
+        };
+        await assert.rejects(autoName(failing.ctx, {}), /auto-name\/read-failed: No Penpot file is open/);
     });
 
     test("names 30 default layers of a page, top-down, without touching named ones", async () => {
@@ -282,6 +365,7 @@ describe("AutoNamer", () => {
             type: "frame",
             oldName: "Board 1",
             newName: "Home Screen",
+            ambiguous: false,
         });
         // two batches, parents first: the second batch sees the board's new name
         assert.equal(prompts.length, 2);
@@ -309,7 +393,7 @@ describe("AutoNamer", () => {
     });
 
     test("drops answers that are missing, default names or unchanged", async () => {
-        const layers = [layer("a", "Rectangle 1"), layer("b", "Rectangle 2"), layer("c", "Group 1")];
+        const layers = [layer("a", "Rectangle 1"), layer("b", "Rectangle 2"), layer("c", "Group 1", { type: "group" })];
         const { ctx } = fakeContext(layers, () => JSON.stringify({ a: "Rectangle 7", b: "  ", x: "Header" }));
         const result = await autoName(ctx, { screenshots: false });
         assert.equal(result.renames.length, 0);
@@ -318,8 +402,6 @@ describe("AutoNamer", () => {
 
     test("selection scope needs node ids and maxNodes limits the run", async () => {
         const { ctx } = fakeContext([], () => "{}");
-        await assert.rejects(autoName(ctx, { scope: "selection" }), /nodeIds/);
-        await assert.rejects(autoName(ctx, { scope: "nope" as any }), /Unknown scope/);
 
         const layers = [layer("a", "Rectangle 1"), layer("b", "Rectangle 2"), layer("c", "Rectangle 3")];
         const second = fakeContext(layers, namesFromPrompt({}));
