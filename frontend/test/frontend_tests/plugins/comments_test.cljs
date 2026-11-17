@@ -210,7 +210,7 @@
 
 (defn- seq-numbers
   [threads]
-  (mapv #(.-seqNumber %) threads))
+  (mapv (fn [^js thread] (.-seqNumber thread)) threads))
 
 (t/deftest ^:async page-find-comment-threads-filters-the-page
   (let [file-id       (random-uuid)
@@ -242,7 +242,7 @@
      (mock/with-mocks*
        {r/check-permission (constantly true)
         rp/cmd!            (threads-rpc (atom []) threads)}
-       (let [found (await (.findCommentThreadById page (str (:id resolved))))]
+       (let [^js found (await (.findCommentThreadById page (str (:id resolved))))]
          (t/is (= (str (:id resolved)) (.-id found))
                "resolved threads are found too")
          (t/is (= (str page-id) (.-pageId found))))
