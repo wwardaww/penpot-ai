@@ -1,0 +1,232 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/typography.scss" as t;
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+@use "ds/_utils.scss" as *;
+@use "ds/mixins.scss" as *;
+
+.pane {
+  @include custom-scrollbar($include-selection: false, $include-placeholder: false);
+
+  position: relative;
+  grid-area: preview;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  block-size: 100vh;
+  border-inline-start: $b-1 solid var(--color-background-quaternary);
+  background-color: var(--color-background-primary);
+}
+
+.resize-handle {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: px2rem(-3);
+  inline-size: px2rem(6);
+  cursor: ew-resize;
+  z-index: var(--z-index-set);
+  touch-action: none;
+
+  &:hover,
+  &:active {
+    background-color: var(--color-accent-primary-muted);
+  }
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-index-set);
+  background-color: var(--color-overlay-default);
+}
+
+.overlay-dialog {
+  display: flex;
+  flex-direction: column;
+  inline-size: 90vw;
+  block-size: 90vh;
+  overflow: hidden;
+  border-radius: $br-8;
+  background-color: var(--color-background-primary);
+  box-shadow: 0 0 px2rem(20) var(--color-shadow-dark);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs);
+  padding: var(--sp-s);
+  border-block-end: $b-1 solid var(--color-background-quaternary);
+}
+
+.title {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.title-text {
+  margin: 0;
+  color: var(--color-foreground-primary);
+}
+
+.muted {
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.status-dot {
+  flex-shrink: 0;
+  inline-size: px2rem(8);
+  block-size: px2rem(8);
+  border-radius: $br-circle;
+  background-color: var(--color-foreground-secondary);
+}
+
+.status-ready {
+  background-color: var(--color-accent-success);
+}
+
+.status-starting {
+  background-color: var(--color-accent-warning);
+}
+
+.status-failed {
+  background-color: var(--color-accent-error);
+}
+
+.device-switch {
+  display: flex;
+  border: $b-1 solid var(--color-background-quaternary);
+  border-radius: $br-8;
+  overflow: hidden;
+}
+
+.device-option {
+  @include t.use-typography("body-small");
+
+  padding: var(--sp-xxs) var(--sp-s);
+  border: none;
+  background: none;
+  color: var(--color-foreground-secondary);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--color-foreground-primary);
+  }
+}
+
+.device-selected {
+  background-color: var(--color-background-quaternary);
+  color: var(--color-foreground-primary);
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  min-block-size: 0;
+}
+
+.frame-area {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  min-inline-size: 0;
+  background-color: var(--color-background-secondary);
+}
+
+.frame-area-mobile {
+  padding: var(--sp-m);
+  overflow: auto;
+}
+
+.frame {
+  flex: 1;
+  inline-size: 100%;
+  block-size: 100%;
+  border: none;
+  background-color: var(--color-static-white);
+}
+
+.frame-mobile {
+  flex: none;
+  max-block-size: px2rem(844);
+  border-radius: $br-8;
+  box-shadow: 0 0 0 $b-1 var(--color-background-quaternary);
+}
+
+.frame-dragging {
+  pointer-events: none;
+}
+
+.message {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-m);
+  padding: var(--sp-l);
+  text-align: center;
+}
+
+.spinner {
+  inline-size: px2rem(20);
+  block-size: px2rem(20);
+  border: $b-2 solid var(--color-background-quaternary);
+  border-block-start-color: var(--color-accent-primary);
+  border-radius: $br-circle;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.logs {
+  max-block-size: 40%;
+  overflow: auto;
+  border-block-start: $b-1 solid var(--color-background-quaternary);
+}
+
+.logs-summary {
+  @include t.use-typography("body-small");
+
+  padding: var(--sp-xs) var(--sp-s);
+  color: var(--color-foreground-secondary);
+  cursor: pointer;
+}
+
+.logs-content {
+  @include t.use-typography("code-font");
+
+  margin: 0;
+  padding: var(--sp-xs) var(--sp-s);
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--color-foreground-primary);
+  user-select: text;
+}
+
+.log-line {
+  display: inline;
+}
+
+.log-stderr {
+  color: var(--color-accent-error);
+}
+
+.log-system {
+  color: var(--color-foreground-secondary);
+}

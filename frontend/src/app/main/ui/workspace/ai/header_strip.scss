@@ -9,3 +9,7 @@
   align-items: center;
   gap: var(--sp-xs);
 }
+
+.primary-action {
+  flex-shrink: 0;
+}

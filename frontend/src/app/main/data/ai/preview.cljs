@@ -1,0 +1,427 @@
+;; This Source Code Form is subject to the terms of the Mozilla Public
+;; License, v. 2.0. If a copy of the MPL was not distributed with this
+;; file, You can obtain one at http://mozilla.org/MPL/2.0/.
+;;
+;; Copyright (c) KALEIDOS SUBSIDIARY SL
+
+(ns app.main.data.ai.preview
+  "Live preview of the generated app (W09).
+
+  The daemon runs the dev server of the project's `app-src/`
+  (`preview.start` / `preview.stop`) and reports `preview.status`
+  (plus `preview.log` lines for the developer persona). The workspace
+  shows the app in a pane next to the canvas or in a large overlay.
+
+  State lives under `[:penforge :preview]`:
+
+  - `:status` `:idle` `:starting` `:ready` `:stopped` `:failed`
+  - `:url` preview URL, `:message` daemon message, `:code` error code
+    of a refused request, `:restarts` restarts after crashes
+  - `:rid` request id of the last `preview.start` / `preview.stop`
+  - `:pane` `nil` (closed), `:split` or `:overlay`
+  - `:device` `:desktop` or `:mobile` (390px frame)
+  - `:width` width of the split pane in px
+  - `:reload-key` bumped to reload the frame
+  - `:logs` last dev server lines `{:stream :text}`
+  - `:build` `nil`, `:planning` or `:building` while the Build
+    action runs
+
+  The pane, device and width are kept per tab in session storage, so a
+  page reload shows the preview again; the daemon keeps the server
+  running for a while after the tab goes away."
+  (:require
+   [app.main.data.ai.chat :as chat]
+   [app.main.data.ai.client :as client]
+   [app.main.data.ai.protocol :as proto]
+   [app.main.data.notifications :as ntf]
+   [app.main.data.penforge :as penforge]
+   [app.main.store :as st]
+   [app.util.i18n :refer [tr]]
+   [app.util.storage :as storage]
+   [beicon.v2.core :as rx]
+   [potok.v2.core :as ptk]))
+
+(def max-logs 300)
+(def min-width 320)
+(def default-width 480)
+(def mobile-width 390)
+
+(def empty-preview
+  {:status :idle
+   :pane nil
+   :device :desktop
+   :width default-width
+   :reload-key 0
+   :logs []
+   :build nil})
+
+(def live-statuses
+  #{:starting :ready})
+
+;; --- Pure helpers
+
+(defn clamp-width
+  "Clamp a split pane width between `min-width` and `max-width`."
+  [width max-width]
+  (-> width
+      (max min-width)
+      (min (max min-width max-width))))
+
+(defn- append-log
+  [preview line]
+  (update preview :logs
+          (fn [logs]
+            (let [logs (conj (or logs []) line)
+                  extra (- (count logs) max-logs)]
+              (if (pos? extra)
+                (subvec logs extra)
+                logs)))))
+
+(defn apply-message
+  "Reduce a daemon message of the open project into the preview
+  state. `error` replies count only for the last preview request."
+  [preview msg]
+  (case (:type msg)
+    "preview.status"
+    (-> preview
+        (assoc :status (keyword (:state msg))
+               :message (:message msg)
+               :restarts (or (:restarts msg) 0)
+               :code nil)
+        (cond-> (some? (:url msg)) (assoc :url (:url msg))))
+
+    "preview.ready"
+    (assoc preview :status :ready :url (:url msg) :message nil :code nil)
+
+    "preview.stopped"
+    (cond-> preview
+      (contains? live-statuses (:status preview))
+      (assoc :status :stopped))
+
+    "preview.log"
+    (append-log preview {:stream (keyword (:stream msg)) :text (:text msg)})
+
+    "error"
+    (if (and (some? (:rid msg)) (= (:rid msg) (:rid preview)))
+      (assoc preview :status :failed :code (:code msg) :message (:message msg))
+      preview)
+
+    preview))
+
+(defn run-outcome
+  "Outcome of a finished workflow run from its messages (see
+  `chat/workflow-messages`): `:ok`, `:declined` (a `result` event said
+  `confirmed: false`), `:missing` (the daemon does not know the
+  workflow) or `:failed`."
+  [messages]
+  (let [final  (last messages)
+        result (->> messages
+                    (filter #(and (= "workflow.event" (:type %))
+                                  (= "result" (:kind %))))
+                    (last)
+                    (:payload))]
+    (cond
+      (= "error" (:type final))
+      (if (= "unknown-workflow" (:code final)) :missing :failed)
+
+      (not= "workflow.done" (:type final))
+      :failed
+
+      (not (:ok final))
+      :failed
+
+      (and (map? result) (false? (:confirmed result)))
+      :declined
+
+      :else
+      :ok)))
+
+(defn- get-preview
+  [state]
+  (get-in state [:penforge :preview] empty-preview))
+
+(defn- update-preview
+  [state f & args]
+  (apply update-in state [:penforge :preview] (fnil f empty-preview) args))
+
+(defn- current-project-id
+  [state]
+  (some-> (:current-project-id state) str))
+
+(defn- connected?
+  [state]
+  (= :connected (get-in state [:penforge :connection :status])))
+
+(defn live?
+  "Whether the dev server is starting or ready."
+  [preview]
+  (contains? live-statuses (:status preview)))
+
+(defn default-device
+  "Initial device frame: mobile for mobile projects."
+  [state]
+  (if (= :mobile (some-> (penforge/current-platform state) keyword))
+    :mobile
+    :desktop))
+
+;; --- Session preferences
+
+(defn- load-prefs
+  [project-id]
+  (let [prefs (get @storage/session ::prefs)]
+    (when (= project-id (:project-id prefs))
+      (select-keys prefs [:pane :device :width]))))
+
+(defn- save-prefs!
+  [state]
+  (let [preview (get-preview state)]
+    (swap! storage/session assoc ::prefs
+           {:project-id (current-project-id state)
+            :pane (:pane preview)
+            :device (:device preview)
+            :width (:width preview)})))
+
+;; --- Events
+
+(defn receive
+  "Apply a daemon message to the preview state."
+  [msg]
+  (ptk/reify ::receive
+    ptk/UpdateEvent
+    (update [_ state]
+      (update-preview state apply-message msg))))
+
+(defn start-preview
+  "Ask the daemon to run (or join) the dev server of the open project.
+  Without a daemon connection nothing is sent; the preview starts on
+  the next connection while the pane is open."
+  []
+  (let [rid (proto/next-rid)]
+    (ptk/reify ::start-preview
+      ptk/UpdateEvent
+      (update [_ state]
+        (if (and (connected? state) (current-project-id state))
+          (update-preview state assoc :status :starting :rid rid :code nil :message nil)
+          state))
+
+      ptk/EffectEvent
+      (effect [_ state _]
+        (when-let [project-id (current-project-id state)]
+          (when (connected? state)
+            (client/send! (proto/preview-start project-id rid))))))))
+
+(defn stop-preview
+  "Stop the dev server of the open project (for every tab)."
+  []
+  (let [rid (proto/next-rid)]
+    (ptk/reify ::stop-preview
+      ptk/UpdateEvent
+      (update [_ state]
+        (update-preview state assoc :rid rid))
+
+      ptk/EffectEvent
+      (effect [_ state _]
+        (when-let [project-id (current-project-id state)]
+          (client/send! (proto/preview-stop project-id rid)))))))
+
+(defn open-pane
+  "Show the preview as `:split` pane or `:overlay` and start the dev
+  server unless it is already live."
+  [mode]
+  (ptk/reify ::open-pane
+    ptk/UpdateEvent
+    (update [_ state]
+      (update-preview state assoc :pane mode))
+
+    ptk/WatchEvent
+    (watch [_ state _]
+      (if (live? (get-preview state))
+        (rx/empty)
+        (rx/of (start-preview))))
+
+    ptk/EffectEvent
+    (effect [_ state _]
+      (save-prefs! state))))
+
+(defn close-pane
+  "Hide the preview; the dev server keeps running."
+  []
+  (ptk/reify ::close-pane
+    ptk/UpdateEvent
+    (update [_ state]
+      (update-preview state assoc :pane nil))
+
+    ptk/EffectEvent
+    (effect [_ state _]
+      (save-prefs! state))))
+
+(defn toggle-pane
+  "Open the split pane, or close the preview when it is shown."
+  []
+  (ptk/reify ::toggle-pane
+    ptk/WatchEvent
+    (watch [_ state _]
+      (if (some? (:pane (get-preview state)))
+        (rx/of (close-pane))
+        (rx/of (open-pane :split))))))
+
+(defn set-device
+  [device]
+  (ptk/reify ::set-device
+    ptk/UpdateEvent
+    (update [_ state]
+      (update-preview state assoc :device device))
+
+    ptk/EffectEvent
+    (effect [_ state _]
+      (save-prefs! state))))
+
+(defn set-width
+  "Set the split pane width (px), clamped to `max-width`."
+  [width max-width]
+  (ptk/reify ::set-width
+    ptk/UpdateEvent
+    (update [_ state]
+      (update-preview state assoc :width (clamp-width width max-width)))
+
+    ptk/EffectEvent
+    (effect [_ state _]
+      (save-prefs! state))))
+
+(defn reload
+  "Reload the preview frame."
+  []
+  (ptk/reify ::reload
+    ptk/UpdateEvent
+    (update [_ state]
+      (update-preview state update :reload-key (fnil inc 0)))))
+
+(defn- set-build
+  [stage]
+  (ptk/reify ::set-build
+    ptk/UpdateEvent
+    (update [_ state]
+      ;; the workspace may have closed meanwhile
+      (if (contains? (:penforge state) :preview)
+        (update-preview state assoc :build stage)
+        state))))
+
+(defn- show-built-app
+  []
+  (ptk/reify ::show-built-app
+    ptk/WatchEvent
+    (watch [_ state _]
+      (let [preview (get-preview state)]
+        (rx/of (if (live? preview) (reload) (start-preview))
+               (open-pane (or (:pane preview) :split)))))))
+
+(defn- run-step
+  "Run a workflow and emit `(on-done outcome)` once it finishes."
+  [stream name params on-done]
+  (let [rid (proto/next-rid)]
+    (rx/merge
+     ;; listen before the request goes out
+     (->> (chat/workflow-messages stream rid)
+          (rx/reduce conj [])
+          (rx/mapcat (comp on-done run-outcome)))
+     (rx/of (chat/run-workflow name params {:rid rid})))))
+
+(defn- finish-build
+  [outcome]
+  (rx/concat
+   (if (= :missing outcome)
+     (rx/of (ntf/info (tr "penforge.build.coming-soon")))
+     (rx/empty))
+   (rx/of (set-build nil))))
+
+(defn build
+  "The Build action: plan the app (`build-plan`, which asks the user
+  to confirm), generate it (`build-run`), then show the preview."
+  []
+  (ptk/reify ::build
+    ptk/WatchEvent
+    (watch [_ state stream]
+      (let [params  {:file-id (str (:current-file-id state))}
+            ;; a lost connection ends the runs on the daemon side too
+            stopper (rx/merge
+                     (rx/filter (ptk/type? ::finalize) stream)
+                     (rx/filter (ptk/type? ::client/disconnect) stream)
+                     (rx/filter (ptk/type? ::client/socket-closed) stream))]
+        (cond
+          (some? (:build (get-preview state)))
+          (rx/empty)
+
+          (not (connected? state))
+          (rx/of (chat/open-chat))
+
+          :else
+          (rx/concat
+           (->> (rx/concat
+                 (rx/of (set-build :planning) (chat/open-chat))
+                 (run-step
+                  stream "build-plan" params
+                  (fn [outcome]
+                    (if (= :ok outcome)
+                      (rx/concat
+                       (rx/of (set-build :building))
+                       (run-step
+                        stream "build-run" params
+                        (fn [outcome]
+                          (if (= :ok outcome)
+                            (rx/of (set-build nil) (show-built-app))
+                            (finish-build outcome)))))
+                      (finish-build outcome)))))
+                (rx/take-until stopper))
+           ;; always leave the building state
+           (rx/of (set-build nil))))))))
+
+(defn initialize
+  "Start following the preview of the project of the open file; mounted
+  at file level next to the AI session."
+  [project-id]
+  (ptk/reify ::initialize
+    ptk/UpdateEvent
+    (update [_ state]
+      (let [project-id (some-> project-id str)]
+        (assoc-in state [:penforge :preview]
+                  (merge empty-preview
+                         {:project-id project-id
+                          :device (default-device state)}
+                         (load-prefs project-id)))))
+
+    ptk/WatchEvent
+    (watch [_ _ stream]
+      (let [stopper (rx/merge
+                     (rx/filter (ptk/type? ::finalize) stream)
+                     (rx/filter (ptk/type? ::initialize) stream))
+            project-id* (fn [] (current-project-id @st/state))]
+        (->> (rx/merge
+              (->> (client/messages stream)
+                   (rx/filter (fn [{:keys [type project-id]}]
+                                (or (= "error" type)
+                                    (and (contains? #{"preview.status" "preview.ready"
+                                                      "preview.stopped" "preview.log"}
+                                                    type)
+                                         (= project-id (project-id*))))))
+                   (rx/map receive))
+
+              ;; (Re)join the dev server on every connection while the
+              ;; preview is shown or live, e.g. after a page reload.
+              (->> (rx/merge
+                    (rx/of :init)
+                    (rx/filter (ptk/type? ::client/connected) stream))
+                   (rx/filter (fn [_]
+                                (let [state @st/state
+                                      preview (get-preview state)]
+                                  (and (connected? state)
+                                       (or (some? (:pane preview))
+                                           (live? preview))))))
+                   (rx/map (fn [_] (start-preview)))))
+             (rx/take-until stopper))))))
+
+(defn finalize
+  []
+  (ptk/reify ::finalize
+    ptk/UpdateEvent
+    (update [_ state]
+      (update state :penforge dissoc :preview))))

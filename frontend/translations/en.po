@@ -10326,3 +10326,117 @@ msgstr "Copy the link again from the Penforge agent output."
 #: src/app/main/ui/workspace/sidebar.cljs:176
 msgid "penforge.sidebar.tab"
 msgstr "AI"
+
+# penforge:W09
+
+#: src/app/main/data/ai/actions/build.cljs:23
+msgid "penforge.build"
+msgstr "Build"
+
+#: src/app/main/data/ai/preview.cljs:330
+msgid "penforge.build.coming-soon"
+msgstr "Building the app from your design is coming soon."
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:134
+msgid "penforge.preview.close"
+msgstr "Close preview"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:181
+msgid "penforge.preview.connect"
+msgstr "Connect"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:69
+msgid "penforge.preview.device"
+msgstr "Device"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:74
+msgid "penforge.preview.device.desktop"
+msgstr "Desktop"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:79
+msgid "penforge.preview.device.mobile"
+msgstr "Mobile"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:160
+msgid "penforge.preview.frame-title"
+msgstr "Preview of your app"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:211
+msgid "penforge.preview.logs"
+msgstr "Server output"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:191
+msgid "penforge.preview.not-built"
+msgstr "There is no app yet. Build it from your design first."
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:180
+msgid "penforge.preview.not-connected"
+msgstr "Connect Penforge to see your app here."
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:118
+msgid "penforge.preview.open-tab"
+msgstr "Open in a new tab"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:125
+msgid "penforge.preview.overlay"
+msgstr "Enlarge"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:113
+msgid "penforge.preview.reload"
+msgstr "Reload"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:253
+msgid "penforge.preview.resize"
+msgstr "Resize preview"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:197
+msgid "penforge.preview.retry"
+msgstr "Try again"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:124
+msgid "penforge.preview.split"
+msgstr "Show next to the canvas"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:132
+msgid "penforge.preview.start"
+msgstr "Start"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:59
+msgid "penforge.preview.status.failed"
+msgstr "The app could not start"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:60
+msgid "penforge.preview.status.idle"
+msgstr "Not running"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:57
+msgid "penforge.preview.status.ready"
+msgstr "Running"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:54
+msgid "penforge.preview.status.restarting"
+msgstr "Restarting the app…"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:56
+msgid "penforge.preview.status.starting"
+msgstr "Starting the app…"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:58
+msgid "penforge.preview.status.stopped"
+msgstr "Stopped"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:130
+msgid "penforge.preview.stop"
+msgstr "Stop"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:201
+msgid "penforge.preview.stopped-hint"
+msgstr "Your app is not running."
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:106
+msgid "penforge.preview.title"
+msgstr "Preview"
+
+#: src/app/main/data/ai/actions/build.cljs:34
+msgid "penforge.preview.toggle"
+msgstr "Preview"
