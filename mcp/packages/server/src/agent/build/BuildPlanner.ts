@@ -23,6 +23,12 @@ import { Routes } from "./Routes";
 export interface BuildPlanParams {
     /** "full" plans a build from scratch even when an earlier build exists */
     mode?: "auto" | "full";
+    /**
+     * Asks "Build it?" as a workflow question and reports the answer as `result {confirmed}`
+     * (default; W09's Build chain). False when the client shows the plan and confirms itself by
+     * running `build-run` (W08 build dialog).
+     */
+    ask?: boolean;
 }
 
 /** Payload of the `plan` event (see `wiki/architecture.md` §7, build pipeline). */
@@ -96,13 +102,42 @@ export class BuildPlanner {
         const hasApp = existsSync(join(this.ctx.workspace.appSrcDir, "package.json"));
         const fresh = params.mode === "full" || map === null || stack === null || !hasApp;
 
-        const plan = fresh ? await this.fullPlan(design, stack) : this.incrementalPlan(design, map!, stack!);
+        let plan = fresh ? await this.fullPlan(design, stack) : this.incrementalPlan(design, map!, stack!);
+        await this.publish(plan);
+        if (params.ask === false) {
+            this.ctx.emit("result", { planId: plan.planId, mode: plan.mode });
+            return { summary: plan.mode === "none" ? this.text.nothingChanged() : plan.summary };
+        }
+        for (;;) {
+            const payload = this.payload(plan);
+            const answer = await this.ctx.ask({ text: this.questionText(plan, payload), options: payload.options });
+            if (answer === "rebuild") {
+                plan = await this.fullPlan(design, plan.stack);
+                await this.publish(plan);
+                continue;
+            }
+            const confirmed = answer === "build";
+            this.ctx.emit("result", { planId: plan.planId, mode: plan.mode, confirmed });
+            return { summary: confirmed ? plan.summary : this.text.notNow() };
+        }
+    }
+
+    /** Writes the plan files and emits the `plan` event. */
+    private async publish(plan: Plan): Promise<void> {
         await this.files.writePlan(plan, this.markdown(plan));
         await this.files.writeStack(plan.stack);
-
         this.ctx.emit("plan", this.payload(plan));
-        this.ctx.emit("result", { planId: plan.planId, mode: plan.mode });
-        return { summary: plan.mode === "none" ? this.text.nothingChanged() : plan.summary };
+    }
+
+    /** Text of the "Build it?" question: the summary, technical details for developers, the question. */
+    private questionText(plan: Plan, payload: PlanEventPayload): string {
+        const parts = [plan.summary];
+        if (payload.developer && plan.mode !== "none") {
+            const routes = payload.developer.routes.map((r) => `- ${r.name} → \`${r.route}\``);
+            parts.push(`**Stack:** ${plan.stack.name}`, ["**Routes:**", ...routes].join("\n"));
+        }
+        parts.push(`**${payload.question}**`);
+        return parts.join("\n\n");
     }
 
     // planning --------------------------------------------------------------------------------

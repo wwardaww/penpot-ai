@@ -132,7 +132,7 @@ class FakeClaude {
             commands: {
                 install: ["npm", "install"],
                 build: ["npm", "run", "build"],
-                dev: ["npm", "run", "dev"],
+                dev: ["npm", "run", "dev", "--", "--port", "{port}", "--strictPort"],
             },
             portEnv: "PORT",
         };
@@ -184,7 +184,7 @@ let claude: FakeClaude;
 let executor: FakeExecutor;
 let events: Emitted[];
 
-function context(persona: Persona = "designer"): WorkflowContext {
+function context(persona: Persona = "designer", answers: string[] = []): WorkflowContext {
     return {
         runId: "run-1",
         context: {
@@ -206,15 +206,20 @@ function context(persona: Persona = "designer"): WorkflowContext {
         emit: (kind, payload) => {
             events.push({ kind, payload });
         },
-        ask: async () => {
-            throw new Error("no questions expected");
+        ask: async (question) => {
+            events.push({ kind: "question", payload: question });
+            const answer = answers.shift();
+            if (answer === undefined) {
+                throw new Error("no questions expected");
+            }
+            return answer;
         },
     };
 }
 
 async function plan(persona: Persona = "designer", mode?: "full"): Promise<PlanEventPayload> {
     events = [];
-    await new BuildPlanner(context(persona)).plan({ mode });
+    await new BuildPlanner(context(persona)).plan({ mode, ask: false });
     const event = events.find((e) => e.kind === "plan");
     assert.ok(event, "plan event emitted");
     return event.payload as PlanEventPayload;
@@ -256,6 +261,9 @@ test("first build: plan for a designer, then build every screen and commit", asy
     assert.ok(readFileSync(join(workspace.metaDir, "plan.md"), "utf8").includes("Login → `/`"));
     const files = new BuildFiles(workspace);
     assert.equal((await files.readStack())?.name, "React + Vite + TypeScript");
+    const stackJson = JSON.parse(readFileSync(join(workspace.metaDir, "stack.json"), "utf8"));
+    assert.equal(stackJson.dev, "npm run dev -- --port {port} --strictPort", "W09 reads a dev string");
+    assert.equal(stackJson.portEnv, "PORT");
 
     const result = await build("designer", { planId: payload.planId });
     assert.equal(result.summary, "Your app is ready.");
@@ -422,4 +430,24 @@ test("the build-run workflow reports persona-safe failures as a failed event", a
     await assert.rejects(workflow.run(context("designer"), { planId: "missing" }));
     const failed = events.find((e) => e.kind === "failed");
     assert.match(failed?.payload.message ?? "", /press Build again/);
+});
+
+test("asking build-plan: the answer ends the run with result {confirmed}", async () => {
+    events = [];
+    await new BuildPlanner(context("developer", ["cancel"])).plan({});
+    const question = events.find((e) => e.kind === "question");
+    assert.match(question?.payload.text ?? "", /\*\*Stack:\*\* React \+ Vite[\s\S]*Dashboard → `\/dashboard`/);
+    assert.deepEqual(events.find((e) => e.kind === "result")?.payload.confirmed, false);
+
+    events = [];
+    await new BuildPlanner(context("designer", ["build"])).plan({});
+    assert.equal(events.find((e) => e.kind === "result")?.payload.confirmed, true);
+    await build("designer", {});
+    assert.match(git("log", "-1", "--format=%s"), /^penforge\(build\): build Login, Dashboard/);
+
+    events = [];
+    await new BuildPlanner(context("designer", ["rebuild", "build"])).plan({});
+    const plans = events.filter((e) => e.kind === "plan").map((e) => e.payload.mode);
+    assert.deepEqual(plans, ["none", "full"], "rebuild re-plans from scratch");
+    assert.equal(events.filter((e) => e.kind === "result").at(-1)?.payload.confirmed, true);
 });

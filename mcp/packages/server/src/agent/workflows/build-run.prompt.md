@@ -11,8 +11,9 @@ Rules:
   texts. Use the design's names for screens and components. Use real assets only when you can
   get them from the design; otherwise draw simple placeholders in CSS.
 - Wire prototype navigation as real navigation between routes.
-- The dev server must listen on `127.0.0.1` and on the port in the environment variable named by
-  `portEnv` in the stack (default `PORT`), with a fixed port (fail if it is taken).
+- The dev server must listen on `127.0.0.1` with a fixed port (fail if it is taken). Penforge
+  passes the port as the `{port}` argument of the `dev` command and in the environment variable
+  named by `portEnv` (default `PORT`).
 - Keep each screen in its own files so later updates can change one screen without touching the
   others.
 {{#mobile}}

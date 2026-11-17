@@ -6,8 +6,11 @@ import type { WorkflowWorkspaceApi } from "@penpot/mcp-common";
 /** Programs a stack command may start (package managers only). */
 const COMMAND_PROGRAMS = ["npm", "npx", "pnpm", "yarn", "bun"] as const;
 
-/** Pattern of one command argument: no spaces, quotes or shell operators. */
-const COMMAND_ARG = /^[A-Za-z0-9@%+=:,./_~^-]+$/;
+/**
+ * Pattern of one command argument: no spaces, quotes or shell operators. `{port}` is replaced by
+ * the dev server port (W09).
+ */
+const COMMAND_ARG = /^(?:[A-Za-z0-9@%+=:,./_~^-]|\{port\})+$/;
 
 /** Command of a stack, as an argument vector run in `app-src/` without a shell. */
 export const CommandSchema = z
@@ -38,6 +41,13 @@ export const StackSchema = z.object({
         .string()
         .regex(/^[A-Z][A-Z0-9_]*$/)
         .default("PORT"),
+    /** `commands.dev` as one shell command, the form W09's dev server manager reads */
+    dev: z.string().optional(),
+    /** path the dev server answers on once ready (W09) */
+    readyPath: z
+        .string()
+        .regex(/^\/\S*$/)
+        .default("/"),
     /** workflow ids run before each build (W21 adds "token-sync") */
     preBuild: z.array(z.string().regex(/^[a-z0-9][a-z0-9-]*$/)).default([]),
 });
@@ -142,7 +152,8 @@ export class BuildFiles {
     }
 
     public writeStack(stack: Stack): Promise<void> {
-        return this.workspace.writeJson(BuildFiles.STACK_JSON, stack);
+        // arguments are shell-safe tokens, so joining them gives a valid shell command
+        return this.workspace.writeJson(BuildFiles.STACK_JSON, { ...stack, dev: stack.commands.dev.join(" ") });
     }
 
     public readMap(): Promise<BuildMap | null> {

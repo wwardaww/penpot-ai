@@ -84,6 +84,10 @@ export class BuildText {
             : `${sentence} Everything else stays as it is.`;
     }
 
+    public notNow(): string {
+        return this.isDeveloper ? "Build cancelled." : "Okay, nothing was built.";
+    }
+
     public noBoards(): string {
         return this.isDeveloper
             ? "The file has no top-level boards; there is nothing to build."
