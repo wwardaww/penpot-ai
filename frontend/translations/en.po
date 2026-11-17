@@ -10033,3 +10033,85 @@ msgstr ""
 #: src/app/main/ui/workspace/sidebar/versions.cljs:470
 msgid "workspace.versions.warning.text"
 msgstr "Autosaved versions will be kept for %s days."
+
+# penforge:W05
+
+#: src/app/main/ui/dashboard/penforge/create_project.cljs
+msgid "penforge.create-project.title"
+msgstr "New project"
+
+#: src/app/main/ui/dashboard/penforge/create_project.cljs
+msgid "penforge.create-project.name"
+msgstr "Project name"
+
+#: src/app/main/ui/dashboard/penforge/create_project.cljs
+msgid "penforge.create-project.name-placeholder"
+msgstr "My new app"
+
+#: src/app/main/ui/dashboard/penforge/create_project.cljs
+msgid "penforge.create-project.platform"
+msgstr "What are you building?"
+
+#: src/app/main/ui/dashboard/penforge/create_project.cljs
+msgid "penforge.create-project.platform.web"
+msgstr "Responsive Web"
+
+#: src/app/main/ui/dashboard/penforge/create_project.cljs
+msgid "penforge.create-project.platform.web-caption"
+msgstr "Works on desktop and phone browsers"
+
+#: src/app/main/ui/dashboard/penforge/create_project.cljs
+msgid "penforge.create-project.platform.mobile"
+msgstr "Mobile App"
+
+#: src/app/main/ui/dashboard/penforge/create_project.cljs
+msgid "penforge.create-project.platform.mobile-caption"
+msgstr "iOS & Android app"
+
+#: src/app/main/ui/dashboard/penforge/create_project.cljs
+msgid "penforge.create-project.create"
+msgstr "Create project"
+
+#: src/app/main/ui/dashboard/penforge/persona.cljs
+msgid "penforge.persona.title"
+msgstr "How do you work?"
+
+#: src/app/main/ui/dashboard/penforge/persona.cljs
+msgid "penforge.persona.subtitle"
+msgstr "Penforge adapts the AI and the tools to you. You can change this later in your profile settings."
+
+#: src/app/main/ui/dashboard/penforge/persona.cljs
+msgid "penforge.persona.designer"
+msgstr "Designer"
+
+#: src/app/main/ui/dashboard/penforge/persona.cljs
+msgid "penforge.persona.designer-caption"
+msgstr "Plain words, visual results"
+
+#: src/app/main/ui/dashboard/penforge/persona.cljs
+msgid "penforge.persona.developer"
+msgstr "Developer"
+
+#: src/app/main/ui/dashboard/penforge/persona.cljs
+msgid "penforge.persona.developer-caption"
+msgstr "Code, diffs and logs included"
+
+#: src/app/main/ui/dashboard/penforge/persona.cljs
+msgid "penforge.persona.skip"
+msgstr "Skip for now"
+
+#: src/app/main/ui/dashboard/penforge/persona.cljs
+msgid "penforge.persona.setting-title"
+msgstr "Work style"
+
+#: src/app/main/ui/dashboard/penforge/persona.cljs
+msgid "penforge.persona.setting-hint"
+msgstr "Changes how the AI talks to you and how much detail Penforge shows."
+
+#: src/app/main/ui/dashboard/penforge/platform_badge.cljs
+msgid "penforge.platform.web"
+msgstr "Web"
+
+#: src/app/main/ui/dashboard/penforge/platform_badge.cljs
+msgid "penforge.platform.mobile"
+msgstr "Mobile"

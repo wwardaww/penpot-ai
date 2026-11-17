@@ -16,6 +16,7 @@
    [app.main.store :as st]
    [app.main.ui.components.file-uploader :refer [file-uploader]]
    [app.main.ui.components.forms :as fm]
+   [app.main.ui.dashboard.penforge.persona :refer [persona-setting*]]
    [app.main.ui.ds.foundations.assets.icon :as i :refer [icon*]]
    [app.main.ui.ds.foundations.typography :as t]
    [app.main.ui.ds.foundations.typography.heading :refer [heading*]]
@@ -161,4 +162,5 @@
                   :class (stl/css :page-title)}
      (tr "labels.profile")]
     [:> profile-photo-form*]
-    [:> profile-form*]]])
+    [:> profile-form*]
+    [:> persona-setting*]]])

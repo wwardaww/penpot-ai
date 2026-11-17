@@ -23,6 +23,7 @@
    [app.main.data.helpers :as dsh]
    [app.main.data.modal :as modal]
    [app.main.data.notifications :as ntf]
+   [app.main.data.penforge :as pf]
    [app.main.data.persistence :as dps]
    [app.main.data.team :as dtm]
    [app.main.data.websocket :as dws]
@@ -60,6 +61,9 @@
               (rx/of (fetch-projects team-id)
                      (df/fetch-fonts team-id)
                      (dws/send initmsg))
+              (if (pf/enabled?)
+                (rx/of (pf/fetch-team-project-settings team-id))
+                (rx/empty))
               ;; On reconnect, send again the subscription message
               (->> stream
                    (rx/filter (ptk/type? ::dws/opened))
@@ -248,38 +252,49 @@
 ;; --- EVENT: create-project
 
 (defn- project-created
-  [{:keys [id] :as project}]
-  (ptk/reify ::project-created
-    IDeref
-    (-deref [_] project)
+  ([project] (project-created project true))
+  ([{:keys [id] :as project} edit?]
+   (ptk/reify ::project-created
+     IDeref
+     (-deref [_] project)
 
-    ptk/UpdateEvent
-    (update [_ state]
-      (-> state
-          (assoc-in [:projects id] project)
-          (assoc-in [:dashboard-local :project-for-edit] id)))))
+     ptk/UpdateEvent
+     (update [_ state]
+       (cond-> (assoc-in state [:projects id] project)
+         edit? (assoc-in [:dashboard-local :project-for-edit] id))))))
 
 (defn create-project
-  []
-  (ptk/reify ::create-project
-    ptk/WatchEvent
-    (watch [_ state _]
-      (let [team-id   (:current-team-id state)
-            projects  (dsh/lookup-team-projects state team-id)
-            unames    (cfh/get-used-names projects)
-            base-name (tr "dashboard.new-project-prefix")
-            name      (cfh/generate-unique-name base-name unames :immediate-suffix? true)
-            team-id   (:current-team-id state)
-            params    {:name name
-                       :team-id team-id}
-            {:keys [on-success on-error]
-             :or {on-success identity
-                  on-error rx/throw}}
-            (meta params)]
-        (->> (rp/cmd! :create-project params)
-             (rx/tap on-success)
-             (rx/map project-created)
-             (rx/catch on-error))))))
+  "Creates a project. Without params it is auto named and opened for
+  inline rename; with the `:ai` flag on it opens the Penforge
+  create-project panel instead, which calls back with `:name` and
+  `:platform` (the platform is then stored in the project settings)."
+  ([] (create-project nil))
+  ([{:keys [platform] given-name :name :as options}]
+   (ptk/reify ::create-project
+     ptk/WatchEvent
+     (watch [_ state _]
+       (if (and (nil? options) (pf/enabled?))
+         (rx/of (modal/show :penforge-create-project {}))
+         (let [team-id   (:current-team-id state)
+             projects  (dsh/lookup-team-projects state team-id)
+             unames    (cfh/get-used-names projects)
+             base-name (tr "dashboard.new-project-prefix")
+             name      (or (some-> given-name str/trim not-empty)
+                           (cfh/generate-unique-name base-name unames :immediate-suffix? true))
+             params    {:name name
+                        :team-id team-id}
+             {:keys [on-success on-error]
+              :or {on-success identity
+                   on-error rx/throw}}
+             (meta params)]
+         (->> (rp/cmd! :create-project params)
+              (rx/tap on-success)
+              (rx/mapcat (fn [project]
+                           (if (some? platform)
+                             (rx/of (project-created project false)
+                                    (pf/update-project-settings (:id project) platform))
+                             (rx/of (project-created project)))))
+              (rx/catch on-error))))))))
 
 ;; --- EVENT: duplicate-project
 
@@ -535,6 +550,7 @@
                           (assoc :features features))]
 
         (->> (rp/cmd! :create-file params)
+             (rx/mapcat #(pf/seed-file-boards state %))
              (rx/tap on-success)
              (rx/map #(with-meta (file-created %) (meta it)))
              (rx/catch on-error))))))

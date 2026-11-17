@@ -1,0 +1,134 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+@use "ds/_utils.scss" as *;
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  grid-auto-flow: column;
+  gap: var(--sp-m);
+}
+
+.card {
+  --card-border-color: var(--color-background-quaternary);
+  --card-background: var(--color-background-tertiary);
+  --card-illustration-color: var(--color-foreground-secondary);
+  --card-illustration-accent: var(--color-foreground-secondary);
+  --card-label-color: var(--color-foreground-primary);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-xs);
+  padding: var(--sp-xl) var(--sp-l) var(--sp-l);
+  border: $b-2 solid var(--card-border-color);
+  border-radius: $br-8;
+  background-color: var(--card-background);
+  text-align: center;
+  cursor: pointer;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+
+  &:hover {
+    --card-border-color: var(--color-accent-primary-muted);
+    --card-illustration-color: var(--color-foreground-primary);
+  }
+
+  &:focus-visible {
+    outline: $b-2 solid var(--color-accent-primary);
+    outline-offset: px2rem(2);
+  }
+}
+
+.card-selected {
+  --card-border-color: var(--color-accent-primary);
+  --card-background: var(--color-background-secondary);
+  --card-illustration-color: var(--color-foreground-primary);
+  --card-illustration-accent: var(--color-accent-primary);
+
+  &:hover {
+    --card-border-color: var(--color-accent-primary);
+  }
+}
+
+.check {
+  position: absolute;
+  inset-block-start: var(--sp-s);
+  inset-inline-end: var(--sp-s);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: $sz-16;
+  block-size: $sz-16;
+  border-radius: $br-circle;
+  border: $b-1 solid var(--card-border-color);
+  color: var(--color-background-primary);
+  stroke: var(--color-background-primary);
+
+  .card-selected & {
+    background-color: var(--color-accent-primary);
+  }
+}
+
+.illustration-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  block-size: $sz-96;
+  margin-block-end: var(--sp-s);
+}
+
+.illustration {
+  inline-size: px2rem(132);
+  block-size: px2rem(88);
+  overflow: visible;
+}
+
+.shape-line,
+.shape-dashed {
+  fill: none;
+  stroke: var(--card-illustration-color);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 0.15s ease;
+}
+
+.shape-dashed {
+  stroke-dasharray: 4 3;
+}
+
+.shape-fill {
+  fill: var(--color-background-primary);
+}
+
+.shape-surface {
+  fill: var(--card-background);
+}
+
+.shape-accent {
+  fill: var(--card-illustration-accent);
+  transition: fill 0.15s ease;
+}
+
+.shape-soft {
+  fill: var(--card-illustration-color);
+  opacity: 0.35;
+}
+
+.card-label {
+  color: var(--card-label-color);
+}
+
+.card-caption {
+  color: var(--color-foreground-secondary);
+}
