@@ -22,6 +22,7 @@
    [app.main.broadcast :as mbc]
    [app.main.data.ai.protocol :as proto]
    [app.main.data.auth :as-alias auth]
+   [app.main.data.penforge :as penforge]
    [app.main.data.workspace.mcp :as mcp]
    [app.main.store :as st]
    [app.util.globals :as globals]
@@ -304,23 +305,16 @@
 ;; --- Tab context (`context.set`)
 
 (defn get-persona
-  "Persona of the profile (W05 stores `:penforge-persona`; same rule as
-  `app.main.data.penforge/current-persona`); designer by default."
+  "Persona of the logged in profile; designer by default."
   [state]
-  (let [persona (get-in state [:profile :props :penforge-persona])]
-    (if (= "developer" (some-> persona name))
-      :developer
-      :designer)))
+  (penforge/current-persona state))
 
 (defn get-platform
-  "Platform of the current project. W05 keeps the loaded platforms under
-  `[:penforge-project-settings <project-id>]` (`app.main.data.penforge`;
-  switch to its `current-platform` once both branches are merged)."
+  "Platform of the project of the open file; web while unknown."
   [state]
-  (let [project-id (:current-project-id state)
-        platform   (get-in state [:penforge-project-settings project-id])]
-    (if (= "mobile" (some-> platform name))
-      :mobile
+  (let [platform (some-> (penforge/current-platform state) keyword)]
+    (if (contains? penforge/platforms platform)
+      platform
       :web)))
 
 (defn get-context
@@ -344,6 +338,9 @@
 
 (def ^:private context-ref
   (l/derived get-context st/state =))
+
+(def ^:private project-id-ref
+  (l/derived :current-project-id st/state))
 
 (def ^:private connected-ref
   (l/derived #(= :connected (get-in % [:penforge :connection :status])) st/state))
@@ -376,6 +373,12 @@
               (->> (messages stream)
                    (rx/filter #(contains? #{"auth.ok" "auth.error"} (:type %)))
                    (rx/map handle-auth-message))
+
+              ;; Load the platform of the open project for `context.set`.
+              (->> (rx/from-atom project-id-ref {:emit-current-value? true})
+                   (rx/filter uuid?)
+                   (rx/pipe (rxo/distinct-contiguous))
+                   (rx/map penforge/fetch-project-settings))
 
               ;; Send the tab context once connected and whenever it
               ;; changes (page, MCP session, persona...).
