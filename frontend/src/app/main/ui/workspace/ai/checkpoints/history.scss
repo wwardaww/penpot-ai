@@ -1,0 +1,200 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+@use "ds/_utils.scss" as *;
+@use "ds/mixins.scss" as *;
+@use "ds/typography.scss" as *;
+
+// Only for the modal placeholders (%modal-overlay-base,
+// %modal-container-base), until the modals move to the DS modal.
+@use "refactor/common-refactor.scss" as deprecated;
+
+.modal-overlay {
+  @extend %modal-overlay-base;
+}
+
+.modal-dialog {
+  @extend %modal-container-base;
+
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-m);
+  inline-size: px2rem(560);
+  max-inline-size: calc(100vw - var(--sp-xxxl) * 2);
+  max-block-size: calc(100vh - var(--sp-xxxl) * 2);
+}
+
+// Goes on the tooltip wrapper of the close icon button.
+.close-btn {
+  position: absolute;
+  inset-block-start: var(--sp-s);
+  inset-inline-end: var(--sp-xs);
+}
+
+.modal-title {
+  margin: 0;
+  color: var(--color-foreground-primary);
+}
+
+.modal-content {
+  min-block-size: 0;
+  overflow-y: auto;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-s);
+}
+
+.muted {
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.error {
+  margin: 0;
+  color: var(--color-foreground-error);
+}
+
+.message {
+  padding: var(--sp-xl) 0;
+  text-align: center;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  padding: var(--sp-s) var(--sp-m);
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+}
+
+.item-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-m);
+}
+
+.item-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-xxs);
+  min-inline-size: 0;
+}
+
+.item-label {
+  overflow: hidden;
+  color: var(--color-foreground-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--sp-xs);
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-xs);
+
+  &:empty {
+    display: none;
+  }
+}
+
+.badge {
+  @include use-typography("body-small");
+
+  padding: 0 var(--sp-xs);
+  border-radius: $br-4;
+  background-color: var(--color-background-quaternary);
+  color: var(--color-foreground-secondary);
+}
+
+.badge-accent {
+  background-color: var(--color-accent-primary-muted);
+  color: var(--color-accent-primary);
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  padding: var(--sp-s);
+  border: $b-1 solid var(--color-accent-warning);
+  border-radius: $br-8;
+  color: var(--color-foreground-primary);
+
+  p {
+    margin: 0;
+  }
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-xs);
+}
+
+.diff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+}
+
+.diff-repo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+}
+
+.diff-title {
+  margin: 0;
+  color: var(--color-foreground-primary);
+}
+
+%diff-pre {
+  @include use-typography("code-font");
+
+  margin: 0;
+  padding: var(--sp-xs);
+  overflow: auto;
+  border-radius: $br-4;
+  background-color: var(--color-background-primary);
+  color: var(--color-foreground-primary);
+  white-space: pre;
+}
+
+.diff-stat {
+  @extend %diff-pre;
+
+  max-block-size: px2rem(120);
+}
+
+.diff-patch {
+  @extend %diff-pre;
+
+  max-block-size: px2rem(320);
+}
