@@ -8,12 +8,16 @@
   "Ask AI about the selection (W06).
 
   Attaches every selected shape to the next chat message as a node
-  attachment with a PNG snapshot, shows the AI chat and puts the
-  cursor in its input. Runs from the context menu and the command
-  palette (registry action `:ai/ask`) and from the workspace shortcut
-  `:ai-ask`."
+  attachment, shows the AI chat and puts the cursor in its input. A few
+  of the shapes (top-level boards first) also get a PNG snapshot,
+  rendered afterwards, one per animation frame, so a large selection
+  does not freeze the UI or flood the message; the agent can capture
+  the others with its screenshot tool. Runs from the context menu and
+  the command palette (registry action `:ai/ask`) and from the
+  workspace shortcut `:ai-ask`."
   (:require
    [app.common.data :as d]
+   [app.common.files.helpers :as cfh]
    [app.common.logging :as log]
    [app.main.data.ai.actions :as actions]
    [app.main.data.ai.chat :as chat]
@@ -31,9 +35,15 @@
 
 (log/set-level! :warn)
 
+(def max-snapshots
+  "Most attachments of one message that carry a snapshot."
+  4)
+
 (def max-snapshot-size
   "Longest side of a snapshot, in pixels."
-  1024)
+  512)
+
+;; --- Snapshots
 
 (defn snapshot-scale
   "Scale, at most 1, that fits a `width` x `height` shape in
@@ -79,50 +89,85 @@
         nil))))
 
 (defn snapshot-fn
-  "Snapshot function for the given state: renders with render-wasm when
-  it is active. Without it the attachment goes without a snapshot; the
-  agent can still capture the node with its screenshot tool."
+  "Snapshot function (shape -> base64 PNG or nil) for the given state, or
+  nil when nothing can render one. Only render-wasm renders snapshots;
+  without it the attachments go without them."
   [state]
-  (if (features/active-feature? state "render-wasm/v1")
-    wasm-snapshot
-    (constantly nil)))
+  (when (features/active-feature? state "render-wasm/v1")
+    wasm-snapshot))
 
-(defn build-attachments
-  "Node attachments of the shapes with `shape-ids` on the current page,
-  in the given order. `snapshot` is a fn of the shape returning a base64
-  PNG or nil; shapes that no longer exist are skipped."
-  [state shape-ids snapshot]
-  (let [file-id (:current-file-id state)
-        page-id (:current-page-id state)
-        objects (dsh/lookup-page-objects state)]
+(defn snapshot-candidates
+  "Shapes to render a snapshot for: the ones not attached with a
+  snapshot yet, top-level boards first, then direct children of the
+  root, then the rest, each group in selection order; at most
+  `max-snapshots` minus the snapshots already pending."
+  [shapes pending]
+  (let [with-png (into #{}
+                       (comp (filter :snapshot-png) (map :node-id))
+                       pending)
+        room     (max 0 (- max-snapshots (count with-png)))]
+    (->> shapes
+         (remove #(contains? with-png (str (:id %))))
+         ;; `sort-by` is stable: selection order holds inside each group
+         (sort-by #(cond
+                     (cfh/root-frame? %) 0
+                     (cfh/is-direct-child-of-root? %) 1
+                     :else 2))
+         (take room)
+         (vec))))
+
+(defn- set-snapshot
+  "Store a rendered snapshot in the pending attachment of its node, if it
+  is still pending."
+  [node-id png]
+  (ptk/reify ::set-snapshot
+    ptk/UpdateEvent
+    (update [_ state]
+      (if (some #(= node-id (:node-id %)) (get-in state [:penforge :chat :attachments]))
+        (update-in state [:penforge :chat :attachments]
+                   (fn [attachments]
+                     (mapv #(cond-> % (= node-id (:node-id %)) (assoc :snapshot-png png))
+                           attachments)))
+        state))))
+
+(defn render-snapshots
+  "Stream of `set-snapshot` events for `shapes`, one render per
+  animation frame (`scheduler`, `:af` by default). Completes at once
+  when there is nothing to render."
+  ([shapes render]
+   (render-snapshots shapes render :af))
+  ([shapes render scheduler]
+   (if (or (empty? shapes) (nil? render))
+     (rx/empty)
+     (->> (rx/from shapes)
+          (rx/mapcat (fn [shape]
+                       (->> (rx/of shape)
+                            (rx/observe-on scheduler)
+                            (rx/map (fn [shape]
+                                      (when-let [png (render shape)]
+                                        (set-snapshot (str (:id shape)) png))))
+                            (rx/filter some?))))))))
+
+;; --- Attachments
+
+(defn- lookup-shapes
+  "Shapes of the current page with `shape-ids`, in the given order, no
+  repeats; ids that no longer exist are skipped."
+  [state shape-ids]
+  (let [objects (dsh/lookup-page-objects state)]
     (into []
           (comp (keep #(get objects %))
-                (d/distinct-xf :id)
-                (map (fn [shape]
-                       (let [attachment (proto/node-attachment file-id page-id shape)
-                             png        (snapshot shape)]
-                         (cond-> attachment
-                           (some? png) (assoc :snapshot-png png))))))
+                (d/distinct-xf :id))
           shape-ids)))
 
-(defn merge-attachments
-  "Add `attachments` to the pending attachments of the chat. A node
-  already attached is not added again; it only gains the snapshot when
-  it had none."
-  [chat attachments]
-  (let [snapshots (into {}
-                        (keep (fn [{:keys [node-id snapshot-png]}]
-                                (when snapshot-png [node-id snapshot-png])))
-                        attachments)]
-    (-> (chat/add-attachments chat attachments)
-        (update :attachments
-                (fn [current]
-                  (mapv (fn [{:keys [node-id] :as attachment}]
-                          (if-let [png (and (nil? (:snapshot-png attachment))
-                                            (get snapshots node-id))]
-                            (assoc attachment :snapshot-png png)
-                            attachment))
-                        current))))))
+(defn build-attachments
+  "Node attachments (without snapshot) of the shapes with `shape-ids` on
+  the current page, in the given order; missing shapes are skipped."
+  [state shape-ids]
+  (let [file-id (:current-file-id state)
+        page-id (:current-page-id state)]
+    (mapv #(proto/node-attachment file-id page-id %)
+          (lookup-shapes state shape-ids))))
 
 (defn- add-attachments
   [attachments]
@@ -130,47 +175,64 @@
     ptk/UpdateEvent
     (update [_ state]
       (update-in state [:penforge :chat]
-                 (fnil merge-attachments chat/empty-chat)
+                 (fnil chat/add-attachments chat/empty-chat)
                  attachments))))
+
+;; --- Chat input
 
 (def ^:private input-selector
   "[data-testid='ai-chat-panel'] textarea")
 
-(defn- focus-input!
+(defn find-chat-input
+  "The chat input element, or nil while it is not mounted. The only place
+  that knows where the chat lives: W10 (detached chat window) redirects
+  this lookup to the popup's document when the chat is detached."
+  []
+  (dom/query input-selector))
+
+(defn- focus-chat-input!
   "Focus the chat input. The panel mounts after the sidebar switches to
   the AI tab, so look for it a few times before giving up."
-  ([] (focus-input! 20))
+  ([] (focus-chat-input! 20))
   ([attempts]
-   (if-let [input (dom/query input-selector)]
+   (if-let [input (find-chat-input)]
      (dom/focus! input)
      (when (pos? attempts)
-       (js/setTimeout #(focus-input! (dec attempts)) 50)))))
+       (js/setTimeout #(focus-chat-input! (dec attempts)) 50)))))
 
 (defn- focus-chat-input
   []
   (ptk/reify ::focus-chat-input
     ptk/EffectEvent
     (effect [_ _ _]
-      (focus-input!))))
+      (focus-chat-input!))))
+
+;; --- Event and action
 
 (defn ask-selection
-  "Attach the selected shapes (with snapshots) to the next chat message,
-  show the AI chat and focus its input. With nothing selected it only
-  shows the chat."
+  "Attach the selected shapes to the next chat message, show the AI chat
+  and focus its input, then render the snapshots of a few of them. With
+  nothing selected it only shows the chat."
   ([]
    (ask-selection nil))
   ([shape-ids]
    (ptk/reify ::ask-selection
      ptk/WatchEvent
-     (watch [_ state _]
+     (watch [_ state stream]
        (let [shape-ids   (or shape-ids (dsh/get-selected-ids state))
-             attachments (build-attachments state shape-ids (snapshot-fn state))]
+             shapes      (lookup-shapes state shape-ids)
+             attachments (build-attachments state shape-ids)
+             pending     (get-in state [:penforge :chat :attachments])
+             candidates  (snapshot-candidates shapes pending)
+             stopper-s   (rx/filter (ptk/type? ::chat/finalize) stream)]
          (rx/concat
           (if (seq attachments)
             (rx/of (add-attachments attachments))
             (rx/empty))
           (rx/of (chat/open-chat)
-                 (focus-chat-input))))))))
+                 (focus-chat-input))
+          (->> (render-snapshots candidates (snapshot-fn state))
+               (rx/take-until stopper-s))))))))
 
 (defn- has-selection?
   [state]

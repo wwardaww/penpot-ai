@@ -22,10 +22,12 @@
 (def ^:private page-id (uuid/next))
 (def ^:private board-id (uuid/next))
 (def ^:private rect-id (uuid/next))
+(def ^:private group-id (uuid/next))
 
 (def ^:private objects
-  {board-id {:id board-id :name "Login" :type :frame}
-   rect-id  {:id rect-id :name "Button" :type :rect}})
+  {board-id {:id board-id :name "Login" :type :frame :frame-id uuid/zero :parent-id uuid/zero}
+   rect-id  {:id rect-id :name "Button" :type :rect :frame-id board-id :parent-id board-id}
+   group-id {:id group-id :name "Logo" :type :group :frame-id uuid/zero :parent-id uuid/zero}})
 
 (defn- state
   [& {:keys [selected chat]}]
@@ -38,9 +40,9 @@
 
 (t/deftest snapshot-scale-fits-the-longest-side
   (t/is (= 1 (ask/snapshot-scale 200 100)) "small shapes keep scale 1")
-  (t/is (= 1 (ask/snapshot-scale 1024 1024)))
-  (t/is (= 0.5 (ask/snapshot-scale 2048 300)))
-  (t/is (= 0.25 (ask/snapshot-scale 300 4096)))
+  (t/is (= 1 (ask/snapshot-scale 512 512)))
+  (t/is (= 0.5 (ask/snapshot-scale 1024 300)))
+  (t/is (= 0.125 (ask/snapshot-scale 300 4096)))
   (t/is (<= (* 3000 (ask/snapshot-scale 3000 10)) ask/max-snapshot-size)))
 
 (t/deftest bytes->base64-matches-btoa
@@ -55,8 +57,7 @@
       (t/is (= (js/btoa text) (ask/bytes->base64 bytes))))))
 
 (t/deftest build-attachments-keeps-order-skips-missing-and-duplicates
-  (let [snapshot    (fn [shape] (when (= :frame (:type shape)) "PNG"))
-        attachments (ask/build-attachments (state) [rect-id (uuid/next) board-id rect-id] snapshot)]
+  (let [attachments (ask/build-attachments (state) [rect-id (uuid/next) board-id rect-id])]
     (t/is (= [{:kind "node"
                :file-id (str file-id)
                :page-id (str page-id)
@@ -68,20 +69,59 @@
                :page-id (str page-id)
                :node-id (str board-id)
                :name "Login"
-               :type "frame"
-               :snapshot-png "PNG"}]
-             attachments))))
+               :type "frame"}]
+             attachments)
+          "attachments go without snapshot; it is rendered afterwards")))
 
-(t/deftest merge-attachments-does-not-duplicate-nodes
-  (let [plain    {:kind "node" :node-id "a" :name "A"}
-        with-png (assoc plain :snapshot-png "PNG")
-        other    {:kind "node" :node-id "b" :name "B" :snapshot-png "PNG-B"}
-        chat     (-> chat/empty-chat
-                     (ask/merge-attachments [plain])
-                     (ask/merge-attachments [with-png other])
-                     (ask/merge-attachments [other]))]
-    (t/is (= [with-png other] (:attachments chat))
-          "the node attached without snapshot gains it, nothing is repeated")))
+(defn- shape
+  [type frame-id]
+  (let [id (uuid/next)]
+    {:id id :name (str id) :type type :frame-id frame-id :parent-id frame-id}))
+
+(t/deftest snapshot-candidates-prefer-top-level-boards-and-are-capped
+  (let [nested  (shape :rect board-id)
+        child   (shape :group uuid/zero)
+        boards  (vec (repeatedly 4 #(shape :frame uuid/zero)))
+        shapes  (into [nested child] boards)]
+    (t/is (= boards (ask/snapshot-candidates shapes []))
+          "at most max-snapshots, root boards first")
+    (t/is (= [(first boards) child nested]
+             (ask/snapshot-candidates [nested child (first boards)] []))
+          "then direct children of the root, then the rest")
+    (t/testing "pending snapshots use up the room and are not rendered again"
+      (let [pending [{:node-id (str (:id (first boards))) :snapshot-png "PNG"}
+                     {:node-id (str (:id (second boards))) :snapshot-png "PNG"}
+                     {:node-id (str (:id nested))}]]
+        (t/is (= [(nth boards 2) (nth boards 3)]
+                 (ask/snapshot-candidates shapes pending)))))
+    (t/is (= [] (ask/snapshot-candidates shapes (mapv (fn [b] {:node-id (str (:id b)) :snapshot-png "P"})
+                                                      boards))))))
+
+(t/deftest ^:async render-snapshots-stores-pngs-in-pending-attachments
+  (let [board    (get objects board-id)
+        rect     (get objects rect-id)
+        group    (get objects group-id)
+        render   (fn [shape] (when-not (= :group (:type shape)) (str "PNG-" (:name shape))))
+        pending  [{:kind "node" :node-id (str board-id)}
+                  {:kind "node" :node-id (str group-id)}]
+        state0   (state :chat (assoc chat/empty-chat :attachments pending))
+        events   (atom [])]
+    (await (async/observe (ask/render-snapshots [board rect group] render :async)
+                          :on-next #(swap! events conj %)))
+    (t/is (= 2 (count @events)) "a shape whose render fails sends no event")
+    (let [chat (:penforge (reduce #(ptk/update %2 %1) state0 @events))]
+      (t/is (= [{:kind "node" :node-id (str board-id) :snapshot-png "PNG-Login"}
+                {:kind "node" :node-id (str group-id)}]
+               (get-in chat [:chat :attachments]))
+            "only pending attachments get a snapshot"))))
+
+(t/deftest ^:async render-snapshots-without-renderer-or-shapes-is-empty
+  (let [events (atom [])]
+    (await (async/observe (ask/render-snapshots [(get objects board-id)] nil :async)
+                          :on-next #(swap! events conj %)))
+    (await (async/observe (ask/render-snapshots [] (constantly "PNG") :async)
+                          :on-next #(swap! events conj %)))
+    (t/is (empty? @events))))
 
 (t/deftest ask-action-is-registered
   (let [registry @actions/registry
