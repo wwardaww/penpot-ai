@@ -578,6 +578,11 @@ export interface ColorShapeInfoEntry {
  */
 export interface Comment {
   /**
+   * The `id` of the comment (UUID string).
+   */
+  readonly id: string;
+
+  /**
    * The `user` that has created the comment.
    */
   readonly user: User;
@@ -605,10 +610,37 @@ export interface Comment {
  */
 export interface CommentThread {
   /**
+   * The `id` of the comment thread (UUID string). Use it with
+   * {@link Page.findCommentThreadById} to get the thread again.
+   */
+  readonly id: string;
+
+  /**
+   * The `id` of the page that holds the thread.
+   */
+  readonly pageId: string;
+
+  /**
    * This is the number that is displayed on the workspace. Is an increasing
    * sequence for each comment.
    */
   readonly seqNumber: number;
+
+  /**
+   * The `id` of the shape the thread points at: the deepest visible shape
+   * under `position`, searched inside `board` when the board still holds the
+   * point, else in the whole page. Groups are never returned (their children
+   * are); boolean shapes are returned whole. It is the board itself when no
+   * child is under the point, and `null` when no shape is there or the page
+   * is not loaded. Computed on each read from the current page content.
+   *
+   * @example
+   * ```js
+   * const [thread] = await penpot.currentPage.findCommentThreads();
+   * const shape = thread.nodeId && penpot.currentPage.getShapeById(thread.nodeId);
+   * ```
+   */
+  readonly nodeId: string | null;
 
   /**
    * If the thread is attached to a `board` this will have that board
@@ -3644,17 +3676,39 @@ export interface Page extends PluginData {
   removeCommentThread(commentThread: CommentThread): Promise<void>;
 
   /**
-   * Find all the comments that match the criteria.
+   * Find the comment threads of this page that match the criteria.
+   * Threads on other pages of the file are not returned.
    * - `onlyYours`: if `true` will return the threads where the current
-   *                user has engaged.
+   *                user has engaged. Defaults to `false`.
    * - `showResolved`: by default resolved comments will be hidden. If `true`
-   *                   the resolved will be returned.
+   *                   the resolved will be returned. Defaults to `false`.
    * Requires the `comment:read` or `comment:write` permission.
+   *
+   * @example
+   * ```js
+   * const open = await penpot.currentPage.findCommentThreads();
+   * const all = await penpot.currentPage.findCommentThreads({ showResolved: true });
+   * ```
    */
   findCommentThreads(criteria?: {
-    onlyYours: boolean;
-    showResolved: boolean;
+    onlyYours?: boolean;
+    showResolved?: boolean;
   }): Promise<CommentThread[]>;
+
+  /**
+   * Find the comment thread of this page with the given `id`, resolved or not.
+   * Returns `null` when no thread of this page has that id.
+   * Requires the `comment:read` or `comment:write` permission.
+   *
+   * @param id the thread id ({@link CommentThread.id})
+   *
+   * @example
+   * ```js
+   * const thread = await penpot.currentPage.findCommentThreadById(id);
+   * if (thread) thread.resolved = true;
+   * ```
+   */
+  findCommentThreadById(id: string): Promise<CommentThread | null>;
 }
 
 /**

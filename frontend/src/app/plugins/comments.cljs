@@ -6,8 +6,13 @@
 
 (ns app.plugins.comments
   (:require
+   [app.common.data :as d]
+   [app.common.files.helpers :as cfh]
    [app.common.geom.point :as gpt]
+   [app.common.geom.shapes :as gsh]
    [app.common.schema :as sm]
+   [app.common.types.shape-tree :as ctst]
+   [app.common.uuid :as uuid]
    [app.main.data.comments :as dc]
    [app.main.data.workspace.comments :as dwc]
    [app.main.repo :as rp]
@@ -21,6 +26,60 @@
    [app.plugins.utils :as u]
    [app.util.object :as obj]
    [beicon.v2.core :as rx]))
+
+(defn- clips-content?
+  [shape]
+  (and (cfh/frame-shape? shape)
+       (not (cfh/root? shape))
+       (not (:show-content shape))))
+
+(defn- get-top-shape-id-at
+  "Returns the id of the top-most visible shape under `position` inside the
+  subtree of `shape` (the shape included), or nil. Children are visited from
+  top to bottom, hidden subtrees are skipped and boards that clip their
+  content only take points inside them. Groups have no paint of their own and
+  are never returned; boolean shapes are returned whole."
+  [objects shape position]
+  (when-not (:hidden shape)
+    (let [inside? (and (not (cfh/root? shape))
+                       (gsh/has-point? shape position))]
+      (when (or inside? (not (clips-content? shape)))
+        (if (cfh/bool-shape? shape)
+          (when inside? (:id shape))
+          (or (->> (:shapes shape)
+                   (keep (d/getf objects))
+                   (ctst/sort-z-index-objects objects)
+                   (some #(get-top-shape-id-at objects % position)))
+              (when (and inside? (not (cfh/group-shape? shape)))
+                (:id shape))))))))
+
+(defn- reachable-at?
+  "Checks that no ancestor of `shape` hides it or clips it away at `position`."
+  [objects shape position]
+  (->> (cfh/get-parent-ids objects (:id shape))
+       (keep (d/getf objects))
+       (not-any? (fn [ancestor]
+                   (or (:hidden ancestor)
+                       (and (clips-content? ancestor)
+                            (not (gsh/has-point? ancestor position))))))))
+
+(defn get-thread-node-id
+  "Returns the id of the deepest visible shape under the thread `position`
+  (absolute point) in the page `objects`. The search runs inside the thread
+  board `frame-id` when that board still exists and holds the point, else in
+  the whole page. Returns nil when no shape is there."
+  [objects frame-id position]
+  (let [position (gpt/point position)
+        board    (get objects frame-id)
+        start    (if (and (some? board)
+                          (not (cfh/root? board))
+                          (not (:hidden board))
+                          (gsh/has-point? board position)
+                          (reachable-at? objects board position))
+                   board
+                   (get objects uuid/zero))]
+    (when (some? start)
+      (get-top-shape-id-at objects start position))))
 
 (defn comment-proxy? [p]
   (obj/type-of? p "CommentProxy"))
@@ -37,6 +96,7 @@
       :$id {:enumerable false :get (fn [] (:id data))}
 
       ;; Public properties
+      :id {:get #(format/format-id (:id data))}
 
       ;; FIXME: inconsistent with comment-thread: owner
       :user
@@ -114,8 +174,19 @@
       :$id {:enumerable false :get (fn [] (:id data))}
 
       :page {:enumerable false :get #(u/locate-page file-id page-id)}
+      :id {:get #(format/format-id (:id data))}
+      :pageId {:get #(format/format-id page-id)}
       :seqNumber {:get #(:seqn data)}
       :board {:get #(shape/shape-proxy plugin-id file-id page-id (:frame-id data))}
+
+      :nodeId
+      {:get
+       (fn []
+         (let [{:keys [frame-id position]} @data*
+               objects (u/locate-objects file-id page-id)]
+           (when (and (some? objects) (some? position))
+             (some-> (get-thread-node-id objects frame-id position)
+                     (format/format-id)))))}
 
       :owner
       {:get #(when (r/check-permission plugin-id "user:read")
