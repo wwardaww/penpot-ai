@@ -10,8 +10,12 @@ import type {
     Text,
     VariantContainer,
 } from "@penpot/plugin-types";
+import { PenforgeApi } from "./penforge/PenforgeApi.ts";
 
 export class PenpotUtils {
+    /** Penforge typed-tool helpers (see `penforge/PenforgeApi.ts`). */
+    public static readonly penforge = PenforgeApi;
+
     /**
      * Generates an overview structure of the given shape,
      * providing its id, name and type, and recursively its children's attributes.
