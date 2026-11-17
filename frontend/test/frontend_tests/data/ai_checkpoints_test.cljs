@@ -81,14 +81,33 @@
              (reduce-run [{:type "error" :code "unknown-workflow" :message "Unknown workflow"}])))
     (t/is (= {:done false} (reduce-run [])))))
 
-(t/deftest actions-are-registered
-  (let [registry @actions/registry]
-    (t/is (some #(= :ai/undo-last (:id %)) (actions/get-actions registry :header {})))
-    (t/is (some #(= :ai/checkpoints (:id %)) (actions/get-actions registry :main-menu {})))
-    (t/is (some #(= :ai/undo-last (:id %)) (actions/get-actions registry :command-palette {})))
-    (t/is (false? (actions/enabled? (get registry :ai/undo-last) {})))
+(def ^:private team-id (uuid "6f1d2c3b-4a5e-4f60-8a71-9b2c3d4e5f60"))
+
+(defn- team-state
+  [can-edit]
+  {:current-team-id team-id
+   :teams {team-id {:id team-id :permissions {:can-edit can-edit}}}})
+
+(t/deftest can-edit-needs-edit-permission-and-a-writable-workspace
+  (t/is (true? (dac/can-edit? (team-state true))))
+  (t/is (false? (dac/can-edit? (team-state false))))
+  (t/is (false? (dac/can-edit? (assoc-in (team-state true) [:workspace-global :read-only?] true))))
+  (t/is (false? (dac/can-edit? {}))))
+
+(t/deftest actions-are-registered-for-editors-only
+  (let [registry @actions/registry
+        editor   (team-state true)
+        viewer   (team-state false)]
+    (t/is (some #(= :ai/undo-last (:id %)) (actions/get-actions registry :header editor)))
+    (t/is (some #(= :ai/checkpoints (:id %)) (actions/get-actions registry :main-menu editor)))
+    (t/is (some #(= :ai/undo-last (:id %)) (actions/get-actions registry :command-palette editor)))
+    (t/is (not-any? #(contains? #{:ai/undo-last :ai/checkpoints} (:id %))
+                    (concat (actions/get-actions registry :header viewer)
+                            (actions/get-actions registry :main-menu viewer)
+                            (actions/get-actions registry :command-palette viewer))))
+    (t/is (false? (actions/enabled? (get registry :ai/undo-last) editor)))
     (t/is (true? (actions/enabled? (get registry :ai/undo-last)
-                                   {:penforge {:connection {:status :connected}}})))))
+                                   (assoc editor :penforge {:connection {:status :connected}}))))))
 
 (t/deftest the-dialog-is-registered-as-a-modal
   (t/is (fn? (get @modal/components dac/modal-type))))
@@ -114,18 +133,28 @@
   (t/is (str/includes? (render-list (assoc dac/empty-state :status :loaded) true)
                        "penforge.checkpoints.empty")))
 
+(defn- render-items
+  [can-edit]
+  (rds/renderToStaticMarkup
+   (mf/element history/checkpoint-list*
+               #js {:checkpoints (dac/apply-listing dac/empty-state listing)
+                    :developer false
+                    :canEdit can-edit
+                    :connected true
+                    :fileId file-id})))
+
 (t/deftest the-list-renders-checkpoints
-  (let [state  (dac/apply-listing dac/empty-state listing)
-        markup (rds/renderToStaticMarkup
-                (mf/element history/checkpoint-list*
-                            #js {:checkpoints state
-                                 :developer false
-                                 :connected true
-                                 :fileId file-id}))]
+  (let [markup (render-items true)]
     (t/is (= 3 (count (re-seq #"data-testid=\"ai-checkpoint\"" markup))))
     (t/is (str/includes? markup "#3 · Before generating a login screen"))
     (t/is (str/includes? markup "#1 · Before fixing comments"))
+    (t/is (= 3 (count (re-seq #">penforge.checkpoints.restore<" markup))))
     (t/is (not (str/includes? markup "ai-checkpoint-diff")))))
+
+(t/deftest viewers-see-the-list-without-go-back
+  (let [markup (render-items false)]
+    (t/is (= 3 (count (re-seq #"data-testid=\"ai-checkpoint\"" markup))))
+    (t/is (not (str/includes? markup ">penforge.checkpoints.restore<")))))
 
 (t/deftest the-list-shows-the-diff-to-developers
   (let [diff   {:status :loaded
@@ -140,6 +169,7 @@
                 (mf/element history/checkpoint-list*
                             #js {:checkpoints state
                                  :developer true
+                                 :canEdit true
                                  :connected true
                                  :fileId file-id}))]
     (t/is (= 1 (count (re-seq #"data-testid=\"ai-checkpoint-diff\"" markup))))
@@ -167,7 +197,7 @@
          (let [markup (rds/renderToStaticMarkup (mf/element history/checkpoints-dialog* #js {}))]
            (t/is (str/includes? markup "ai-checkpoints-dialog"))
            (t/is (str/includes? markup "penforge.checkpoints.title"))
-           (t/is (str/includes? markup "penforge.checkpoints.create")))))
+           (t/is (str/includes? markup "penforge.checkpoints.intro")))))
       (finally
         (reset! st/state previous)
         (.close window)))))

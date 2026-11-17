@@ -43,12 +43,25 @@ export class Checkpoints {
 
     private static readonly WORKFLOW_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
+    /** Signs in git's output that a file was in use (Windows file locks, busy files). */
+    private static readonly FILE_IN_USE_PATTERN =
+        /unable to unlink|unable to create file|permission denied|resource busy|being used by another process|invalid argument/i;
+
     private readonly store: CheckpointStore;
     private readonly versions: PenpotVersions;
+    private readonly gitRepo: (dir: string) => GitRepo;
 
-    constructor(private readonly ctx: WorkflowContext) {
+    /**
+     * @param ctx - the workflow context
+     * @param options - `gitRepo` builds the git helper of a repository folder (tests)
+     */
+    constructor(
+        private readonly ctx: WorkflowContext,
+        options: { gitRepo?: (dir: string) => GitRepo } = {}
+    ) {
         this.store = new CheckpointStore(ctx.workspace);
         this.versions = new PenpotVersions(ctx.tools);
+        this.gitRepo = options.gitRepo ?? ((dir) => new GitRepo(dir));
     }
 
     /**
@@ -88,8 +101,11 @@ export class Checkpoints {
 
     /**
      * Restores a checkpoint: saves a checkpoint of the current state first (so the restore can be
-     * undone), restores the Penpot version, then resets both repositories (`git reset --hard`).
-     * Asks the user first unless `params.confirmed`.
+     * undone; its commits are the heads to roll back to), restores the Penpot version and waits
+     * for it, then resets both repositories (`git reset --hard`). Nothing in git changes when the
+     * design restore fails. When a git reset fails (a file in use on Windows), both repositories
+     * and the design go back to the safety checkpoint. Asks the user first unless
+     * `params.confirmed`.
      *
      * @param params - which checkpoint
      * @returns the result, or null when the user said no
@@ -132,8 +148,13 @@ export class Checkpoints {
                 : "skipped";
 
             this.progress("Restoring the code");
-            await this.repo("design").resetHard(checkpoint.designSha);
-            await this.repo("app-src").resetHard(checkpoint.appSha);
+            try {
+                await this.repo("design").resetHard(checkpoint.designSha);
+                await this.repo("app-src").resetHard(checkpoint.appSha);
+            } catch (error) {
+                const complete = await this.rollBack(safety, design === "restored");
+                throw new Error(Checkpoints.codeRestoreFailure(error, safety, complete));
+            }
 
             const restored = await this.store.update(checkpoint.id, { restoredAt: new Date().toISOString() });
             const result: CheckpointRestoreResult = { checkpoint: restored, safety, design };
@@ -150,7 +171,7 @@ export class Checkpoints {
     public static restoreSummary(result: CheckpointRestoreResult): string {
         const label = `“${result.checkpoint.label}”`;
         switch (result.design) {
-            case "restoring":
+            case "restored":
                 return `Went back to ${label}: design and code restored.`;
             case "missing":
                 return (
@@ -160,6 +181,50 @@ export class Checkpoints {
             default:
                 return `Went back to ${label}: code restored. No design version was saved with it.`;
         }
+    }
+
+    /**
+     * Puts both repositories and, when it was restored, the design back to the safety checkpoint.
+     *
+     * @returns true when everything went back
+     */
+    private async rollBack(safety: Checkpoint, designRestored: boolean): Promise<boolean> {
+        let complete = true;
+        for (const [repo, sha] of [
+            ["design", safety.designSha],
+            ["app-src", safety.appSha],
+        ] as [ProjectRepo, string][]) {
+            try {
+                await this.repo(repo).resetHard(sha);
+            } catch {
+                complete = false;
+            }
+        }
+        if (designRestored) {
+            try {
+                if (!safety.fileVersion || (await this.versions.restore(safety.fileVersion)) !== "restored") {
+                    complete = false;
+                }
+            } catch {
+                complete = false;
+            }
+        }
+        return complete;
+    }
+
+    /**
+     * Describes a failed code restore in plain words.
+     */
+    private static codeRestoreFailure(error: unknown, safety: Checkpoint, complete: boolean): string {
+        const detail = Checkpoints.describe(error);
+        const cause = Checkpoints.FILE_IN_USE_PATTERN.test(detail)
+            ? "A file of the project is in use (for example by the running app preview, a terminal " +
+              "or an editor), so the code could not be restored."
+            : `The code could not be restored (${detail.split("\n")[0].trim()}).`;
+        const state = complete
+            ? "Nothing was changed. Close the app preview or the program using the files and try again."
+            : `Some files could not be put back; checkpoint #${safety.n} holds the state from before.`;
+        return `${cause} ${state}`;
     }
 
     private async createLocked(label: string, workflow: string): Promise<Checkpoint> {
@@ -172,10 +237,7 @@ export class Checkpoints {
 
         let fileVersion: CheckpointFileVersion | null = null;
         try {
-            fileVersion = await this.versions.save(PenpotVersions.versionLabel(n, label));
-            if (fileVersion.fileId !== this.ctx.context.fileId) {
-                warnings.push("The design version was saved for another file than the one open in this tab.");
-            }
+            fileVersion = await this.versions.save(PenpotVersions.versionLabel(n, label), this.ctx.context.fileId);
         } catch (error) {
             warnings.push(`The design version could not be saved: ${Checkpoints.describe(error)}`);
         }
@@ -246,7 +308,7 @@ export class Checkpoints {
 
     private repo(repo: ProjectRepo): GitRepo {
         const workspace = this.ctx.workspace;
-        return new GitRepo(workspace.resolve(repo === "design" ? workspace.designDir : workspace.appSrcDir));
+        return this.gitRepo(workspace.resolve(repo === "design" ? workspace.designDir : workspace.appSrcDir));
     }
 
     private progress(text: string): void {

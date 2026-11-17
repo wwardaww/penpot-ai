@@ -1,10 +1,11 @@
 import type { WorkflowToolsApi } from "@penpot/mcp-common";
-import type { CheckpointFileVersion, DesignRestoreStatus } from "./types";
+import type { CheckpointFileVersion } from "./types";
 
 /** Reply of the restore code run in the plugin. */
 interface RestoreReply {
-    status: "restoring" | "missing" | "wrong-file";
+    status: "restored" | "missing" | "wrong-file" | "failed" | "timeout";
     fileId?: string | null;
+    error?: string;
 }
 
 /**
@@ -15,6 +16,9 @@ interface RestoreReply {
 export class PenpotVersions {
     /** Longest version label written to Penpot. */
     public static readonly MAX_LABEL_LENGTH = 120;
+
+    /** Longest wait for Penpot to restore a version (below the bridge's tool timeout). */
+    public static readonly RESTORE_TIMEOUT_MS = 60_000;
 
     /** Turns a JS value of the plugin's `createdAt` into an ISO string (runs in the plugin). */
     private static readonly TO_ISO = `const toIso = (value) => {
@@ -45,20 +49,28 @@ export class PenpotVersions {
      * Saves the open file as a new version.
      *
      * @param label - the version label
+     * @param fileId - the file the version must belong to (the tab's file)
      * @returns the saved version
-     * @throws Error if the plugin is not reachable or Penpot refused the version
+     * @throws Error if the plugin is not reachable, another file is open, or Penpot refused the
+     *     version
      */
-    public async save(label: string): Promise<CheckpointFileVersion> {
-        const reply = await this.run<{ fileId: string; fileName?: string; label: string; createdAt: string | null }>(
+    public async save(label: string, fileId: string): Promise<CheckpointFileVersion> {
+        const reply = await this.run<
+            | { status: "saved"; fileId: string; fileName?: string; label: string; createdAt: string | null }
+            | { status: "wrong-file"; fileId: string | null }
+        >(
             `${PenpotVersions.TO_ISO}
 const file = penpot.currentFile;
-if (!file) {
-    throw new Error("No file is open");
+if (!file || file.id !== ${JSON.stringify(fileId)}) {
+    return { status: "wrong-file", fileId: file ? file.id : null };
 }
 const version = await file.saveVersion(${JSON.stringify(label)});
-return { fileId: file.id, fileName: file.name, label: version.label, createdAt: toIso(version.createdAt) };`
+return { status: "saved", fileId: file.id, fileName: file.name, label: version.label, createdAt: toIso(version.createdAt) };`
         );
-        if (typeof reply?.fileId !== "string" || typeof reply.label !== "string") {
+        if (reply?.status === "wrong-file") {
+            throw new Error("the Penpot plugin has another file open than this tab");
+        }
+        if (reply?.status !== "saved" || typeof reply.fileId !== "string" || typeof reply.label !== "string") {
             throw new Error("Penpot did not report the saved version");
         }
         return {
@@ -70,14 +82,15 @@ return { fileId: file.id, fileName: file.name, label: version.label, createdAt: 
     }
 
     /**
-     * Starts restoring a version of the open file. The workspace reloads the file and closes the
-     * plugin, so the call does not wait for the restore to finish.
+     * Restores a version of the open file and waits until Penpot has replaced the file content
+     * (at most {@link RESTORE_TIMEOUT_MS}). The workspace then reloads the file.
      *
      * @param version - the version saved by {@link save}
-     * @returns `restoring`, or `missing` when the version is gone (deleted or renamed in Penpot)
-     * @throws Error if another file is open or the plugin is not reachable
+     * @returns `restored`, or `missing` when the version is gone (deleted or renamed in Penpot)
+     * @throws Error if another file is open, the plugin is not reachable, Penpot refused the
+     *     restore or did not answer in time
      */
-    public async restore(version: CheckpointFileVersion): Promise<Exclude<DesignRestoreStatus, "skipped">> {
+    public async restore(version: CheckpointFileVersion): Promise<"restored" | "missing"> {
         const reply = await this.run<RestoreReply>(
             `${PenpotVersions.TO_ISO}
 const file = penpot.currentFile;
@@ -93,18 +106,28 @@ const version =
 if (!version) {
     return { status: "missing" };
 }
-const restoring = version.restore();
-if (restoring && typeof restoring.catch === "function") {
-    restoring.catch(() => undefined);
-}
-return { status: "restoring" };`
+let timer;
+const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve({ status: "timeout" }), ${PenpotVersions.RESTORE_TIMEOUT_MS});
+});
+const restoring = Promise.resolve(version.restore()).then(
+    () => ({ status: "restored" }),
+    (error) => ({ status: "failed", error: error && error.message ? error.message : String(error) })
+);
+const result = await Promise.race([restoring, timeout]);
+clearTimeout(timer);
+return result;`
         );
         switch (reply?.status) {
-            case "restoring":
+            case "restored":
             case "missing":
                 return reply.status;
             case "wrong-file":
                 throw new Error("The checkpoint belongs to another Penpot file; open that file to restore it");
+            case "failed":
+                throw new Error(`Penpot could not restore the design version: ${reply.error ?? "unknown error"}`);
+            case "timeout":
+                throw new Error("Penpot did not finish restoring the design version in time");
             default:
                 throw new Error("Penpot did not report the restore");
         }

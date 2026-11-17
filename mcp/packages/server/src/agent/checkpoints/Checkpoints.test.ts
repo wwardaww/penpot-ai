@@ -16,6 +16,7 @@ import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import { WorkflowRegistry } from "../workflows/WorkflowRegistry";
 import { workflow as restoreWorkflow } from "../workflows/checkpoint-restore";
 import { Checkpoints, ensureCheckpoint } from "./Checkpoints";
+import { GitRepo } from "./GitRepo";
 import { CheckpointStore } from "./CheckpointStore";
 import type { Checkpoint } from "./types";
 
@@ -32,6 +33,8 @@ class FakePenpot implements WorkflowToolsApi {
     public connected = true;
     public readonly versions: { label: string; createdAt: string; design: string }[] = [];
     public restores = 0;
+    /** error Penpot reports for the next restores, if any */
+    public restoreError: string | null = null;
 
     public async call(toolName: string, args: Record<string, unknown> = {}): Promise<WorkflowToolResult> {
         if (!this.connected) {
@@ -39,26 +42,29 @@ class FakePenpot implements WorkflowToolsApi {
         }
         assert.equal(toolName, "execute_code");
         const code = String(args.code);
+        const wanted = /file\.id !== ("[^"]*")/.exec(code);
+        if (!wanted || JSON.parse(wanted[1]) !== this.fileId) {
+            return FakePenpot.reply({ status: "wrong-file", fileId: this.fileId });
+        }
         const save = /saveVersion\(("(?:[^"\\]|\\.)*")\)/.exec(code);
         if (save) {
             const label = JSON.parse(save[1]) as string;
             const createdAt = new Date(Date.UTC(2026, 10, 17, 12, 0, this.versions.length)).toISOString();
             this.versions.push({ label, createdAt, design: this.design });
-            return FakePenpot.reply({ fileId: this.fileId, fileName: "Shop", label, createdAt });
+            return FakePenpot.reply({ status: "saved", fileId: this.fileId, fileName: "Shop", label, createdAt });
         }
         const restore = /const label = ("(?:[^"\\]|\\.)*");/.exec(code);
         if (restore) {
-            const wanted = /file\.id !== ("[^"]*")/.exec(code);
-            if (!wanted || JSON.parse(wanted[1]) !== this.fileId) {
-                return FakePenpot.reply({ status: "wrong-file", fileId: this.fileId });
-            }
             const version = this.versions.find((candidate) => candidate.label === JSON.parse(restore[1]));
             if (!version) {
                 return FakePenpot.reply({ status: "missing" });
             }
+            if (this.restoreError) {
+                return FakePenpot.reply({ status: "failed", error: this.restoreError });
+            }
             this.design = version.design;
             this.restores++;
-            return FakePenpot.reply({ status: "restoring" });
+            return FakePenpot.reply({ status: "restored" });
         }
         throw new Error(`Unexpected code: ${code}`);
     }
@@ -199,7 +205,7 @@ test("restore brings back the design and the code, after saving a safety checkpo
     const result = await checkpoints.restore({ id: before.id, confirmed: true });
 
     assert.ok(result);
-    assert.equal(result.design, "restoring");
+    assert.equal(result.design, "restored");
     assert.equal(penpot.design, "design v1");
     assert.equal(readFileSync(join(workspace.appSrcDir, "index.html"), "utf8"), "<h1>v1</h1>");
     assert.equal(existsSync(join(workspace.appSrcDir, "extra.js")), false);
@@ -210,10 +216,75 @@ test("restore brings back the design and the code, after saving a safety checkpo
 
     // the restore itself can be undone with the safety checkpoint
     const back = await checkpoints.restore({ id: result.safety.id, confirmed: true });
-    assert.equal(back?.design, "restoring");
+    assert.equal(back?.design, "restored");
     assert.equal(penpot.design, "design v2");
     assert.equal(readFileSync(join(workspace.appSrcDir, "late.js"), "utf8"), "not committed");
     assert.equal(readFileSync(join(workspace.designDir, "DESIGN.md"), "utf8"), "# changed");
+});
+
+test("restore leaves the code alone when Penpot refuses the design restore", async () => {
+    writeFileSync(join(workspace.appSrcDir, "index.html"), "<h1>v1</h1>");
+    const { ctx } = makeContext();
+    const checkpoint = await new Checkpoints(ctx).create({ label: "Before generate" });
+    penpot.design = "design v2";
+    writeFileSync(join(workspace.appSrcDir, "index.html"), "<h1>v2</h1>");
+    penpot.restoreError = "no edit permission";
+
+    await assert.rejects(
+        new Checkpoints(ctx).restore({ id: checkpoint.id, confirmed: true }),
+        /could not restore the design version: no edit permission/
+    );
+
+    assert.equal(penpot.design, "design v2");
+    assert.equal(readFileSync(join(workspace.appSrcDir, "index.html"), "utf8"), "<h1>v2</h1>");
+    assert.equal((await new CheckpointStore(workspace).get(checkpoint.id))?.restoredAt, undefined);
+});
+
+test("restore rolls the design and both repos back when a file is in use", async () => {
+    writeFileSync(join(workspace.appSrcDir, "index.html"), "<h1>v1</h1>");
+    writeFileSync(join(workspace.designDir, "DESIGN.md"), "# v1");
+    const { ctx } = makeContext();
+    const checkpoint = await new Checkpoints(ctx).create({ label: "Before build" });
+    penpot.design = "design v2";
+    writeFileSync(join(workspace.appSrcDir, "index.html"), "<h1>v2</h1>");
+    writeFileSync(join(workspace.designDir, "DESIGN.md"), "# v2");
+    let locked = false;
+    const gitRepo = (dir: string) =>
+        new (class extends GitRepo {
+            public override async resetHard(sha: string): Promise<void> {
+                if (dir === workspace.appSrcDir && !locked) {
+                    locked = true;
+                    throw new Error("error: unable to unlink old 'index.html': Invalid argument");
+                }
+                await super.resetHard(sha);
+            }
+        })(dir);
+
+    await assert.rejects(
+        new Checkpoints(ctx, { gitRepo }).restore({ id: checkpoint.id, confirmed: true }),
+        /in use .*Nothing was changed/
+    );
+
+    assert.equal(penpot.design, "design v2");
+    assert.equal(readFileSync(join(workspace.designDir, "DESIGN.md"), "utf8"), "# v2");
+    assert.equal(readFileSync(join(workspace.appSrcDir, "index.html"), "utf8"), "<h1>v2</h1>");
+    assert.equal((await new CheckpointStore(workspace).get(checkpoint.id))?.restoredAt, undefined);
+});
+
+test("a plugin on another file gives a code-only checkpoint that still restores the code", async () => {
+    writeFileSync(join(workspace.appSrcDir, "index.html"), "<h1>v1</h1>");
+    penpot.fileId = "plugin-on-another-file";
+    const { ctx } = makeContext();
+
+    const checkpoint = await new Checkpoints(ctx).create({ label: "Before tidy" });
+    assert.equal(checkpoint.fileVersion, null);
+    assert.match(checkpoint.warnings?.[0] ?? "", /another file open/);
+    assert.equal(penpot.versions.length, 0);
+
+    writeFileSync(join(workspace.appSrcDir, "index.html"), "<h1>v2</h1>");
+    const result = await new Checkpoints(ctx).restore({ id: checkpoint.id, confirmed: true });
+    assert.equal(result?.design, "skipped");
+    assert.equal(readFileSync(join(workspace.appSrcDir, "index.html"), "utf8"), "<h1>v1</h1>");
 });
 
 test("restore asks first and changes nothing when the user says no", async () => {

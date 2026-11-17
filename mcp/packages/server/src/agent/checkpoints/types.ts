@@ -61,7 +61,7 @@ export interface CheckpointRestoreParams {
 }
 
 /** What happened to the design during a restore. */
-export type DesignRestoreStatus = "restoring" | "skipped" | "missing";
+export type DesignRestoreStatus = "restored" | "skipped" | "missing";
 
 /** Result of a restore. */
 export interface CheckpointRestoreResult {

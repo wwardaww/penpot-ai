@@ -10433,6 +10433,10 @@ msgid "penforge.checkpoints.manual-label"
 msgstr "Saved by hand"
 
 #: src/app/main/ui/workspace/ai/checkpoints/history.cljs, src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.no-edit-rights"
+msgstr "Only people who can edit this file can go back to a checkpoint."
+
+#: src/app/main/ui/workspace/ai/checkpoints/history.cljs, src/app/main/data/ai/actions/checkpoints.cljs
 msgid "penforge.checkpoints.not-connected"
 msgstr "Connect the Penforge agent to use the AI history."
 

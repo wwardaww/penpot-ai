@@ -23,6 +23,7 @@
    [app.main.data.ai.chat :as chat]
    [app.main.data.ai.client :as client]
    [app.main.data.ai.protocol :as proto]
+   [app.main.data.helpers :as dsh]
    [app.main.data.modal :as modal]
    [app.main.data.notifications :as ntf]
    [app.main.store :as st]
@@ -107,6 +108,27 @@
   [state]
   (= :connected (get-in state [:penforge :connection :status])))
 
+(defn can-edit?
+  "Whether the profile may change the open file. Going back resets the
+  design and the project's `design/` and `app-src/` repos, so viewers
+  may not do it."
+  [state]
+  (boolean
+   (and (get-in (dsh/lookup-team state) [:permissions :can-edit])
+        (not (get-in state [:workspace-global :read-only?])))))
+
+(defn- allowed?
+  "Whether a change (save, go back) may start now."
+  [state]
+  (and (connected? state) (can-edit? state)))
+
+(defn- refusal
+  "Toast that tells why a change may not start, or nil."
+  [state]
+  (cond
+    (not (can-edit? state))  (ntf/error (tr "penforge.checkpoints.no-edit-rights"))
+    (not (connected? state)) (ntf/error (tr "penforge.checkpoints.not-connected"))))
+
 (defn- update-checkpoints
   [state f & args]
   (apply update-in state state-path (fnil f empty-state) args))
@@ -126,10 +148,6 @@
 (defn- outcome?
   [value]
   (and (map? value) (contains? value :done)))
-
-(defn- not-connected-error
-  []
-  (ntf/error (tr "penforge.checkpoints.not-connected")))
 
 (defn- checkpoints-loaded
   [listing]
@@ -208,19 +226,19 @@
   (ptk/reify ::restore-checkpoint
     ptk/UpdateEvent
     (update [_ state]
-      (if (connected? state)
+      (if (allowed? state)
         (update-checkpoints state assoc :busy id)
         state))
 
     ptk/WatchEvent
     (watch [_ state stream]
-      (if (connected? state)
+      (if-let [refused (refusal state)]
+        (rx/of refused)
         (->> (run-silent stream "checkpoint-restore" {:id id :confirmed true})
              (rx/mapcat (fn [value]
                           (if (outcome? value)
                             (restore-finished value)
-                            (rx/of value)))))
-        (rx/of (not-connected-error))))))
+                            (rx/of value)))))))))
 
 (defn- confirm-undo
   [checkpoint]
@@ -240,7 +258,8 @@
   (ptk/reify ::undo-last
     ptk/WatchEvent
     (watch [_ state stream]
-      (if (connected? state)
+      (if-let [refused (refusal state)]
+        (rx/of refused)
         (let [file-id (:current-file-id state)]
           (->> (run-silent stream "checkpoint-list" {})
                (rx/mapcat
@@ -263,8 +282,7 @@
                                                      (get-in target [:file-version :file-id]))))
 
                                    :else
-                                   (confirm-undo target)))))))))))
-        (rx/of (not-connected-error))))))
+                                   (confirm-undo target)))))))))))))))
 
 (defn create-checkpoint
   "Save a checkpoint by hand."
@@ -272,13 +290,14 @@
   (ptk/reify ::create-checkpoint
     ptk/UpdateEvent
     (update [_ state]
-      (if (connected? state)
+      (if (allowed? state)
         (update-checkpoints state assoc :busy :create)
         state))
 
     ptk/WatchEvent
     (watch [_ state stream]
-      (if (connected? state)
+      (if-let [refused (refusal state)]
+        (rx/of refused)
         (->> (run-silent stream "checkpoint-create"
                          {:label (tr "penforge.checkpoints.manual-label")
                           :workflow "manual"})
@@ -290,8 +309,7 @@
                          (if (:ok value)
                            (ntf/success (tr "penforge.checkpoints.created"))
                            (ntf/error (tr "penforge.checkpoints.create-failed")))
-                         (fetch-checkpoints))))))
-        (rx/of (not-connected-error))))))
+                         (fetch-checkpoints))))))))))
 
 (defn- set-diff
   [id diff]
@@ -345,6 +363,7 @@
   :icon i/history
   :order 80
   :scopes #{:main-menu :command-palette}
+  :visible? can-edit?
   :run (fn [_] (st/emit! (open-history)))})
 
 (actions/register-action!
@@ -353,5 +372,6 @@
   :icon i/arrow-left
   :order 81
   :scopes #{:header :main-menu :command-palette}
+  :visible? can-edit?
   :enabled? connected?
   :run (fn [_] (st/emit! (undo-last)))})

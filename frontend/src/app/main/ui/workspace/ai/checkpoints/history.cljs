@@ -36,6 +36,9 @@
 (def ^:private ref:file-id
   (l/derived :current-file-id st/state))
 
+(def ^:private ref:can-edit
+  (l/derived dac/can-edit? st/state))
+
 (defn- format-date
   [at]
   (when-let [date (ct/inst at)]
@@ -98,7 +101,7 @@
 
 (mf/defc checkpoint-item*
   {::mf/private true}
-  [{:keys [checkpoint developer file-id busy connected undo-target diff
+  [{:keys [checkpoint developer can-edit file-id busy connected undo-target diff
            confirming on-confirm on-cancel]}]
   (let [{:keys [id n label workflow at restored-at]} checkpoint
         other-file (dac/other-file? checkpoint file-id)
@@ -156,14 +159,15 @@
           (if (some? diff)
             (tr "penforge.checkpoints.compare.hide")
             (tr "penforge.checkpoints.compare"))])
-       [:> button* {:variant "secondary"
-                    :disabled (or disabled confirming)
-                    :on-click on-ask}
-        (if restoring
-          (tr "penforge.checkpoints.restoring")
-          (tr "penforge.checkpoints.restore"))]]]
+       (when can-edit
+         [:> button* {:variant "secondary"
+                      :disabled (or disabled confirming)
+                      :on-click on-ask}
+          (if restoring
+            (tr "penforge.checkpoints.restoring")
+            (tr "penforge.checkpoints.restore"))])]]
 
-     (when confirming
+     (when (and can-edit confirming)
        [:div {:class (stl/css :confirm)
               :role "alert"}
         [:> text* {:as "p" :typography t/body-small}
@@ -180,7 +184,7 @@
        [:> checkpoint-diff* {:checkpoint checkpoint :diff diff}])]))
 
 (mf/defc checkpoint-list*
-  [{:keys [checkpoints developer file-id connected]}]
+  [{:keys [checkpoints developer can-edit file-id connected]}]
   (let [confirming* (mf/use-state nil)
         confirming  (deref confirming*)
 
@@ -217,6 +221,7 @@
            [:> checkpoint-item* {:key id
                                  :checkpoint checkpoint
                                  :developer developer
+                                 :can-edit can-edit
                                  :file-id file-id
                                  :busy busy
                                  :connected connected
@@ -236,6 +241,7 @@
         persona     (mf/deref ref:persona)
         connected   (mf/deref ref:connected)
         file-id     (mf/deref ref:file-id)
+        can-edit    (mf/deref ref:can-edit)
         busy        (:busy checkpoints)
 
         on-close
@@ -264,13 +270,16 @@
        (tr "penforge.checkpoints.intro")]
 
       [:div {:class (stl/css :toolbar)}
-       [:> button* {:variant "secondary"
-                    :icon i/add
-                    :disabled (or (not connected) (some? busy))
-                    :on-click on-create}
-        (if (= busy :create)
-          (tr "penforge.checkpoints.creating")
-          (tr "penforge.checkpoints.create"))]
+       (if can-edit
+         [:> button* {:variant "secondary"
+                      :icon i/add
+                      :disabled (or (not connected) (some? busy))
+                      :on-click on-create}
+          (if (= busy :create)
+            (tr "penforge.checkpoints.creating")
+            (tr "penforge.checkpoints.create"))]
+         [:> text* {:as "p" :typography t/body-small :class (stl/css :muted)}
+          (tr "penforge.checkpoints.no-edit-rights")])
        [:> icon-button* {:variant "ghost"
                          :icon i/reload
                          :disabled (not connected)
@@ -280,5 +289,6 @@
       [:div {:class (stl/css :modal-content)}
        [:> checkpoint-list* {:checkpoints checkpoints
                              :developer (= persona :developer)
+                             :can-edit can-edit
                              :file-id file-id
                              :connected connected}]]]]))
