@@ -1005,6 +1005,8 @@ function run-devenv {
     fi
 
     pull-devenv-if-not-exists
+    # Penforge: per-machine trusted TLS cert mounted by docker-compose.main.yml.
+    ./scripts/penforge-devenv-tls
     ensure-devenv-network
     ensure-infra-up
 

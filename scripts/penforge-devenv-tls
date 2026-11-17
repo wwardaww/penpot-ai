@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Penforge: make sure the devenv has a per-machine TLS certificate for
+# https://localhost:3449.
+#
+# Creates (once) a local CA that is name-constrained to localhost,
+# 127.0.0.1 and ::1, and a server certificate signed by it. The CA private
+# key never leaves this machine (the folder is git-ignored). The server
+# certificate is renewed automatically when it expires within 30 days.
+#
+# Usage: scripts/penforge-devenv-tls [--force]
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DIR="$ROOT/docker/devenv/files/local-tls"
+FORCE=false
+[[ "${1:-}" == "--force" ]] && FORCE=true
+
+if ! command -v openssl >/dev/null 2>&1; then
+    echo "[penforge-tls] openssl not found; install it to get a trusted HTTPS devenv." >&2
+    exit 1
+fi
+
+mkdir -p "$DIR"
+cd "$DIR"
+
+new_ca=false
+
+if [[ "$FORCE" == "true" || ! -f ca.key || ! -f ca.crt ]]; then
+    cat > ca.cnf <<'EOF'
+[req]
+distinguished_name=dn
+x509_extensions=v3_ca
+prompt=no
+[dn]
+CN=Penforge Local Dev CA (localhost only)
+O=Penforge Local
+[v3_ca]
+basicConstraints=critical,CA:TRUE,pathlen:0
+keyUsage=critical,keyCertSign,cRLSign
+nameConstraints=critical,permitted;DNS:localhost,permitted;IP:127.0.0.1/255.255.255.255,permitted;IP:0:0:0:0:0:0:0:1/FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF
+subjectKeyIdentifier=hash
+EOF
+    MSYS_NO_PATHCONV=1 openssl req -x509 -newkey rsa:3072 -nodes \
+        -keyout ca.key -out ca.crt -days 3650 -config ca.cnf 2>/dev/null
+    chmod 600 ca.key
+    new_ca=true
+    echo "[penforge-tls] created local CA: $DIR/ca.crt"
+fi
+
+renew_leaf=false
+if [[ "$new_ca" == "true" || ! -f localhost.key || ! -f localhost.crt ]]; then
+    renew_leaf=true
+elif ! openssl x509 -checkend $((30 * 24 * 3600)) -noout -in localhost.crt >/dev/null 2>&1; then
+    renew_leaf=true
+elif ! openssl verify -CAfile ca.crt localhost.crt >/dev/null 2>&1; then
+    renew_leaf=true
+fi
+
+if [[ "$renew_leaf" == "true" ]]; then
+    cat > leaf.cnf <<'EOF'
+basicConstraints=critical,CA:FALSE
+keyUsage=critical,digitalSignature,keyEncipherment
+extendedKeyUsage=serverAuth
+subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1
+authorityKeyIdentifier=keyid
+subjectKeyIdentifier=hash
+EOF
+    MSYS_NO_PATHCONV=1 openssl req -newkey rsa:2048 -nodes \
+        -keyout localhost.key -out localhost.csr \
+        -subj "/CN=localhost/O=Penforge Local" 2>/dev/null
+    MSYS_NO_PATHCONV=1 openssl x509 -req -in localhost.csr -CA ca.crt -CAkey ca.key \
+        -CAcreateserial -out localhost.crt -days 397 -sha256 -extfile leaf.cnf 2>/dev/null
+    cat localhost.crt ca.crt > localhost-fullchain.crt
+    # The container reads the key as another user.
+    chmod 644 localhost.key localhost-fullchain.crt
+    rm -f localhost.csr ca.srl
+    echo "[penforge-tls] issued localhost certificate (valid 397 days)"
+fi
+
+if [[ "$new_ca" == "true" ]]; then
+    win_path=""
+    if command -v wslpath >/dev/null 2>&1; then
+        win_path="$(wslpath -w "$DIR/ca.crt" 2>/dev/null || true)"
+    fi
+    cat <<EOF
+
+[penforge-tls] Trust the local CA once so browsers show https://localhost:3449
+as secure. It can only sign certificates for localhost/127.0.0.1/::1.
+
+  Windows (PowerShell, no admin):
+    Import-Certificate -FilePath "${win_path:-<path-to>\\ca.crt}" -CertStoreLocation Cert:\\CurrentUser\\Root
+  macOS:
+    security add-trusted-cert -r trustRoot -k ~/Library/Keychains/login.keychain-db "$DIR/ca.crt"
+  Linux (system + Chrome/Firefox via NSS):
+    sudo cp "$DIR/ca.crt" /usr/local/share/ca-certificates/penforge-local-ca.crt && sudo update-ca-certificates
+
+Then restart the browser. Plain http://localhost:3450 works without this.
+
+EOF
+fi
