@@ -1,7 +1,15 @@
+import { getPluginRuntimeFailure } from './ses-guard.js';
+
 let isLockedDown = false;
 
 export const ses = {
   hardenIntrinsics: () => {
+    const failure = getPluginRuntimeFailure();
+    if (failure !== null) {
+      throw new Error('Plugin system is disabled: SES failed to initialize', {
+        cause: failure,
+      });
+    }
     if (!isLockedDown) {
       isLockedDown = true;
       hardenIntrinsics();

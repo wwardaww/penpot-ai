@@ -8,14 +8,17 @@ import {
   ɵunloadPlugin,
 } from './lib/load-plugin.js';
 
+import { safeRepairIntrinsics } from './lib/ses-guard.js';
+
 // Export the plugin error checker so the frontend can identify plugin errors
 export { isPluginError } from './lib/create-sandbox.js';
+export { isPluginRuntimeAvailable } from './lib/ses-guard.js';
 
 import type { Context } from '@penpot/plugin-types';
 
 console.log('%c[PLUGINS] Loading plugin system', 'color: #008d7c');
 
-repairIntrinsics({
+safeRepairIntrinsics({
   evalTaming: 'unsafeEval',
   stackFiltering: 'verbose',
   errorTaming: 'unsafe',
