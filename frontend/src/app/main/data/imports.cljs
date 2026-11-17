@@ -18,6 +18,7 @@
    [app.common.logging :as log]
    [app.common.schema :as sm]
    [app.common.uuid :as uuid]
+   [app.config :as cf]
    [app.main.data.jobs :as dj]
    [app.main.data.uploads :as uploads]
    [app.main.repo :as rp]
@@ -75,6 +76,22 @@
       "120 113 3 4" "application/zip"
       "1 13 32 206" "application/octet-stream"
       "other")))
+
+(defn fig-enabled?
+  "Whether `.fig` files can be imported: a Penforge addition, behind the
+  `:ai` flag."
+  []
+  (contains? cf/flags :ai))
+
+(defn- fig-canvas?
+  "Whether the first bytes are the prelude of a bare Figma `canvas.fig`
+  (`fig-kiwi`, or the FigJam and Slides kinds the server refuses with
+  its own message)."
+  [ba]
+  (and (>= (.-byteLength ba) 8)
+       (let [u8      (js/Uint8Array. ba 0 8)
+             prelude (apply str (map #(js/String.fromCharCode (aget u8 %)) (range 8)))]
+         (contains? #{"fig-kiwi" "fig-jam." "fig-deck"} prelude))))
 
 (def ^:private schema:manifest
   [:map {:title "Manifest"}
@@ -231,12 +248,28 @@
                      (fn [body]
                        (let [mtype (parse-mtype body)]
                          (cond
+                           (and (fig-enabled?) (fig-canvas? body))
+                           (rx/of (assoc file :type :fig :container-size size))
+
                            (= "application/zip" mtype)
                            (let [zip-reader (uz/reader body)]
-                             (->> (read-zip-manifest zip-reader)
+                             (->> (if (fig-enabled?)
+                                    (rx/from (uz/get-entry zip-reader "canvas.fig"))
+                                    (rx/of nil))
+                                  (rx/merge-map
+                                   (fn [canvas]
+                                     ;; a saved Figma file is a zip with a
+                                     ;; `canvas.fig` and no manifest
+                                     (if (some? canvas)
+                                       (rx/of (assoc file :type :fig :container-size size))
+                                       (read-zip-manifest zip-reader))))
                                   (rx/merge-map
                                    (fn [manifest]
-                                     (if (= (:type manifest) "penpot/export-files")
+                                     (cond
+                                       (= :fig (:type manifest))
+                                       (rx/of manifest)
+
+                                       (= (:type manifest) "penpot/export-files")
                                        (->> (rx/from (uz/get-entries zip-reader))
                                             (rx/mapcat file-sizes)
                                             (rx/map (fn [sizes]
@@ -245,6 +278,8 @@
                                                           (assoc :container-size size)
                                                           (assoc :files (:files (decode-manifest manifest)))
                                                           (assoc :sizes sizes)))))
+
+                                       :else
                                        (rx/of (assoc file :type :unknown)))))
                                   (rx/finalize (partial uz/close zip-reader))))
 
@@ -256,6 +291,14 @@
                     (rx/share))]
 
     (->> (rx/merge
+          (->> stream
+               (rx/filter (fn [entry] (= :fig (:type entry))))
+               (rx/map (fn [entry]
+                         (-> entry
+                             (assoc :file-id (uuid/next))
+                             (assoc :name (str/replace (:name file) #"(?i)\.fig$" ""))
+                             (assoc :status :success)))))
+
           (->> stream
                (rx/filter (fn [entry] (= :binfile-v1 (:type entry))))
                (rx/map (fn [entry]
@@ -328,7 +371,17 @@
                {:uri     uri
                 :version 3
                 :name    (:name (first entries))
-                :entries entries})))))
+                :entries entries})))
+
+   ;; a Figma `.fig` file is one package of one entry, imported by the
+   ;; same job as a `.penpot` with the "fig" kind
+   (->> entries
+        (filter #(= :fig (:type %)))
+        (map (fn [entry]
+               {:uri     (:uri entry)
+                :version "fig"
+                :name    (:name entry)
+                :entries [entry]})))))
 
 (defn- entry-messages
   "The message of every entry of a package: the job works on the package,
@@ -386,7 +439,12 @@
                                             (do
                                               (when-let [resolution (not-empty (:resolution result))]
                                                 (vswap! resolutions merge resolution))
-                                              (rx/from (entry-messages entries {:status :finish})))
+                                              ;; a `.fig` import also answers with
+                                              ;; what it could not keep as it was
+                                              (rx/from (entry-messages entries
+                                                                       (cond-> {:status :finish}
+                                                                         (some? (:report result))
+                                                                         (assoc :report (:report result))))))
 
                                             (= "failed" status)
                                             (rx/from (entry-messages entries {:status :error

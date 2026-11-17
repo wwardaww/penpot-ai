@@ -9,6 +9,7 @@
   (:require
    [app.common.json :as json]
    [app.common.uuid :as uuid]
+   [app.config :as cf]
    [app.main.data.imports :as imp]
    [app.main.data.jobs :as dj]
    [app.main.data.uploads :as uploads]
@@ -382,6 +383,96 @@
                     (into #{} (comp (filter (comp #{:finish} :status)) (map :file-id)) @seen)))
 
            (t/is (= {:libraries-resolution resolution} (last @seen)))))))))
+
+(t/deftest ^:async a-saved-figma-file-is-one-fig-entry
+  (let [seen (atom [])]
+
+    (await
+     (mock/with-mocks*
+       {cf/flags (conj cf/flags :ai)
+        http/send! (slurp-stub zip-magic)
+        ;; a saved Figma file is a zip with a canvas.fig
+        uz/get-entry (mock/stub (fn [_ name] (p/resolved (when (= "canvas.fig" name) ::entry))))
+        uz/close (mock/stub (fn [_] nil))}
+
+       (await (hva/observe (imp/analyze [{:uri uri :name "Design.fig" :size 10}])
+                           {:on-next #(swap! seen conj %)}))
+
+       (t/testing "the file is one entry of the fig kind, named without extension"
+         (t/is (= 1 (count @seen)))
+         (t/is (= :fig (:type (first @seen))))
+         (t/is (= "Design" (:name (first @seen))))
+         (t/is (= :success (:status (first @seen))))
+         (t/is (uuid? (:file-id (first @seen)))))))))
+
+(t/deftest ^:async a-bare-figma-canvas-is-one-fig-entry
+  (let [seen    (atom [])
+        ;; "fig-kiwi" and a little endian version
+        prelude (js/Uint8Array. #js [102 105 103 45 107 105 119 105 48 0 0 0])]
+
+    (await
+     (mock/with-mocks*
+       {cf/flags (conj cf/flags :ai)
+        http/send! (slurp-stub (.-buffer prelude))}
+
+       (await (hva/observe (imp/analyze [{:uri uri :name "canvas.fig" :size 12}])
+                           {:on-next #(swap! seen conj %)}))
+
+       (t/is (= [:fig] (mapv :type @seen)))))))
+
+(t/deftest ^:async a-figma-file-is-unknown-without-the-ai-flag
+  (let [seen    (atom [])
+        prelude (js/Uint8Array. #js [102 105 103 45 107 105 119 105 48 0 0 0])]
+
+    (await
+     (mock/with-mocks*
+       {cf/flags (disj cf/flags :ai)
+        http/send! (slurp-stub (.-buffer prelude))}
+
+       (await (hva/observe (imp/analyze [{:uri uri :name "canvas.fig" :size 12}])
+                           {:on-next #(swap! seen conj %)}))
+
+       (t/is (= [:error] (mapv :status @seen)))))))
+
+(t/deftest ^:async a-fig-entry-is-imported-with-the-fig-kind-and-its-report
+  (let [ws-stream  (rx/subject)
+        calls      (atom [])
+        rows       (atom {})
+        seen       (atom [])
+        report     {:total 1
+                    :unsupported [{:node "Note (1:10)" :fig-type "STICKY" :reason "node type STICKY not supported"}]
+                    :summary [{:fig-type "STICKY" :reason "node type STICKY not supported" :count 1}]
+                    :counts {:pages 1}
+                    :fonts ["Inter"]}
+        one        (entry :name "Design" :type :fig)]
+
+    (await
+     (mock/with-mocks*
+       {st/state (atom {:ws-conn ws-stream})
+        http/send! (slurp-stub ::blob)
+        uploads/upload-blob-chunked (upload-stub (uuid/next))
+        rp/cmd! (fake-server calls rows (fn [job-id] (job job-id "running")))
+        ws/get-rcv-stream (ws-stub ws-stream)}
+
+       (let [done   (hva/observe (imp/import-files {:project-id project-id
+                                                    :entries    [one]})
+                                 {:on-next #(swap! seen conj %)})
+             job-id (:job-id (first @calls))]
+
+         (t/testing "the job is created with the fig kind"
+           (t/is (= {:project-id project-id :name "Design" :version "fig"}
+                    (:params (:params (first @calls))))))
+
+         (t/testing "the entry finishes with the compatibility report"
+           (swap! rows assoc job-id
+                  (job job-id "completed"
+                       :result {:file-ids [(str (uuid/next))]
+                                :name     "Design"
+                                :version  "fig"
+                                :report   report}))
+           (rx/push! ws-stream (message (event job-id :end {:outcome "completed"})))
+           (await done)
+           (t/is (= [report] (into [] (comp (filter (comp #{:finish} :status)) (map :report)) @seen)))))))))
 
 (t/deftest ^:async the-job-reports-queued-then-started-before-progress
   (let [ws-stream  (rx/subject)

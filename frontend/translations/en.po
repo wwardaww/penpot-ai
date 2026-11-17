@@ -10115,3 +10115,20 @@ msgstr "Web"
 #: src/app/main/ui/dashboard/penforge/platform_badge.cljs
 msgid "penforge.platform.mobile"
 msgstr "Mobile"
+
+# penforge:W12
+#: src/app/main/ui/dashboard/import.cljs
+msgid "dashboard.import.fig-report.title"
+msgstr "%s: %s elements could not be imported exactly as they are in Figma."
+
+#: src/app/main/ui/dashboard/import.cljs
+msgid "dashboard.import.fig-report.line"
+msgstr "%s (%s, %s times)"
+
+#: src/app/main/ui/dashboard/import.cljs
+msgid "dashboard.import.fig-report.more"
+msgstr "And %s other kinds of changes."
+
+#: src/app/main/ui/dashboard/import.cljs
+msgid "dashboard.import.fig-report.fonts"
+msgstr "Fonts used by the file (install or upload them if the text looks different): %s"

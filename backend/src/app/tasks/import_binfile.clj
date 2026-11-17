@@ -9,6 +9,7 @@
   resource into the project frozen in its params."
   (:require
    [app.binfile.common :as bfc]
+   [app.binfile.fig.import :as bf.fig]
    [app.binfile.jobs :as bfj]
    [app.binfile.v1 :as bf.v1]
    [app.binfile.v3 :as bf.v3]
@@ -32,7 +33,7 @@
    [:project-id   ::sm/uuid]
    [:name         [:or [:string {:max 250}]
                    [:map-of ::sm/uuid [:string {:max 250}]]]]
-   [:version      [:enum 1 3]]
+   [:version      [:enum 1 3 "fig"]]
    [:generated-by {:optional true} [:maybe ::sm/text]]
    [:referer      {:optional true} [:maybe ::sm/text]]])
 
@@ -46,7 +47,7 @@
    [:project-id ::sm/uuid]
    [:name       [:or [:string {:max 250}]
                  [:map-of ::sm/uuid [:string {:max 250}]]]]
-   [:version    {:optional true} [:enum 1 3]]])
+   [:version    {:optional true} [:enum 1 3 "fig"]]])
 
 (def schema:candidate
   "A library of the instance whose slugified name matches the one the package
@@ -97,7 +98,9 @@
    [:resolution {:optional true} schema:resolution]
    [:name       [:or [:string {:max 250}]
                  [:map-of ::sm/uuid [:string {:max 250}]]]]
-   [:version    [:enum 1 3]]])
+   [:version    [:enum 1 3 "fig"]]
+   ;; only a Figma `.fig` import answers with a compatibility report
+   [:report     {:optional true} bf.fig/schema:report]])
 
 (def ^:private check-result
   (sm/check-fn schema:result
@@ -160,9 +163,10 @@
                               (bfj/check-active context)
                               (bfj/run context
                                        (fn [cfg]
-                                         (let [result (case (int (:version params))
+                                         (let [result (case (:version params)
                                                         1 (bf.v1/import-files! cfg)
                                                         3 (bf.v3/import-files! cfg)
+                                                        "fig" (bf.fig/import-files! cfg)
                                                         (ex/raise :type :validation
                                                                   :code :unsupported-version
                                                                   :hint "unsupported binfile version"
