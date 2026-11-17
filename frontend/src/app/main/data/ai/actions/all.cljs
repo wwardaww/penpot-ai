@@ -22,4 +22,5 @@
    ;; W15: registers the audit results modal
    [app.main.ui.workspace.ai.audit.panel]
    [app.main.data.ai.actions.design-md]
-   [app.main.ui.workspace.ai.build.actions]))
+   [app.main.ui.workspace.ai.build.actions]
+   [app.main.data.ai.actions.detached]))

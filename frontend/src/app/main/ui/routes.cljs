@@ -68,7 +68,8 @@
          (when (contains? cf/flags :admin-console)
            [:nitrate-entry])
          (when (contains? cf/flags :ai)
-           [:penforge-pair])
+           [:penforge-pair
+            :penforge-chat])
          (when *assert*
            [:debug-icons-preview
             :debug-playground]))))
@@ -107,6 +108,10 @@
    ;; the legacy entries of this table
    (when (contains? cf/flags :ai)
      ["/penforge/pair" :penforge-pair])
+
+   ;; Penforge detached AI chat window, opened by a workspace tab
+   (when (contains? cf/flags :ai)
+     ["/penforge/chat" :penforge-chat])
 
    ["/view" :viewer]
 

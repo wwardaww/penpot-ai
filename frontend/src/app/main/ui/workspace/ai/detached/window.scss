@@ -1,0 +1,22 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-index-panels);
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-background-primary);
+  color: var(--color-foreground-primary);
+}
+
+.window {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-block-size: 0;
+}

@@ -11870,3 +11870,60 @@ msgstr "The app is already being built. Please wait for it to finish."
 #: src/app/main/ui/workspace/ai/build/dialog.cljs
 msgid "penforge.build.failed.gave-up"
 msgstr "I couldn't get the app working this time. Your design is safe; please try Build again."
+# penforge:W10
+
+#: src/app/main/data/ai/actions/detached.cljs:20
+msgid "penforge.actions.detach-chat"
+msgstr "Open chat in a new window"
+
+#: src/app/main/data/ai/actions/detached.cljs:29
+msgid "penforge.actions.dock-chat"
+msgstr "Bring chat back to the sidebar"
+
+#: src/app/main/data/ai/detached.cljs:296
+msgid "penforge.detached.blocked"
+msgstr "Your browser blocked the chat window. Allow pop-ups for Penpot and try again."
+
+#: src/app/main/ui/workspace/ai/detached/placeholder.cljs:43
+msgid "penforge.detached.detach"
+msgstr "Open chat in a new window"
+
+#: src/app/main/ui/workspace/ai/detached/placeholder.cljs:42, src/app/main/ui/workspace/ai/detached/placeholder.cljs:72
+msgid "penforge.detached.dock"
+msgstr "Bring back to the sidebar"
+
+#: src/app/main/ui/workspace/ai/detached/page.cljs:57
+msgid "penforge.detached.page.close"
+msgstr "Close window"
+
+#: src/app/main/ui/workspace/ai/detached/page.cljs:48
+msgid "penforge.detached.page.orphan"
+msgstr "This window has no workspace"
+
+#: src/app/main/ui/workspace/ai/detached/page.cljs:52
+msgid "penforge.detached.page.orphan-hint"
+msgstr "Open the chat from the AI tab of a workspace. This window does not connect to the AI on its own."
+
+#: src/app/main/ui/workspace/ai/detached/page.cljs:47
+msgid "penforge.detached.page.waiting"
+msgstr "Opening the chat…"
+
+#: src/app/main/ui/workspace/ai/detached/placeholder.cljs:67
+msgid "penforge.detached.placeholder.hint"
+msgstr "Close that window or bring the chat back to see it here."
+
+#: src/app/main/ui/workspace/ai/detached/placeholder.cljs:63
+msgid "penforge.detached.placeholder.title"
+msgstr "The chat is open in another window"
+
+#: src/app/main/ui/workspace/ai/detached/placeholder.cljs:70
+msgid "penforge.detached.show"
+msgstr "Show window"
+
+#: src/app/main/ui/workspace/ai/detached/window.cljs:40
+msgid "penforge.detached.window-title"
+msgstr "AI chat · %s"
+
+#: src/app/main/ui/workspace/ai/detached/window.cljs:41
+msgid "penforge.detached.window-title-empty"
+msgstr "AI chat"

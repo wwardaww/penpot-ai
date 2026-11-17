@@ -20,6 +20,7 @@
    [frontend-tests.data.ai-comments-test]
    [frontend-tests.data.ai-generate-test]
    [frontend-tests.data.ai-preview-test]
+   [frontend-tests.data.ai-detached-test]
    [frontend-tests.data.ai-protocol-test]
    [frontend-tests.data.auth-test]
    [frontend-tests.data.comments-batches-test]
@@ -249,6 +250,7 @@
    'frontend-tests.data.ai-comments-test
    'frontend-tests.data.ai-generate-test
    'frontend-tests.data.ai-preview-test
+   'frontend-tests.data.ai-detached-test
    'frontend-tests.data.ai-protocol-test
    'frontend-tests.data.auth-test
    'frontend-tests.data.comments-batches-test

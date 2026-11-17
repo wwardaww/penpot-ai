@@ -28,6 +28,7 @@
    [app.main.ui.releases :refer [release-notes-modal]]
    [app.main.ui.static :as static]
    [app.main.ui.workspace.ai.chat.pair :refer [pair-page*]]
+   [app.main.ui.workspace.ai.detached.page :refer [detached-chat-page*]]
    [app.util.dom :as dom]
    [app.util.modules :as mod]
    [app.util.theme :as theme]
@@ -236,6 +237,9 @@
 
        :penforge-pair
        [:> pair-page* {:token (get-in params [:query :token])}]
+
+       :penforge-chat
+       [:> detached-chat-page* {}]
 
        nil)]))
 
