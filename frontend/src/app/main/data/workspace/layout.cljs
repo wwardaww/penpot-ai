@@ -9,6 +9,7 @@
   (:require
    [app.common.data :as d]
    [app.common.data.macros :as dm]
+   [app.config :as cf]
    [app.main.data.event :as ev]
    [app.util.storage :as storage]
    [clojure.set :as set]
@@ -36,21 +37,32 @@
     :snap-pixel-grid})
 
 (def presets
-  {:assets
-   {:del #{:sitemap :layers :document-history}
-    :add #{:assets}}
+  (cond-> {:assets
+           {:del #{:sitemap :layers :document-history :ai-chat}
+            :add #{:assets}}
 
-   :document-history
-   {:del #{:assets :layers :sitemap}
-    :add #{:document-history}}
+           :document-history
+           {:del #{:assets :layers :sitemap :ai-chat}
+            :add #{:document-history}}
 
-   :layers
-   {:del #{:document-history :assets}
-    :add #{:sitemap :layers}}
+           :layers
+           {:del #{:document-history :assets :ai-chat}
+            :add #{:sitemap :layers}}
 
-   :tokens
-   {:del #{:sitemap :layers :document-history :assets}
-    :add #{:tokens}}})
+           :tokens
+           {:del #{:sitemap :layers :document-history :assets :ai-chat}
+            :add #{:tokens}}}
+
+    ;; Penforge AI tab
+    (contains? cf/flags :ai)
+    (assoc :ai-chat {:del #{:sitemap :layers :document-history :assets :tokens}
+                     :add #{:ai-chat}})))
+
+(defn get-default-preset
+  "Preset of a workspace opened without an explicit layout: the AI tab
+  when the `:ai` flag is on, the layers otherwise."
+  []
+  (if (contains? cf/flags :ai) :ai-chat :layers))
 
 (def valid-options-mode
   #{:design :prototype :inspect :debug})

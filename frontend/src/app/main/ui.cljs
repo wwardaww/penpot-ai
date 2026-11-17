@@ -27,6 +27,7 @@
    [app.main.ui.onboarding.team-choice :refer [onboarding-team-modal*]]
    [app.main.ui.releases :refer [release-notes-modal]]
    [app.main.ui.static :as static]
+   [app.main.ui.workspace.ai.chat.pair :refer [pair-page*]]
    [app.util.dom :as dom]
    [app.util.modules :as mod]
    [app.util.theme :as theme]
@@ -232,6 +233,9 @@
 
        :frame-preview
        [:> frame-preview/frame-preview*]
+
+       :penforge-pair
+       [:> pair-page* {:token (get-in params [:query :token])}]
 
        nil)]))
 

@@ -42,6 +42,22 @@
    :permissions
    preg/mcp-permissions})
 
+(def penforge-bridge-uri
+  "Plugin bridge of the Penforge host daemon, used with the `:ai` flag;
+  `penforgeMcpBridgeURI` in `config.js` overrides it."
+  "ws://127.0.0.1:4402")
+
+(defn- penforge?
+  []
+  (contains? cf/flags :ai))
+
+(defn- get-server-uri
+  []
+  (if (penforge?)
+    (or (unchecked-get globals/global "penforgeMcpBridgeURI")
+        penforge-bridge-uri)
+    (str cf/mcp-ws-uri)))
+
 (defonce interval-sub
   (atom nil))
 
@@ -77,7 +93,9 @@
     ptk/UpdateEvent
     (update [_ state]
       (if (and (get-in state [:mcp :enabled])
-               (get-in state [:mcp :token-valid]))
+               (or (get-in state [:mcp :token-valid])
+                   ;; the Penforge host bridge needs no access token
+                   (penforge?)))
         (update state :mcp assoc
                 :connection-requested true
                 :connection-status "connecting")
@@ -227,7 +245,7 @@
                                     session-id))))
 
             extension #js {:getToken (constantly token)
-                           :getServerUrl #(str cf/mcp-ws-uri)
+                           :getServerUrl get-server-uri
                            :isConnectionRequested #(and @active?
                                                         (get-in @st/state [:mcp :connection-requested]))
                            :setMcpStatus
@@ -309,7 +327,8 @@
     ptk/UpdateEvent
     (update [_ state]
       (let [profile      (get state :profile)
-            mcp-enabled? (-> profile :props :mcp-enabled boolean)]
+            mcp-enabled? (or (penforge?)
+                             (-> profile :props :mcp-enabled boolean))]
         (update state :mcp assoc
                 :enabled mcp-enabled?
                 :connection-requested false
@@ -325,7 +344,12 @@
             mcp-state  (get state :mcp)]
 
         (->> (rx/merge
-              (rx/of (du/fetch-access-tokens))
+              (if (penforge?)
+                ;; Penforge: the plugin always runs; it connects to the
+                ;; host daemon bridge, which needs no access token, once
+                ;; the AI client pairs
+                (rx/of (init-mcp-plugin {}))
+                (rx/of (du/fetch-access-tokens)))
 
               ;; Wait until access tokens are initialized and are
               ;; setup on the state
@@ -366,7 +390,7 @@
   (ptk/reify ::initialize
     ptk/WatchEvent
     (watch [_ _ stream]
-      (if (contains? cf/flags :mcp)
+      (if (or (contains? cf/flags :mcp) (penforge?))
         (->> stream
              (rx/filter #(or (ptk/type? ::du/set-profile %)
                              (ptk/type? ::auth/logged-out %)))

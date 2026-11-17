@@ -1,0 +1,333 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/typography.scss" as t;
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+@use "ds/_utils.scss" as *;
+@use "ds/mixins.scss" as *;
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+  min-block-size: 0;
+  gap: var(--sp-s);
+  padding: var(--sp-s);
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-s);
+}
+
+.panel-title {
+  flex: 1;
+  margin: 0;
+  color: var(--color-foreground-primary);
+}
+
+.status-dot {
+  inline-size: px2rem(8);
+  block-size: px2rem(8);
+  border-radius: $br-circle;
+  background-color: var(--color-foreground-secondary);
+}
+
+.status-connected {
+  background-color: var(--color-accent-success);
+}
+
+.empty {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-l);
+  text-align: center;
+}
+
+.muted {
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.timeline {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-m);
+  min-block-size: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  min-inline-size: 0;
+}
+
+.entry-user {
+  align-self: flex-end;
+  max-inline-size: 90%;
+  padding: var(--sp-s);
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+}
+
+.user-text {
+  margin: 0;
+  color: var(--color-foreground-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.entry-assistant {
+  padding-inline: var(--sp-xs);
+}
+
+.caret {
+  inline-size: px2rem(6);
+  block-size: $sz-14;
+  background-color: var(--color-accent-primary);
+  animation: blink 1s steps(1) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.entry-tool {
+  padding-inline: var(--sp-xs);
+  color: var(--color-foreground-secondary);
+}
+
+.tool-line {
+  @include t.use-typography("body-small");
+
+  display: flex;
+  align-items: center;
+  gap: var(--sp-s);
+  cursor: default;
+}
+
+.tool-details > .tool-line {
+  cursor: pointer;
+}
+
+.tool-summary {
+  @include text-ellipsis;
+
+  min-inline-size: 0;
+}
+
+.tool-done {
+  color: var(--color-accent-success);
+}
+
+.tool-error {
+  color: var(--color-accent-error);
+}
+
+.tool-detail {
+  @include t.use-typography("code-font");
+
+  max-block-size: $sz-200;
+  margin: var(--sp-xs) 0 0;
+  padding: var(--sp-s);
+  border-radius: $br-8;
+  background-color: var(--color-background-primary);
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.spinner {
+  flex-shrink: 0;
+  inline-size: $sz-12;
+  block-size: $sz-12;
+  border: $b-2 solid var(--color-background-quaternary);
+  border-block-start-color: var(--color-accent-primary);
+  border-radius: $br-circle;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.entry-error {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--sp-s);
+  padding: var(--sp-s);
+  border-radius: $br-8;
+  background-color: var(--color-background-error);
+  color: var(--color-foreground-primary);
+}
+
+.error-icon {
+  flex-shrink: 0;
+  color: var(--color-accent-error);
+}
+
+.error-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xxs);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.card {
+  gap: var(--sp-s);
+  padding: var(--sp-m);
+  border: $b-1 solid var(--color-background-quaternary);
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+}
+
+.card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-s);
+}
+
+.card-title {
+  margin: 0;
+  color: var(--color-foreground-primary);
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-s);
+}
+
+.card-options {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.answer {
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.risk {
+  @include t.use-typography("body-small");
+
+  flex-shrink: 0;
+  padding: 0 var(--sp-s);
+  border-radius: $br-8;
+  background-color: var(--color-background-quaternary);
+  color: var(--color-foreground-primary);
+}
+
+.risk-medium {
+  background-color: var(--color-background-warning);
+}
+
+.risk-high {
+  background-color: var(--color-background-error);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  @include t.use-typography("body-small");
+
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs);
+  max-inline-size: 100%;
+  padding: var(--sp-xxs) var(--sp-xs);
+  border-radius: $br-6;
+  background-color: var(--color-background-quaternary);
+  color: var(--color-foreground-primary);
+}
+
+.chip-name {
+  @include text-ellipsis;
+
+  min-inline-size: 0;
+}
+
+.chip-remove {
+  flex-shrink: 0;
+}
+
+.thumbnail {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  inline-size: $sz-24;
+  block-size: $sz-24;
+  border-radius: $br-4;
+  background-color: var(--color-background-primary);
+  overflow: hidden;
+}
+
+.thumbnail-svg {
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  padding-block-start: var(--sp-s);
+  border-block-start: $b-1 solid var(--color-background-quaternary);
+}
+
+.input {
+  @include t.use-typography("body-medium");
+
+  inline-size: 100%;
+  min-block-size: $sz-64;
+  max-block-size: $sz-200;
+  padding: var(--sp-s);
+  border: $b-1 solid transparent;
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+  color: var(--color-foreground-primary);
+  resize: vertical;
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-accent-primary);
+  }
+
+  &:disabled {
+    color: var(--color-foreground-secondary);
+  }
+}
+
+.composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-s);
+}

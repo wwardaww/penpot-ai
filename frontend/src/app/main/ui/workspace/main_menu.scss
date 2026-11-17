@@ -58,6 +58,10 @@
     top: calc($sz-16 + (6 * $sz-32));
   }
 
+  &.pos-7 {
+    top: calc($sz-16 + (7 * $sz-32));
+  }
+
   &.pos-final-5 {
     top: calc($sz-32 + (5 * $sz-32));
   }
@@ -68,6 +72,10 @@
 
   &.pos-final-7 {
     top: calc($sz-32 + (7 * $sz-32));
+  }
+
+  &.pos-final-8 {
+    top: calc($sz-32 + (8 * $sz-32));
   }
 
   &.plugins {

@@ -10115,3 +10115,197 @@ msgstr "Web"
 #: src/app/main/ui/dashboard/penforge/platform_badge.cljs
 msgid "penforge.platform.mobile"
 msgstr "Mobile"
+
+# penforge:W04
+
+#: src/app/main/data/ai/actions/chat.cljs:18
+msgid "penforge.actions.open-chat"
+msgstr "Ask AI"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:77
+msgid "penforge.chat.attachment.remove"
+msgstr "Remove %s"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:267
+msgid "penforge.chat.empty"
+msgstr "Ask anything about this file. Select layers and add them to give the AI context."
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:134
+msgid "penforge.chat.error.busy"
+msgstr "The AI is still working on another request. Try again when it finishes."
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:138
+msgid "penforge.chat.error.generic"
+msgstr "Something went wrong."
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:135
+msgid "penforge.chat.error.no-context"
+msgstr "The AI does not know which file is open yet. Try again in a moment."
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:136
+msgid "penforge.chat.error.not-configured"
+msgstr "The Penforge agent is not set up on this computer."
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:133
+msgid "penforge.chat.error.not-connected"
+msgstr "Not connected to the Penforge agent."
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:137
+msgid "penforge.chat.error.not-implemented"
+msgstr "This is not available yet."
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:88
+msgid "penforge.chat.help.pair"
+msgstr "Open the pairing link the agent prints, or paste it here:"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:84
+msgid "penforge.chat.help.start"
+msgstr "Start the agent on this computer:"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:348
+msgid "penforge.chat.input.attach-selection"
+msgstr "Add selected layers"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:340
+msgid "penforge.chat.input.label"
+msgstr "Message to the AI"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:341
+msgid "penforge.chat.input.placeholder"
+msgstr "Ask the AI…"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:358
+msgid "penforge.chat.input.send"
+msgstr "Send"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:354
+msgid "penforge.chat.input.stop"
+msgstr "Stop"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:387
+msgid "penforge.chat.new-conversation"
+msgstr "New conversation"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:76
+msgid "penforge.chat.pair.invalid"
+msgstr "That is not a pairing link."
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:64
+msgid "penforge.chat.pair.label"
+msgstr "Pairing link"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:65
+msgid "penforge.chat.pair.placeholder"
+msgstr "Paste the pairing link"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:71
+msgid "penforge.chat.pair.submit"
+msgstr "Connect"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:190
+msgid "penforge.chat.permission.allow"
+msgstr "Allow"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:182
+msgid "penforge.chat.permission.allowed"
+msgstr "Allowed"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:192
+msgid "penforge.chat.permission.always"
+msgstr "Always allow"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:186
+msgid "penforge.chat.permission.denied"
+msgstr "Denied"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:194
+msgid "penforge.chat.permission.deny"
+msgstr "Deny"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:174
+msgid "penforge.chat.permission.risk-high"
+msgstr "High risk"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:176
+msgid "penforge.chat.permission.risk-low"
+msgstr "Low risk"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:175
+msgid "penforge.chat.permission.risk-medium"
+msgstr "Medium risk"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:380
+msgid "penforge.chat.status.connected"
+msgstr "Connected to the Penforge agent"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:106
+msgid "penforge.chat.status.connecting"
+msgstr "Connecting to the Penforge agent…"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:381
+msgid "penforge.chat.status.disconnected"
+msgstr "Not connected"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:115
+msgid "penforge.chat.status.not-paired"
+msgstr "Connect the Penforge agent"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:123
+msgid "penforge.chat.status.not-paired-hint"
+msgstr "The AI runs on your computer through the Penforge agent. Connect it once per browser tab."
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:113
+msgid "penforge.chat.status.pair-expired"
+msgstr "Pair the agent again"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:121
+msgid "penforge.chat.status.pair-expired-hint"
+msgstr "The agent restarted, so the old pairing link no longer works."
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:131
+msgid "penforge.chat.status.retry"
+msgstr "Try again"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:114
+msgid "penforge.chat.status.unreachable"
+msgstr "Can't reach the Penforge agent"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:122
+msgid "penforge.chat.status.unreachable-hint"
+msgstr "Make sure the agent is running on this computer."
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:383
+msgid "penforge.chat.title"
+msgstr "AI"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:236
+msgid "penforge.chat.workflow.running"
+msgstr "Working…"
+
+#: src/app/main/ui/workspace/main_menu.cljs:1178
+msgid "penforge.main-menu.ai"
+msgstr "AI"
+
+#: src/app/main/ui/workspace/ai/chat/pair.cljs:50
+msgid "penforge.pair.continue"
+msgstr "Continue"
+
+#: src/app/main/ui/workspace/ai/chat/pair.cljs:43
+msgid "penforge.pair.done"
+msgstr "Penforge is paired"
+
+#: src/app/main/ui/workspace/ai/chat/pair.cljs:47
+msgid "penforge.pair.done-hint"
+msgstr "Your open Penpot tabs can now talk to the AI. You can close this tab."
+
+#: src/app/main/ui/workspace/ai/chat/pair.cljs:44
+msgid "penforge.pair.invalid"
+msgstr "This pairing link is not valid"
+
+#: src/app/main/ui/workspace/ai/chat/pair.cljs:48
+msgid "penforge.pair.invalid-hint"
+msgstr "Copy the link again from the Penforge agent output."
+
+#: src/app/main/ui/workspace/sidebar.cljs:176
+msgid "penforge.sidebar.tab"
+msgstr "AI"

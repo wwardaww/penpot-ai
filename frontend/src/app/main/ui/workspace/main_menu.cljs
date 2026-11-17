@@ -12,6 +12,7 @@
    [app.common.files.helpers :as cfh]
    [app.common.uuid :as uuid]
    [app.config :as cf]
+   [app.main.data.ai.actions :as ai-actions]
    [app.main.data.common :as dcm]
    [app.main.data.event :as ev]
    [app.main.data.exports.assets :as de]
@@ -118,6 +119,9 @@
         mcp-enabled?
         (contains? cf/flags :mcp)
 
+        extra-items
+        (count (filter true? [plugins? mcp-enabled? (contains? cf/flags :ai)]))
+
         show-shortcuts
         (mf/use-fn
          (mf/deps layout)
@@ -145,9 +149,10 @@
                         :on-close on-close
                         :class (stl/css-case :base-menu true
                                              :sub-menu true
-                                             :pos-final-5 (not (or plugins? mcp-enabled?))
-                                             :pos-final-6 (not= plugins? mcp-enabled?)
-                                             :pos-final-7 (and plugins? mcp-enabled?))}
+                                             :pos-final-5 (= extra-items 0)
+                                             :pos-final-6 (= extra-items 1)
+                                             :pos-final-7 (= extra-items 2)
+                                             :pos-final-8 (= extra-items 3))}
      [:> dropdown-menu-item* {:class (stl/css :base-menu-item :submenu-item)
                               :on-click    nav-to-helpc-center
                               :on-key-down (fn [event]
@@ -818,7 +823,7 @@
   {::mf/private true}
   [{:keys [on-close mcp]}]
   (let [plugins-enabled? (features/use-feature "plugins/runtime")
-        has-valid-token? (get mcp :token-valid)
+        has-valid-token? (or (get mcp :token-valid) (contains? cf/flags :ai))
         enabled?         (get mcp :enabled)
 
         conn-status      (get mcp :connection-status)
@@ -883,6 +888,55 @@
        (if show-enabled?
          (tr "workspace.header.menu.mcp.server.status.enabled")
          (tr "workspace.header.menu.mcp.server.status.disabled"))]]]))
+
+(mf/defc ai-menu-item*
+  {::mf/private true}
+  [{:keys [action on-close-all]}]
+  (let [on-click
+        (mf/use-fn
+         (mf/deps action on-close-all)
+         (fn [event]
+           (dom/stop-propagation event)
+           (on-close-all)
+           (ai-actions/run-action action :main-menu)))
+
+        on-key-down
+        (mf/use-fn
+         (mf/deps on-click)
+         (fn [event]
+           (when (kbd/enter? event)
+             (on-click event))))
+
+        enabled? (ai-actions/enabled? action @st/state)]
+
+    [:> dropdown-menu-item* {:class (stl/css-case :base-menu-item true
+                                                  :submenu-item true
+                                                  :disabled (not enabled?))
+                             :on-click on-click
+                             :on-key-down on-key-down}
+     [:span {:class (stl/css :item-name)}
+      (ai-actions/get-label action)]]))
+
+(mf/defc ai-menu*
+  "Penforge AI actions registered with the `:main-menu` scope."
+  {::mf/private true}
+  [{:keys [on-close on-close-all]}]
+  (let [registry (mf/deref ai-actions/registry)
+        actions  (ai-actions/get-actions registry :main-menu @st/state)
+        position (+ 5
+                    (if (features/active-feature? @st/state "plugins/runtime") 1 0)
+                    (if (contains? cf/flags :mcp) 1 0))]
+    [:> dropdown-menu* {:show true
+                        :class (stl/css-case :base-menu true
+                                             :sub-menu true
+                                             :pos-5 (= position 5)
+                                             :pos-6 (= position 6)
+                                             :pos-7 (= position 7))
+                        :on-close on-close}
+     (for [action actions]
+       [:> ai-menu-item* {:key (str (:id action))
+                          :action action
+                          :on-close-all on-close-all}])]))
 
 (mf/defc menu*
   [{:keys [layout file]}]
@@ -1085,7 +1139,7 @@
       (when (contains? cf/flags :mcp)
         (let [enabled?         (get mcp :enabled)
               conn-status      (get mcp :connection-status)
-              has-valid-token? (get mcp :token-valid)
+              has-valid-token? (or (get mcp :token-valid) (contains? cf/flags :ai))
 
               connected?       (= conn-status "connected")
               error?           (= conn-status "error")
@@ -1110,6 +1164,20 @@
                                         :failed failed?)}]
            [:> icon* {:icon-id i/arrow-right
                       :class (stl/css :item-arrow)}]]))
+
+      (when (contains? cf/flags :ai)
+        [:> dropdown-menu-item* {:class (stl/css :base-menu-item :menu-item)
+                                 :on-click    on-menu-click
+                                 :on-key-down (fn [event]
+                                                (when (kbd/enter? event)
+                                                  (on-menu-click event)))
+                                 :on-pointer-enter on-menu-click
+                                 :data-testid "ai"
+                                 :id          "file-menu-ai"}
+         [:span {:class (stl/css :item-name)}
+          (tr "penforge.main-menu.ai")]
+         [:> icon* {:icon-id i/arrow-right
+                    :class (stl/css :item-arrow)}]])
 
       [:div {:class (stl/css :separator)}]
 
@@ -1160,6 +1228,10 @@
 
        :mcp
        [:> mcp-menu* {:on-close close-sub-menu :mcp mcp}]
+
+       :ai
+       [:> ai-menu* {:on-close close-sub-menu
+                     :on-close-all close-all-menus}]
 
        :help-info
        [:> help-info-menu* {:layout layout

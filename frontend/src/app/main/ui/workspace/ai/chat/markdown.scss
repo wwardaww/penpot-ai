@@ -1,0 +1,89 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/typography.scss" as t;
+@use "ds/_borders.scss" as *;
+
+.markdown {
+  @include t.use-typography("body-medium");
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  min-inline-size: 0;
+  color: var(--color-foreground-primary);
+  overflow-wrap: anywhere;
+}
+
+.paragraph {
+  margin: 0;
+}
+
+.heading {
+  @include t.use-typography("headline-small");
+
+  margin: 0;
+}
+
+.inline-code {
+  @include t.use-typography("code-font");
+
+  padding-inline: var(--sp-xxs);
+  border-radius: $br-4;
+  background-color: var(--color-background-quaternary);
+}
+
+.code-block {
+  @include t.use-typography("code-font");
+
+  margin: 0;
+  padding: var(--sp-s);
+  border-radius: $br-8;
+  background-color: var(--color-background-primary);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.quote {
+  margin: 0;
+  padding-inline-start: var(--sp-s);
+  border-inline-start: $b-2 solid var(--color-background-quaternary);
+  color: var(--color-foreground-secondary);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  margin: 0;
+  padding-inline-start: var(--sp-l);
+}
+
+.rule {
+  inline-size: 100%;
+  border: none;
+  border-block-start: $b-1 solid var(--color-background-quaternary);
+}
+
+.link {
+  color: var(--color-accent-primary);
+  text-decoration: underline;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: var(--sp-xs) var(--sp-s);
+    border: $b-1 solid var(--color-background-quaternary);
+    text-align: start;
+  }
+}

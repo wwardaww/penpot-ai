@@ -7,6 +7,7 @@
 (ns app.main.ui.workspace.right-header
   (:require-macros [app.main.style :as stl])
   (:require
+   [app.config :as cf]
    [app.main.data.common :as dcm]
    [app.main.data.event :as ev]
    [app.main.data.shortcuts :as scd]
@@ -25,6 +26,7 @@
    [app.main.ui.ds.foundations.assets.icon :as i]
    [app.main.ui.exports.assets :refer [progress-widget]]
    [app.main.ui.formats :as fmt]
+   [app.main.ui.workspace.ai.header-strip :refer [header-strip*]]
    [app.main.ui.workspace.presence :refer [active-sessions*]]
    [app.util.dom :as dom]
    [app.util.i18n :as i18n :refer [tr]]
@@ -236,6 +238,9 @@
                           :aria-label (tr "workspace.sidebar.history")
                           :icon i/history
                           :on-click toggle-history}]])
+
+     (when (contains? cf/flags :ai)
+       [:> header-strip* {}])
 
      (when display-share-button?
        [:> icon-button* {:variant "action"

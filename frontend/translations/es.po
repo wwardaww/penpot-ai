@@ -10125,3 +10125,197 @@ msgstr "Si quieres aumentar este límite, contáctanos en [support@penpot.app](%
 #: src/app/main/ui/workspace/sidebar/versions.cljs:470
 msgid "workspace.versions.warning.text"
 msgstr "Los autoguardados duran %s días."
+
+# penforge:W04
+
+#: src/app/main/data/ai/actions/chat.cljs:18
+msgid "penforge.actions.open-chat"
+msgstr "Preguntar a la IA"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:77
+msgid "penforge.chat.attachment.remove"
+msgstr "Quitar %s"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:267
+msgid "penforge.chat.empty"
+msgstr "Pregunta lo que quieras sobre este archivo. Selecciona capas y añádelas para darle contexto a la IA."
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:134
+msgid "penforge.chat.error.busy"
+msgstr "La IA sigue trabajando en otra petición. Inténtalo de nuevo cuando termine."
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:138
+msgid "penforge.chat.error.generic"
+msgstr "Algo ha ido mal."
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:135
+msgid "penforge.chat.error.no-context"
+msgstr "La IA aún no sabe qué archivo está abierto. Inténtalo de nuevo en un momento."
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:136
+msgid "penforge.chat.error.not-configured"
+msgstr "El agente de Penforge no está configurado en este ordenador."
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:133
+msgid "penforge.chat.error.not-connected"
+msgstr "No hay conexión con el agente de Penforge."
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:137
+msgid "penforge.chat.error.not-implemented"
+msgstr "Esto aún no está disponible."
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:88
+msgid "penforge.chat.help.pair"
+msgstr "Abre el enlace de emparejamiento que muestra el agente o pégalo aquí:"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:84
+msgid "penforge.chat.help.start"
+msgstr "Inicia el agente en este ordenador:"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:348
+msgid "penforge.chat.input.attach-selection"
+msgstr "Añadir las capas seleccionadas"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:340
+msgid "penforge.chat.input.label"
+msgstr "Mensaje para la IA"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:341
+msgid "penforge.chat.input.placeholder"
+msgstr "Pregunta a la IA…"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:358
+msgid "penforge.chat.input.send"
+msgstr "Enviar"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:354
+msgid "penforge.chat.input.stop"
+msgstr "Detener"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:387
+msgid "penforge.chat.new-conversation"
+msgstr "Nueva conversación"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:76
+msgid "penforge.chat.pair.invalid"
+msgstr "Eso no es un enlace de emparejamiento."
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:64
+msgid "penforge.chat.pair.label"
+msgstr "Enlace de emparejamiento"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:65
+msgid "penforge.chat.pair.placeholder"
+msgstr "Pega el enlace de emparejamiento"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:71
+msgid "penforge.chat.pair.submit"
+msgstr "Conectar"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:190
+msgid "penforge.chat.permission.allow"
+msgstr "Permitir"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:182
+msgid "penforge.chat.permission.allowed"
+msgstr "Permitido"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:192
+msgid "penforge.chat.permission.always"
+msgstr "Permitir siempre"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:186
+msgid "penforge.chat.permission.denied"
+msgstr "Denegado"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:194
+msgid "penforge.chat.permission.deny"
+msgstr "Denegar"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:174
+msgid "penforge.chat.permission.risk-high"
+msgstr "Riesgo alto"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:176
+msgid "penforge.chat.permission.risk-low"
+msgstr "Riesgo bajo"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:175
+msgid "penforge.chat.permission.risk-medium"
+msgstr "Riesgo medio"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:380
+msgid "penforge.chat.status.connected"
+msgstr "Conectado al agente de Penforge"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:106
+msgid "penforge.chat.status.connecting"
+msgstr "Conectando con el agente de Penforge…"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:381
+msgid "penforge.chat.status.disconnected"
+msgstr "Sin conexión"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:115
+msgid "penforge.chat.status.not-paired"
+msgstr "Conecta el agente de Penforge"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:123
+msgid "penforge.chat.status.not-paired-hint"
+msgstr "La IA funciona en tu ordenador a través del agente de Penforge. Conéctalo una vez por pestaña del navegador."
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:113
+msgid "penforge.chat.status.pair-expired"
+msgstr "Vuelve a emparejar el agente"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:121
+msgid "penforge.chat.status.pair-expired-hint"
+msgstr "El agente se ha reiniciado y el enlace anterior ya no sirve."
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:131
+msgid "penforge.chat.status.retry"
+msgstr "Reintentar"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:114
+msgid "penforge.chat.status.unreachable"
+msgstr "No se puede contactar con el agente de Penforge"
+
+#: src/app/main/ui/workspace/ai/chat/banner.cljs:122
+msgid "penforge.chat.status.unreachable-hint"
+msgstr "Comprueba que el agente está en marcha en este ordenador."
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:383
+msgid "penforge.chat.title"
+msgstr "IA"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:236
+msgid "penforge.chat.workflow.running"
+msgstr "Trabajando…"
+
+#: src/app/main/ui/workspace/main_menu.cljs:1178
+msgid "penforge.main-menu.ai"
+msgstr "IA"
+
+#: src/app/main/ui/workspace/ai/chat/pair.cljs:50
+msgid "penforge.pair.continue"
+msgstr "Continuar"
+
+#: src/app/main/ui/workspace/ai/chat/pair.cljs:43
+msgid "penforge.pair.done"
+msgstr "Penforge está emparejado"
+
+#: src/app/main/ui/workspace/ai/chat/pair.cljs:47
+msgid "penforge.pair.done-hint"
+msgstr "Las pestañas de Penpot abiertas ya pueden hablar con la IA. Puedes cerrar esta pestaña."
+
+#: src/app/main/ui/workspace/ai/chat/pair.cljs:44
+msgid "penforge.pair.invalid"
+msgstr "Este enlace de emparejamiento no es válido"
+
+#: src/app/main/ui/workspace/ai/chat/pair.cljs:48
+msgid "penforge.pair.invalid-hint"
+msgstr "Vuelve a copiar el enlace desde la salida del agente de Penforge."
+
+#: src/app/main/ui/workspace/sidebar.cljs:176
+msgid "penforge.sidebar.tab"
+msgstr "IA"

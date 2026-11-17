@@ -1,0 +1,38 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+
+.pair-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  block-size: 100vh;
+  padding: var(--sp-l);
+  background-color: var(--color-background-primary);
+}
+
+.pair-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-l);
+  max-inline-size: $sz-480;
+  padding: var(--sp-xxxl);
+  border-radius: $br-12;
+  background-color: var(--color-background-secondary);
+  color: var(--color-foreground-primary);
+}
+
+.title {
+  margin: 0;
+}
+
+.description {
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
