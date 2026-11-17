@@ -147,8 +147,20 @@ export class WorkflowEngine {
         let text = "";
         let sessionId: string | undefined;
         let usage: ChatUsage | undefined;
+        const filter = request.toolFilter;
+        const turnSetup: TurnSetup = filter
+            ? {
+                  ...setup,
+                  permissions: {
+                      decide: async (use) => {
+                          const denied = filter.check(use.toolName, use.input);
+                          return denied !== null ? { allow: false, message: denied } : setup.permissions.decide(use);
+                      },
+                  },
+              }
+            : setup;
         const events = this.turns.run(
-            setup,
+            turnSetup,
             { id: conversationId, resumeSessionId: request.resumeSessionId },
             {
                 text: request.prompt,
