@@ -9,4 +9,5 @@
   Append-only: each feature adds one require line for its own
   `app.main.data.ai.actions.<name>` namespace."
   (:require
-   [app.main.data.ai.actions.chat]))
+   [app.main.data.ai.actions.chat]
+   [app.main.data.ai.actions.detached]))

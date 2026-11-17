@@ -21,6 +21,7 @@
    [app.main.ui.ds.foundations.typography.text :refer [text*]]
    [app.main.ui.workspace.ai.chat.banner :refer [connection-banner*]]
    [app.main.ui.workspace.ai.chat.markdown :refer [markdown*]]
+   [app.main.ui.workspace.ai.detached.placeholder :refer [ref:detached? detach-button* detached-placeholder*]]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
    [app.util.keyboard :as kbd]
@@ -359,7 +360,8 @@
 
 ;; --- Panel
 
-(mf/defc ai-chat-panel*
+(mf/defc chat-panel*
+  "The chat itself; rendered by the AI tab and by the detached window."
   []
   (let [chat       (mf/deref ref:chat)
         connection (mf/deref ref:connection)
@@ -385,7 +387,8 @@
                         :icon i/add
                         :disabled (empty? entries)
                         :aria-label (tr "penforge.chat.new-conversation")
-                        :on-click on-new-conversation}]]
+                        :on-click on-new-conversation}]
+      [:> detach-button* {}]]
 
      [:> connection-banner* {:connection connection}]
 
@@ -397,3 +400,10 @@
      [:> composer* {:attachments attachments
                     :status status
                     :connected connected}]]))
+
+(mf/defc ai-chat-panel*
+  "The AI tab: the chat, or a notice while it is in its own window."
+  []
+  (if (mf/deref ref:detached?)
+    [:> detached-placeholder* {}]
+    [:> chat-panel* {}]))
