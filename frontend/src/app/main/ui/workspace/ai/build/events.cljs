@@ -19,13 +19,17 @@
   - `:rid` request id of the run the state follows; `:run-id` its id
     while it runs
   - `:plan` payload of the `plan` event (kept while building)
-  - `:steps` progress steps `{:id :step :label :status}`, in order
+  - `:steps` progress steps `{:id :step :status :name :update :detail
+    :label}`, in order; the UI translates by `:step` (`:label` is the
+    daemon's English fallback)
   - `:activity` latest tool activity line of Claude
   - `:logs` technical log lines (developers only)
   - `:result` payload of the `result` event
-  - `:failure` persona-safe failure message (`failed` event)
+  - `:failure-code` code of a `failed` event (translated by the UI) and
+    `:failure` its message (English; technical for developers)
   - `:error` technical error (`workflow.done` error or request error)"
   (:require
+   [app.common.data :as d]
    [app.main.data.ai.chat :as chat]
    [app.main.data.ai.client :as client]
    [app.main.data.ai.protocol :as proto]
@@ -69,10 +73,14 @@
     "progress"
     (if (string? (:step payload))
       (-> build
-          (update :steps upsert-step {:id (or (:id payload) (:step payload))
-                                      :step (:step payload)
-                                      :label (:label payload)
-                                      :status (keyword (:status payload))})
+          (update :steps upsert-step (d/without-nils
+                                      {:id (or (:id payload) (:step payload))
+                                       :step (:step payload)
+                                       :name (:name payload)
+                                       :update (:update payload)
+                                       :detail (:detail payload)
+                                       :label (:label payload)
+                                       :status (keyword (:status payload))}))
           (assoc :activity nil))
       (assoc build :activity (:summary payload)))
 
@@ -80,7 +88,9 @@
     (update build :logs conj (:text payload))
 
     "failed"
-    (assoc build :failure (:message payload))
+    (assoc build
+           :failure-code (:code payload)
+           :failure (:message payload))
 
     "result"
     (assoc build :result payload)

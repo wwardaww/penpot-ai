@@ -60,6 +60,7 @@
     (t/is (= plan-payload (:plan result)))
     (t/is (= [{:id "read" :step "read" :label "Reading the design" :status :done}]
              (:steps result)))
+    (t/is (= "penforge.build.step.read" (dialog/get-step-label (first (:steps result)) :designer)))
     (t/is (nil? (:run-id result)))))
 
 (t/deftest build-run-ends-done-with-the-result
@@ -78,9 +79,10 @@
   (let [result (reduce-messages
                 (assoc build/initial-state :stage :building :workflow "build-run")
                 [{:type "workflow.event" :run-id "r3" :kind "failed"
-                  :payload {:message "Please press Build again."}}
+                  :payload {:code "stale-plan" :message "Please press Build again."}}
                  {:type "workflow.done" :run-id "r3" :ok false :error "Please press Build again."}])]
     (t/is (= :error (:stage result)))
+    (t/is (= "stale-plan" (:failure-code result)))
     (t/is (= "Please press Build again." (:failure result))))
   (let [result (build/apply-message (assoc build/initial-state :stage :planning)
                                     {:type "error" :rid "x" :code "unknown-workflow"})]
@@ -137,6 +139,15 @@
   [markup texts]
   (every? #(str/includes? markup %) texts))
 
+(t/deftest ^:async incremental-plan-summary-is-translated
+  (let [{:keys [markup errors]}
+        (await (render-view {:stage :plan :plan (assoc plan-payload :mode "incremental"
+                                                       :summary "I'll update Dashboard.")}
+                            :designer))]
+    (t/is (empty? errors))
+    (t/is (str/includes? markup "penforge.build.plan.summary-incremental"))
+    (t/is (not (str/includes? markup "I'll update")))))
+
 (t/deftest ^:async designer-plan-shows-outcomes-only
   (let [{:keys [markup errors]}
         (await (render-view {:stage :plan :plan plan-payload} :designer))]
@@ -156,18 +167,24 @@
                                  "penforge.build.plan.question-developer"]))))
 
 (t/deftest ^:async progress-done-and-error-stages-render
-  (let [steps    [{:id "scaffold" :label "Setting up the app" :status :done}
-                  {:id "b-login" :label "Building Login" :status :running}]
+  (let [steps    [{:id "scaffold" :step "scaffold" :detail "React + Vite" :label "Setting up" :status :done}
+                  {:id "b-login" :step "screen" :name "Login" :label "Building Login" :status :running}]
         planning (await (render-view {:stage :planning :steps steps :activity "Reading the design"} :designer))
         building (await (render-view {:stage :building :steps steps :logs ["npm install ok"]} :designer))
         dev      (await (render-view {:stage :building :steps steps :logs ["npm install ok"]} :developer))
         done     (await (render-view {:stage :done :result {:commit "0123456789abcdef"}} :developer))
         failed   (await (render-view {:stage :error :error "TypeError: boom"} :designer))
+        gave-up  (await (render-view {:stage :error :failure-code "gave-up"
+                                      :failure "npm run build exited 2"} :designer))
         dev-fail (await (render-view {:stage :error :error "TypeError: boom"} :developer))
         offline  (await (render-view {:stage :error :error "not-connected"} :designer))]
-    (t/is (every? (comp empty? :errors) [planning building dev done failed dev-fail offline]))
-    (t/is (includes-all? (:markup planning) ["Setting up the app" "Reading the design"]))
-    (t/is (includes-all? (:markup building) ["Building Login" "penforge.build.hide"]))
+    (t/is (every? (comp empty? :errors) [planning building dev done failed gave-up dev-fail offline]))
+    (t/is (str/includes? (:markup gave-up) "penforge.build.failed.gave-up"))
+    (t/is (not (str/includes? (:markup gave-up) "npm run build")) "no command output for designers")
+    (t/is (includes-all? (:markup planning) ["penforge.build.step.scaffold" "Reading the design"]))
+    (t/is (includes-all? (:markup building) ["penforge.build.step.screen" "penforge.build.hide"]))
+    (t/is (not (str/includes? (:markup building) "React + Vite")) "no technical detail for designers")
+    (t/is (str/includes? (:markup dev) "React + Vite"))
     (t/is (not (str/includes? (:markup building) "npm install ok")) "no logs for designers")
     (t/is (str/includes? (:markup dev) "npm install ok"))
     (t/is (includes-all? (:markup done) ["penforge.build.done.open-preview" "penforge.build.dev.commit"]))

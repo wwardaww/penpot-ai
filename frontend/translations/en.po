@@ -10460,3 +10460,79 @@ msgstr "Open AI panel"
 #: src/app/main/ui/workspace/ai/build/dialog.cljs
 msgid "penforge.build.error.retry"
 msgstr "Try again"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.step.read"
+msgstr "Reading the design"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.step.plan"
+msgstr "Working out how the app will work"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.step.prepare"
+msgstr "Getting ready"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.step.prebuild"
+msgstr "Preparing the design for the app"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.step.scaffold"
+msgstr "Setting up the app"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.step.screen"
+msgstr "Building %s"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.step.screen-update"
+msgstr "Updating %s"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.step.cleanup"
+msgstr "Removing the screens you deleted"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.step.install"
+msgstr "Getting what the app needs"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.step.check"
+msgstr "Checking that everything works"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.step.fix"
+msgstr "Fixing a small problem"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.step.save"
+msgstr "Saving the app"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.plan.summary-none"
+msgstr "Your app already matches the design. Nothing changed since the last build."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.plan.summary-incremental"
+msgstr "Only the screens below that changed, are new or were removed will be updated. Everything else stays as it is."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.failed.no-boards"
+msgstr "There is nothing to build yet. Add a board for each screen of your app first."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.failed.plan-failed"
+msgstr "I couldn't work out a plan this time. Please try Build again."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.failed.stale-plan"
+msgstr "The design changed since the plan was made. Please press Build again."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.failed.busy"
+msgstr "The app is already being built. Please wait for it to finish."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.failed.gave-up"
+msgstr "I couldn't get the app working this time. Your design is safe; please try Build again."

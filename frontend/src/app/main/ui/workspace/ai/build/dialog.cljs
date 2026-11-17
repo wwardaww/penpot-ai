@@ -52,16 +52,39 @@
     :else
     [:span {:class (stl/css :spinner) :aria-hidden true}]))
 
+(defn get-step-label
+  "Translated label of a progress step; developers also get the
+  technical detail (command, stack, workflow, attempt)."
+  [{:keys [step name update detail label]} persona]
+  (let [text (case step
+               "read" (tr "penforge.build.step.read")
+               "plan" (tr "penforge.build.step.plan")
+               "prepare" (tr "penforge.build.step.prepare")
+               "prebuild" (tr "penforge.build.step.prebuild")
+               "scaffold" (tr "penforge.build.step.scaffold")
+               "screen" (if update
+                          (tr "penforge.build.step.screen-update" name)
+                          (tr "penforge.build.step.screen" name))
+               "cleanup" (tr "penforge.build.step.cleanup")
+               "install" (tr "penforge.build.step.install")
+               "check" (tr "penforge.build.step.check")
+               "fix" (tr "penforge.build.step.fix")
+               "save" (tr "penforge.build.step.save")
+               label)]
+    (if (and (= persona :developer) (seq detail))
+      (str text " · " detail)
+      text)))
+
 (mf/defc steps*
   {::mf/private true}
-  [{:keys [steps activity]}]
+  [{:keys [steps activity persona]}]
   [:div {:class (stl/css :steps-wrapper)}
    (when (seq steps)
      [:ol {:class (stl/css :steps) :aria-live "polite"}
-      (for [{:keys [id label status]} steps]
+      (for [{:keys [id status] :as step} steps]
         [:li {:key id :class (stl/css :step)}
          [:> step-icon* {:status status}]
-         [:span {:class (stl/css :step-label)} label]])])
+         [:span {:class (stl/css :step-label)} (get-step-label step persona)]])])
    (when (seq activity)
      [:> text* {:as "p" :typography t/body-small :class (stl/css :muted :activity)}
       activity])])
@@ -223,7 +246,14 @@
     [:*
      [:div {:class (stl/css :body)}
       [:div {:class (stl/css :summary)}
-       [:> markdown* {:text (or summary "")}]]
+       ;; Claude writes the summary of a full plan; the other modes are
+       ;; worded here so they get translated.
+       (cond
+         nothing? [:> text* {:as "p" :typography t/body-medium}
+                   (tr "penforge.build.plan.summary-none")]
+         (= "incremental" mode) [:> text* {:as "p" :typography t/body-medium}
+                                 (tr "penforge.build.plan.summary-incremental")]
+         :else [:> markdown* {:text (or summary "")}])]
       (when (seq screens)
         [:> screens* {:screens screens}])
       (when (and developer? (not nothing?))
@@ -251,13 +281,13 @@
 
 (mf/defc planning-view*
   {::mf/private true}
-  [{:keys [build]}]
+  [{:keys [build persona]}]
   (let [on-cancel (mf/use-fn #(st/emit! (build/cancel)))]
     [:*
      [:div {:class (stl/css :body)}
       [:> text* {:as "p" :typography t/body-medium}
        (tr "penforge.build.planning")]
-      [:> steps* {:steps (:steps build) :activity (:activity build)}]]
+      [:> steps* {:steps (:steps build) :activity (:activity build) :persona persona}]]
      [:footer {:class (stl/css :footer)}
       [:> button* {:variant "secondary" :on-click on-cancel}
        (tr "penforge.build.stop")]]]))
@@ -271,7 +301,7 @@
      [:div {:class (stl/css :body)}
       [:> text* {:as "p" :typography t/body-medium}
        (tr "penforge.build.building")]
-      [:> steps* {:steps (:steps build) :activity (:activity build)}]
+      [:> steps* {:steps (:steps build) :activity (:activity build) :persona persona}]
       (when (= persona :developer)
         [:> logs* {:logs (:logs build)}])]
      [:footer {:class (stl/css :footer)}
@@ -305,9 +335,13 @@
        (tr "penforge.build.done.open-preview")]]]))
 
 (defn- get-error-message
-  [{:keys [failure error]}]
+  [{:keys [failure-code error]}]
   (cond
-    (seq failure) failure
+    (= failure-code "no-boards") (tr "penforge.build.failed.no-boards")
+    (= failure-code "plan-failed") (tr "penforge.build.failed.plan-failed")
+    (= failure-code "stale-plan") (tr "penforge.build.failed.stale-plan")
+    (= failure-code "busy") (tr "penforge.build.failed.busy")
+    (= failure-code "gave-up") (tr "penforge.build.failed.gave-up")
     (= error "not-connected") (tr "penforge.build.error.not-connected")
     :else (tr "penforge.build.error.generic")))
 
@@ -325,10 +359,10 @@
        [:> icon* {:icon-id i/msg-error :size "s" :class (stl/css :step-error)}]
        [:> text* {:as "p" :typography t/body-medium}
         (get-error-message build)]]
-      (when (and (= persona :developer) (seq error) (not= error failure) (not not-connected?))
+      (when (and (= persona :developer) (or (seq failure) (seq error)) (not not-connected?))
         [:details {:class (stl/css :details) :open true}
          [:summary (tr "penforge.build.dev.details")]
-         [:pre {:class (stl/css :pre)} error]])
+         [:pre {:class (stl/css :pre)} (or (not-empty failure) error)]])
       (when (= persona :developer)
         [:> logs* {:logs logs}])]
      [:footer {:class (stl/css :footer)}
@@ -347,7 +381,7 @@
   [{:keys [build persona]}]
   (let [stage (:stage build)]
     (cond
-      (= stage :planning) [:> planning-view* {:build build}]
+      (= stage :planning) [:> planning-view* {:build build :persona persona}]
       (= stage :plan) [:> plan-view* {:key (get-in build [:plan :plan-id])
                                       :plan (:plan build)
                                       :persona persona}]
