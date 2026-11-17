@@ -10326,3 +10326,152 @@ msgstr "Copy the link again from the Penforge agent output."
 #: src/app/main/ui/workspace/sidebar.cljs:176
 msgid "penforge.sidebar.tab"
 msgstr "AI"
+
+# penforge:W22
+#: src/app/main/data/ai/actions/design_md.cljs:20
+msgid "penforge.actions.design-md"
+msgstr "Design system (DESIGN.md)"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.apply"
+msgstr "Apply to file"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.back"
+msgstr "Back to current"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.close"
+msgstr "Close"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.create-from-file"
+msgstr "Create from this file"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.discard"
+msgstr "Discard changes"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.draft.label"
+msgstr "Describe the design system"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.draft.placeholder"
+msgstr "A calm banking app: deep blue, lots of white space, rounded buttons…"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.draft.submit"
+msgstr "Draft with AI"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.edit"
+msgstr "Edit"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.empty.hint"
+msgstr "Create it from this file's colors, text styles and components, write it yourself, or describe the design system and let the AI draft it."
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.empty.title"
+msgstr "This project has no DESIGN.md yet"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.error"
+msgstr "Could not finish: %s"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.front-matter"
+msgstr "Tokens"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.history.current"
+msgstr "Current"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.history.empty"
+msgstr "No saved versions yet"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.history.title"
+msgstr "Versions"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.issues.errors"
+msgstr "Fix %s problems before applying"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.issues.title"
+msgstr "Problems"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.loading"
+msgstr "Loading DESIGN.md…"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.not-connected"
+msgstr "Connect the AI to see and edit the design system."
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.preview"
+msgstr "Preview"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.report.checkpoint"
+msgstr "A version of the file was saved first."
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.report.colors"
+msgstr "Colors: %s added, %s updated"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.report.components"
+msgstr "Components linked: %s"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.report.missing"
+msgstr "Not built yet: %s"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.report.tokens"
+msgstr "Tokens: %s added, %s updated"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.report.typographies"
+msgstr "Text styles: %s added, %s updated"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.restore"
+msgstr "Restore this version"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.save"
+msgstr "Save"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.subtitle"
+msgstr "DESIGN.md of this project, saved with its history on this computer"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.title"
+msgstr "Design system"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.unsaved"
+msgstr "Unsaved changes"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.update-from-file"
+msgstr "Update from file"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.viewing"
+msgstr "You are looking at an older version (%s)."
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.working"
+msgstr "Working…"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.write"
+msgstr "Write it yourself"
