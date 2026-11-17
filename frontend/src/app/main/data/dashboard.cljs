@@ -276,25 +276,25 @@
        (if (and (nil? options) (pf/enabled?))
          (rx/of (modal/show :penforge-create-project {}))
          (let [team-id   (:current-team-id state)
-             projects  (dsh/lookup-team-projects state team-id)
-             unames    (cfh/get-used-names projects)
-             base-name (tr "dashboard.new-project-prefix")
-             name      (or (some-> given-name str/trim not-empty)
-                           (cfh/generate-unique-name base-name unames :immediate-suffix? true))
-             params    {:name name
-                        :team-id team-id}
-             {:keys [on-success on-error]
-              :or {on-success identity
-                   on-error rx/throw}}
-             (meta params)]
-         (->> (rp/cmd! :create-project params)
-              (rx/tap on-success)
-              (rx/mapcat (fn [project]
-                           (if (some? platform)
-                             (rx/of (project-created project false)
-                                    (pf/update-project-settings (:id project) platform))
-                             (rx/of (project-created project)))))
-              (rx/catch on-error))))))))
+               projects  (dsh/lookup-team-projects state team-id)
+               unames    (cfh/get-used-names projects)
+               base-name (tr "dashboard.new-project-prefix")
+               name      (or (some-> given-name str/trim not-empty)
+                             (cfh/generate-unique-name base-name unames :immediate-suffix? true))
+               params    {:name name
+                          :team-id team-id}
+               {:keys [on-success on-error]
+                :or {on-success identity
+                     on-error rx/throw}}
+               (meta params)]
+           (->> (rp/cmd! :create-project params)
+                (rx/tap on-success)
+                (rx/mapcat (fn [project]
+                             (if (some? platform)
+                               (rx/of (project-created project false)
+                                      (pf/update-project-settings (:id project) platform))
+                               (rx/of (project-created project)))))
+                (rx/catch on-error))))))))
 
 ;; --- EVENT: duplicate-project
 
