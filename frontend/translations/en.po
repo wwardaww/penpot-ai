@@ -10700,3 +10700,43 @@ msgstr "Name layers"
 #: src/app/main/ui/workspace/ai/auto_name/dialog.cljs
 msgid "penforge.auto-name.truncated"
 msgstr "This file is very large: only its first 50,000 layers were looked at."
+# penforge:W07
+#: src/app/main/data/ai/actions/comments.cljs
+msgid "penforge.actions.fix-comments"
+msgstr "Fix comments"
+
+#: src/app/main/data/ai/actions/comments.cljs
+msgid "penforge.actions.fix-file-comments"
+msgstr "Fix comments in the whole file"
+
+#: src/app/main/ui/workspace/ai/comments/fix_button.cljs
+msgid "penforge.comments.fix-failed"
+msgstr "Couldn't fix"
+
+#: src/app/main/ui/workspace/ai/comments/fix_button.cljs
+msgid "penforge.comments.fix-retry"
+msgstr "The AI couldn't fix this comment. Click to try again."
+
+#: src/app/main/ui/workspace/ai/comments/fix_button.cljs
+msgid "penforge.comments.fix-with-ai"
+msgstr "Fix with AI"
+
+#: src/app/main/ui/workspace/ai/comments/fix_button.cljs
+msgid "penforge.comments.fix-with-ai.hint"
+msgstr "Let the AI make the change this comment asks for"
+
+#: src/app/main/ui/workspace/ai/comments/fix_button.cljs
+msgid "penforge.comments.fixed"
+msgstr "Fixed"
+
+#: src/app/main/ui/workspace/ai/comments/fix_button.cljs
+msgid "penforge.comments.fixing"
+msgstr "Fixing…"
+
+#: src/app/main/ui/workspace/ai/comments/fix_button.cljs
+msgid "penforge.comments.no-change"
+msgstr "No change"
+
+#: src/app/main/ui/workspace/ai/comments/fix_button.cljs
+msgid "penforge.comments.unchanged"
+msgstr "Not changed"

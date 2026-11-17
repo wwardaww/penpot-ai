@@ -333,6 +333,21 @@ export type RunnerEvent =
     | { kind: "done"; messageId: string; text: string; usage?: ChatUsage }
     | { kind: "error"; message: string };
 
+/**
+ * Narrows the tools Claude may use in one workflow turn, on top of the daemon's permission policy.
+ */
+export interface WorkflowToolFilter {
+    /**
+     * Checks one tool use.
+     *
+     * @param toolName - the tool name as Claude calls it (Penpot tools are `mcp__penpot__<name>`)
+     * @param input - the tool input
+     * @returns null to leave the decision to the daemon's policy, or the reason Claude is told
+     *   when the use is denied
+     */
+    check(toolName: string, input: Record<string, unknown>): string | null;
+}
+
 /** Claude turn requested by a workflow. */
 export interface WorkflowClaudeRequest {
     /** user prompt of the turn */
@@ -346,6 +361,8 @@ export interface WorkflowClaudeRequest {
     resumeSessionId?: string;
     /** receives every runner event of the turn */
     onEvent?: (event: RunnerEvent) => void;
+    /** denies tool uses before the daemon's permission policy sees them */
+    toolFilter?: WorkflowToolFilter;
 }
 
 /** Result of a Claude turn requested by a workflow. */
