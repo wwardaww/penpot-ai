@@ -10326,3 +10326,40 @@ msgstr "Copy the link again from the Penforge agent output."
 #: src/app/main/ui/workspace/sidebar.cljs:176
 msgid "penforge.sidebar.tab"
 msgstr "AI"
+
+# penforge:W07
+#: src/app/main/data/ai/actions/comments.cljs
+msgid "penforge.actions.fix-comments"
+msgstr "Fix comments"
+
+#: src/app/main/data/ai/actions/comments.cljs
+msgid "penforge.actions.fix-file-comments"
+msgstr "Fix comments in the whole file"
+
+#: src/app/main/ui/workspace/ai/comments/fix_button.cljs
+msgid "penforge.comments.fix-failed"
+msgstr "Couldn't fix"
+
+#: src/app/main/ui/workspace/ai/comments/fix_button.cljs
+msgid "penforge.comments.fix-retry"
+msgstr "The AI couldn't fix this comment. Click to try again."
+
+#: src/app/main/ui/workspace/ai/comments/fix_button.cljs
+msgid "penforge.comments.fix-with-ai"
+msgstr "Fix with AI"
+
+#: src/app/main/ui/workspace/ai/comments/fix_button.cljs
+msgid "penforge.comments.fix-with-ai.hint"
+msgstr "Let the AI make the change this comment asks for"
+
+#: src/app/main/ui/workspace/ai/comments/fix_button.cljs
+msgid "penforge.comments.fixed"
+msgstr "Fixed"
+
+#: src/app/main/ui/workspace/ai/comments/fix_button.cljs
+msgid "penforge.comments.fixing"
+msgstr "Fixing…"
+
+#: src/app/main/ui/workspace/ai/comments/fix_button.cljs
+msgid "penforge.comments.no-change"
+msgstr "No change"

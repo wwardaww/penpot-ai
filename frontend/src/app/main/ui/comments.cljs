@@ -26,6 +26,7 @@
    [app.main.ui.ds.controls.checkbox :refer [checkbox*]]
    [app.main.ui.ds.foundations.assets.icon :refer [icon*] :as i]
    [app.main.ui.hooks :as h]
+   [app.main.ui.workspace.ai.comments.fix-button :refer [fix-with-ai-button*]]
    [app.util.dom :as dom]
    [app.util.i18n :as i18n :refer [tr]]
    [app.util.keyboard :as kbd]
@@ -952,6 +953,8 @@
      [:div {:class (stl/css :floating-thread-header-left)}
       (tr "labels.comment") " " [:span {:class (stl/css :grayed-text)} "#" (:seqn thread)]]
      [:div {:class (stl/css :floating-thread-header-right)}
+      ;; penforge:W07
+      [:> fix-with-ai-button* {:thread thread}]
       (when (some? thread)
         [:> checkbox* {:class (stl/css :checkbox-wrapper)
                        :checked (:is-resolved thread)
