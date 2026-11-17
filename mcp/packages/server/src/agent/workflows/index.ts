@@ -5,3 +5,4 @@
  * "./<name>";`. The registry picks up every export of this module (see `wiki/architecture.md` §7).
  */
 export { workflow as chat } from "./chat";
+export { workflow as audit } from "./audit";
