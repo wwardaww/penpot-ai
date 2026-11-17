@@ -10326,3 +10326,48 @@ msgstr "Copy the link again from the Penforge agent output."
 #: src/app/main/ui/workspace/sidebar.cljs:176
 msgid "penforge.sidebar.tab"
 msgstr "AI"
+
+# penforge:W13
+#: src/app/main/data/ai/actions/generate.cljs
+msgid "penforge.actions.generate-screen"
+msgstr "Generate screen"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.title"
+msgstr "Generate a screen"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.prompt"
+msgstr "What should the screen show?"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.prompt-placeholder"
+msgstr "A login screen with email, password and a sign-in button"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.platform"
+msgstr "Platform"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.platform.web"
+msgstr "Web"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.platform.mobile"
+msgstr "Mobile app"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.use-selection"
+msgstr "Use the selected layers as a reference (%s)"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.use-selection-empty"
+msgstr "Use the selected layers as a reference (select some first)"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.hint"
+msgstr "The screen is built next to your boards with this file's components, tokens and styles. Progress shows in the AI tab."
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.submit"
+msgstr "Generate"
