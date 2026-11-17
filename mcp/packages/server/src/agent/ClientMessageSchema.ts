@@ -60,8 +60,8 @@ export class ClientMessageSchema {
             params: z.record(z.string(), z.unknown()).optional(),
         }),
         z.object({ type: z.literal("workflow.cancel"), runId: id }),
-        z.object({ type: z.literal("preview.start"), projectId: id }),
-        z.object({ type: z.literal("preview.stop"), projectId: id }),
+        z.object({ type: z.literal("preview.start"), rid: id.optional(), projectId: id }),
+        z.object({ type: z.literal("preview.stop"), rid: id.optional(), projectId: id }),
     ]);
 
     /**

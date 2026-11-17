@@ -8,6 +8,7 @@ import type { TurnSetup } from "./chat/TurnRunner";
 import { ClientMessageSchema } from "./ClientMessageSchema";
 import { PermissionBroker } from "./permissions/PermissionBroker";
 import { ToolPermissionPolicy } from "./permissions/ToolPermissionPolicy";
+import type { PreviewService } from "./process/PreviewService";
 import type { McpToolsClient } from "./tools/McpToolsClient";
 import type { WorkflowEngine } from "./workflows/WorkflowEngine";
 import type { ProjectWorkspace } from "./workspace/ProjectWorkspace";
@@ -20,6 +21,7 @@ export interface AgentSessionDeps {
     verifyToken(token: string): boolean;
     chat: ChatService;
     workflows: WorkflowEngine;
+    previews: PreviewService;
     workspaces: WorkspaceManager;
     tools: McpToolsClient | null;
     /** time the client has to send `auth` */
@@ -141,8 +143,9 @@ export class AgentSession implements AgentClient {
             case "workflow.cancel":
                 return this.deps.workflows.cancel(this, message);
             case "preview.start":
+                return this.deps.previews.start(this, message);
             case "preview.stop":
-                throw new AgentError("not-implemented", "Previews are not available yet");
+                return this.deps.previews.stop(this, message);
         }
     }
 

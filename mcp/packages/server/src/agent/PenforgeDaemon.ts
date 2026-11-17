@@ -3,6 +3,8 @@ import { AgentConfig, PENFORGE_DAEMON_VERSION } from "./AgentConfig";
 import { AgentServer, PairingToken } from "./AgentServer";
 import { ChatService } from "./chat/ChatService";
 import { TurnRunner } from "./chat/TurnRunner";
+import { DevServerManager } from "./process/DevServerManager";
+import { PreviewService } from "./process/PreviewService";
 import { PromptRegistry } from "./prompts/promptRegistry";
 import type { ClaudeRunner } from "./runner/ClaudeRunner";
 import { createRunner } from "./runner/createRunner";
@@ -18,6 +20,8 @@ export interface PenforgeDaemonParts {
     prompts?: PromptRegistry;
     /** null disables direct MCP tool calls */
     tools?: McpToolsClient | null;
+    /** dev server manager of the previews */
+    devServers?: DevServerManager;
     authTimeoutMs?: number;
 }
 
@@ -35,6 +39,7 @@ export class PenforgeDaemon {
     private readonly chat: ChatService;
     private readonly workflows: WorkflowEngine;
     private readonly tools: McpToolsClient | null;
+    private readonly previews: PreviewService;
     private readonly server: AgentServer;
 
     /**
@@ -52,6 +57,7 @@ export class PenforgeDaemon {
         const turns = new TurnRunner(this.runner, parts.prompts ?? PromptRegistry.locate());
         this.chat = new ChatService(turns);
         this.workflows = new WorkflowEngine(this.registry, turns);
+        this.previews = new PreviewService(parts.devServers ?? new DevServerManager());
         this.server = new AgentServer(
             config,
             this.token,
@@ -59,6 +65,7 @@ export class PenforgeDaemon {
                 daemonVersion: PENFORGE_DAEMON_VERSION,
                 chat: this.chat,
                 workflows: this.workflows,
+                previews: this.previews,
                 workspaces: new WorkspaceManager(config.projectsDir),
                 tools: this.tools,
                 authTimeoutMs: parts.authTimeoutMs ?? 10_000,
@@ -92,12 +99,13 @@ export class PenforgeDaemon {
     }
 
     /**
-     * Stops all runs and Claude processes, then the endpoint.
+     * Stops all runs, Claude processes and dev servers, then the endpoint.
      */
     public async stop(): Promise<void> {
         this.workflows.cancelAll();
         this.chat.cancelAll();
         this.runner.cancel();
+        await this.previews.stopAll();
         await this.server.stop();
         await this.tools?.close();
     }
