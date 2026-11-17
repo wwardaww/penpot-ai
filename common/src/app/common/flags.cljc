@@ -203,7 +203,11 @@
     :link-preview
 
     ;; Shows the "link later" option on the files export modal.
-    :export-link-later})
+    :export-link-later
+
+    ;; Penforge: enables the AI studio features (AI chat, comment
+    ;; fixing, build app). Disabled by default.
+    :ai})
 
 (def all-flags
   (set/union email login varia))
