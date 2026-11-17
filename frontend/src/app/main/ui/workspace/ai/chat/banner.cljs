@@ -29,6 +29,7 @@
         value     (deref value*)
         error*    (mf/use-state false)
         error?    (deref error*)
+        input-ref (mf/use-ref nil)
 
         on-change
         (mf/use-fn
@@ -36,16 +37,19 @@
            (reset! error* false)
            (reset! value* (dom/get-target-val event))))
 
+        ;; Read the input element, not the state: a link pasted and
+        ;; submitted with Enter right away can reach this handler before
+        ;; the state update renders, which used to submit an empty value.
         on-submit
         (mf/use-fn
-         (mf/deps value)
          (fn [event]
            (dom/prevent-default event)
-           (if-let [token (client/parse-pair-input value)]
-             (do
-               (reset! value* "")
-               (st/emit! (client/pair token)))
-             (reset! error* true))))
+           (let [input (mf/ref-val input-ref)]
+             (if-let [token (client/parse-pair-input (some-> input dom/get-value))]
+               (do
+                 (reset! value* "")
+                 (st/emit! (client/pair token)))
+               (reset! error* true)))))
 
         on-key-down
         (mf/use-fn
@@ -57,6 +61,7 @@
     [:form {:class (stl/css :pair-form)
             :on-submit on-submit}
      [:input {:class (stl/css :pair-input)
+              :ref input-ref
               :type "text"
               :value value
               :spell-check false
