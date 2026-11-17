@@ -31,7 +31,7 @@
   (:require
    [app.common.data :as d]
    [app.main.data.ai.chat :as chat]
-   [app.main.data.ai.client :as client]
+   [app.main.data.ai.preview :as preview]
    [app.main.data.ai.protocol :as proto]
    [app.main.data.modal :as modal]
    [beicon.v2.core :as rx]
@@ -269,15 +269,12 @@
   (modal/hide))
 
 (defn open-preview
-  "Ask the daemon to start the preview of the generated app (W09
-  answers with `preview.ready`) and close the dialog."
+  "Close the dialog and show the generated app in the preview pane
+  (W09): opens the pane, starts the dev server (or reloads a running
+  one); the pane shows progress and any failure."
   []
   (ptk/reify ::open-preview
     ptk/WatchEvent
     (watch [_ _ _]
-      (rx/of (modal/hide)))
-
-    ptk/EffectEvent
-    (effect [_ state _]
-      (when-let [project-id (:current-project-id state)]
-        (client/send! (proto/preview-start project-id))))))
+      (rx/of (modal/hide)
+             (preview/show-app)))))

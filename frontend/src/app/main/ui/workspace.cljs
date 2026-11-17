@@ -25,6 +25,8 @@
    [app.main.ui.hooks.resize :refer [use-resize-observer]]
    [app.main.ui.modal :refer [modal-container*]]
    [app.main.ui.workspace.ai.chat.session :refer [ai-session*]]
+   [app.main.ui.workspace.ai.preview.pane :as preview-pane :refer [preview-pane*]]
+   [app.main.ui.workspace.ai.preview.session :refer [preview-session*]]
    [app.main.ui.workspace.colorpicker]
    [app.main.ui.workspace.components-debugger :refer [components-debugger*]]
    [app.main.ui.workspace.context-menu :refer [context-menu*]]
@@ -232,6 +234,10 @@
 
         first-frame-rendered?  (mf/use-state false)
 
+        ai?              (contains? cf/flags :ai)
+        split-preview?   (mf/deref preview-pane/split-open-ref)
+        split-preview?   (and ai? split-preview?)
+
         background-color (:background-color wglobal)]
 
     (mf/with-effect []
@@ -277,7 +283,8 @@
         [:> (mf/provider ctx/workspace-read-only?) {:value read-only?}
          [:> modal-container*]
          [:> components-debugger*]
-         [:section {:class (stl/css :workspace)
+         [:section {:class (stl/css-case :workspace true
+                                         :workspace-with-preview split-preview?)
                     :style {:background-color background-color
                             :touch-action "none"
                             :position "relative"}}
@@ -287,6 +294,12 @@
           ;; would close the agent connection and abort a running AI turn.
           (when (contains? cf/flags :ai)
             [:> ai-session* {:file-id file-id}])
+          ;; Penforge: the live preview of the generated app, at file level
+          ;; too, so the frame does not reload on page changes.
+          (when ai?
+            [:*
+             [:> preview-session* {:project-id project-id :file-id file-id}]
+             [:> preview-pane*]])
           (when (and file-loaded? page-id)
             [:> workspace-inner*
              {:page-id page-id

@@ -22,6 +22,8 @@
   - `:icon` optional DS icon id (`i/text`)
   - `:scopes` set of `:context-menu` `:main-menu` `:header`
     `:command-palette`
+  - `:primary` optional; true renders the action as a labelled primary
+    button in the header strip (the Build CTA)
   - `:order` optional number; lower first, then by id
   - `:visible?` optional fn of the app state; hidden when false
   - `:enabled?` optional fn of the app state; disabled when false
@@ -40,6 +42,7 @@
    [:label fn?]
    [:icon {:optional true} :string]
    [:scopes [:set (into [:enum] scopes)]]
+   [:primary {:optional true} :boolean]
    [:order {:optional true} number?]
    [:visible? {:optional true} fn?]
    [:enabled? {:optional true} fn?]

@@ -20,6 +20,11 @@
   overflow: hidden;
 }
 
+// Penforge: live preview pane between the canvas and the right sidebar
+.workspace-with-preview {
+  grid-template: "left-sidebar viewport preview right-sidebar" 1fr / auto 1fr auto auto;
+}
+
 .workspace-loader {
   position: absolute;
   inset: 0;

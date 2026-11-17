@@ -19,6 +19,7 @@
    [frontend-tests.data.ai-checkpoints-test]
    [frontend-tests.data.ai-comments-test]
    [frontend-tests.data.ai-generate-test]
+   [frontend-tests.data.ai-preview-test]
    [frontend-tests.data.ai-protocol-test]
    [frontend-tests.data.auth-test]
    [frontend-tests.data.comments-batches-test]
@@ -161,6 +162,7 @@
    [frontend-tests.tokens.workspace-tokens-remap-test]
    [frontend-tests.ui.ai-design-md-test]
    [frontend-tests.ui.ai-build-test]
+   [frontend-tests.ui.ai-preview-pane-test]
    [frontend-tests.ui.check-updates-test]
    [frontend-tests.ui.color-token-position-test]
    [frontend-tests.ui.colorpicker-token-set-order-test]
@@ -246,6 +248,7 @@
    'frontend-tests.data.ai-checkpoints-test
    'frontend-tests.data.ai-comments-test
    'frontend-tests.data.ai-generate-test
+   'frontend-tests.data.ai-preview-test
    'frontend-tests.data.ai-protocol-test
    'frontend-tests.data.auth-test
    'frontend-tests.data.comments-batches-test
@@ -393,6 +396,7 @@
    'frontend-tests.tokens.workspace-tokens-remap-test
    'frontend-tests.ui.ai-design-md-test
    'frontend-tests.ui.ai-build-test
+   'frontend-tests.ui.ai-preview-pane-test
    'frontend-tests.ui.check-updates-test
    'frontend-tests.ui.color-token-position-test
    'frontend-tests.ui.colorpicker-token-set-order-test

@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "child_process";
 import type { AbortSignalLike } from "@penpot/mcp-common";
 import { CommandSchema } from "./BuildFiles";
+import { CommandLauncher } from "../process/CommandLauncher";
 import { ChildEnvironment } from "./ChildEnvironment";
 
 /** Options of one command run. */
@@ -34,8 +35,9 @@ export interface CommandExecutor {
 /**
  * Executor running commands as child processes.
  *
- * Only argument vectors accepted by {@link CommandSchema} run: the command line holds plain
- * tokens, so starting it through a shell on Windows (needed for `npm.cmd`) adds no other command.
+ * Only argument vectors accepted by {@link CommandSchema} run, and never through a shell: the
+ * program is started directly, or a Windows batch shim (`npm.cmd`) through `cmd.exe` with quoted
+ * arguments ({@link CommandLauncher}, shared with the dev server manager).
  * What the command then runs (package scripts, dependencies) is code Claude wrote or chose; it
  * gets a scrubbed environment ({@link ChildEnvironment}) without the daemon's secrets. The whole
  * process tree is killed on abort or timeout.
@@ -52,11 +54,19 @@ export class ProcessCommandExecutor implements CommandExecutor {
         if (options.signal?.aborted) {
             return Promise.reject(new Error("cancelled"));
         }
+        const env = ChildEnvironment.scrub(process.env, { CI: "1", FORCE_COLOR: "0", NO_COLOR: "1" });
+        let spec: ReturnType<CommandLauncher["spawnSpec"]>;
+        try {
+            spec = new CommandLauncher(env).spawnSpec(argv);
+        } catch (error) {
+            return Promise.reject(error);
+        }
         return new Promise<CommandOutcome>((resolve, reject) => {
-            const child = spawn(argv[0], argv.slice(1), {
+            const child = spawn(spec.file, spec.args, {
                 cwd: options.cwd,
-                env: ChildEnvironment.scrub(process.env, { CI: "1", FORCE_COLOR: "0", NO_COLOR: "1" }),
-                shell: ProcessCommandExecutor.IS_WINDOWS,
+                env,
+                shell: false,
+                windowsVerbatimArguments: spec.windowsVerbatimArguments,
                 detached: !ProcessCommandExecutor.IS_WINDOWS,
                 windowsHide: true,
                 stdio: ["ignore", "pipe", "pipe"],

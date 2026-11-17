@@ -118,13 +118,24 @@ export interface WorkflowCancelMessage {
     runId: string;
 }
 
+/**
+ * Request to run the dev server of a project's generated app (`app-src/`) and preview it.
+ *
+ * Idempotent: a running server is reused and its current status is sent again. The project must be
+ * the one of the client's `context.set`. The client then receives the `preview.*` messages of that
+ * project until it disconnects or starts the preview of another project.
+ */
 export interface PreviewStartMessage {
     type: "preview.start";
+    /** optional request id, echoed by an `error` reply */
+    rid?: string;
     projectId: string;
 }
 
+/** Request to stop the dev server of a project (all tabs on that project see it stop). */
 export interface PreviewStopMessage {
     type: "preview.stop";
+    rid?: string;
     projectId: string;
 }
 
@@ -242,6 +253,44 @@ export interface PreviewStoppedMessage {
     url: string;
 }
 
+/** State of a project's dev server. */
+export type PreviewState = "starting" | "ready" | "stopped" | "failed";
+
+/**
+ * Why a dev server is restarting, stopped or failed; the client words it for the user.
+ * `restarting` after a crash, `start-timeout` (no HTTP answer in time), `crashed` (gave up after
+ * the restarts), `command-failed` (the dev command could not start), `stopped` (`preview.stop`),
+ * `project-closed` (no tab watched it for a while), `daemon-stopped`.
+ */
+export type PreviewReason =
+    "restarting" | "start-timeout" | "crashed" | "command-failed" | "stopped" | "project-closed" | "daemon-stopped";
+
+/**
+ * Status of a project's dev server; sent on every state change (and on `preview.start` of a
+ * client that joins a running server). `preview.ready` / `preview.stopped` are sent as well.
+ */
+export interface PreviewStatusMessage {
+    type: "preview.status";
+    projectId: string;
+    state: PreviewState;
+    /** preview URL once a port is assigned */
+    url?: string;
+    /** why the server is restarting, failed or stopped (code; see {@link PreviewReason}) */
+    reason?: PreviewReason;
+    /** technical detail of `reason`, in English (for logs and the developer persona) */
+    message?: string;
+    /** number of restarts after crashes */
+    restarts?: number;
+}
+
+/** Output line of a project's dev server; sent only to clients with the developer persona. */
+export interface PreviewLogMessage {
+    type: "preview.log";
+    projectId: string;
+    stream: "stdout" | "stderr" | "system";
+    text: string;
+}
+
 /** Error codes of the `error` message. */
 export type AgentErrorCode =
     | "bad-request"
@@ -274,6 +323,8 @@ export type DaemonMessage =
     | WorkflowDoneMessage
     | PreviewReadyMessage
     | PreviewStoppedMessage
+    | PreviewStatusMessage
+    | PreviewLogMessage
     | ErrorMessage;
 
 // ---------------------------------------------------------------------------------------------

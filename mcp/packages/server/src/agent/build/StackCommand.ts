@@ -30,9 +30,10 @@ export class StackCommand {
      * Checks a command.
      *
      * @param argv - the argument vector
+     * @param programs - programs the command may start (tests of the dev server use `node`)
      * @returns why the command is refused, or null when it is acceptable
      */
-    public static problem(argv: string[]): string | null {
+    public static problem(argv: readonly string[], programs: readonly string[] = StackCommand.PROGRAMS): string | null {
         if (argv.length === 0 || argv.length > 16) {
             return "a command has 1 to 16 arguments";
         }
@@ -41,8 +42,8 @@ export class StackCommand {
             return `unsafe argument ${JSON.stringify(unsafe)}`;
         }
         const [program, first] = argv;
-        if (!(StackCommand.PROGRAMS as readonly string[]).includes(program)) {
-            return `a command starts with one of ${StackCommand.PROGRAMS.join(", ")}`;
+        if (!programs.includes(program)) {
+            return `a command starts with one of ${programs.join(", ")}`;
         }
         if (program === "npx" && !(StackCommand.NPX_PACKAGES as readonly string[]).includes(first ?? "")) {
             return `npx may only run ${StackCommand.NPX_PACKAGES.join(", ")}`;
@@ -53,7 +54,7 @@ export class StackCommand {
         return StackCommand.hostProblem(argv);
     }
 
-    private static hostProblem(argv: string[]): string | null {
+    private static hostProblem(argv: readonly string[]): string | null {
         for (let index = 0; index < argv.length; index++) {
             const arg = argv[index];
             if (StackCommand.ALL_INTERFACES.has(arg)) {

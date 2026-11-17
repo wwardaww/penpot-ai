@@ -11,6 +11,7 @@
   (:require
    [app.main.data.ai.actions :as actions]
    [app.main.store :as st]
+   [app.main.ui.ds.buttons.button :refer [button*]]
    [app.main.ui.ds.buttons.icon-button :refer [icon-button*]]
    [app.main.ui.ds.foundations.assets.icon :as i]
    [okulary.core :as l]
@@ -23,12 +24,19 @@
         (mf/use-fn
          (mf/deps action)
          #(actions/run-action action :header))]
-    [:> icon-button* {:variant "action"
-                      :tooltip-placement "bottom-left"
-                      :aria-label (actions/get-label action)
-                      :icon (or (:icon action) i/feedback)
-                      :disabled (not enabled)
-                      :on-click on-click}]))
+    ;; `:primary` actions (the Build CTA) show their label
+    (if (:primary action)
+      [:> button* {:variant "primary"
+                   :class (stl/css :primary-action)
+                   :disabled (not enabled)
+                   :on-click on-click}
+       (actions/get-label action)]
+      [:> icon-button* {:variant "action"
+                        :tooltip-placement "bottom-left"
+                        :aria-label (actions/get-label action)
+                        :icon (or (:icon action) i/feedback)
+                        :disabled (not enabled)
+                        :on-click on-click}])))
 
 (mf/defc header-strip*
   []

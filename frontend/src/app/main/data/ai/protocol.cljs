@@ -107,10 +107,10 @@
     [:map [:type :string] [:run-id :string]]]
 
    ["preview.start"
-    [:map [:type :string] [:project-id :string]]]
+    [:map [:type :string] [:rid {:optional true} :string] [:project-id :string]]]
 
    ["preview.stop"
-    [:map [:type :string] [:project-id :string]]]])
+    [:map [:type :string] [:rid {:optional true} :string] [:project-id :string]]]])
 
 ;; --- Daemon -> client
 
@@ -186,6 +186,24 @@
 
    ["preview.stopped"
     [:map [:type :string] [:project-id :string] [:url {:optional true} :string]]]
+
+   ["preview.status"
+    [:map
+     [:type :string]
+     [:project-id :string]
+     [:state [:enum "starting" "ready" "stopped" "failed"]]
+     [:url {:optional true} :string]
+     ;; unknown future reasons must not drop the message: a string
+     [:reason {:optional true} :string]
+     [:message {:optional true} :string]
+     [:restarts {:optional true} :int]]]
+
+   ["preview.log"
+    [:map
+     [:type :string]
+     [:project-id :string]
+     [:stream [:enum "stdout" "stderr" "system"]]
+     [:text :string]]]
 
    ["error"
     [:map
@@ -303,12 +321,16 @@
   {:type "workflow.cancel" :run-id run-id})
 
 (defn preview-start
-  [project-id]
-  {:type "preview.start" :project-id (str project-id)})
+  ([project-id] (preview-start project-id nil))
+  ([project-id rid]
+   (cond-> {:type "preview.start" :project-id (str project-id)}
+     (some? rid) (assoc :rid rid))))
 
 (defn preview-stop
-  [project-id]
-  {:type "preview.stop" :project-id (str project-id)})
+  ([project-id] (preview-stop project-id nil))
+  ([project-id rid]
+   (cond-> {:type "preview.stop" :project-id (str project-id)}
+     (some? rid) (assoc :rid rid))))
 
 (defn node-attachment
   "Build a node attachment from a shape."
