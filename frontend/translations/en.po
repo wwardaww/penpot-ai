@@ -10326,3 +10326,137 @@ msgstr "Copy the link again from the Penforge agent output."
 #: src/app/main/ui/workspace/sidebar.cljs:176
 msgid "penforge.sidebar.tab"
 msgstr "AI"
+
+# penforge:W08
+
+#: src/app/main/ui/workspace/ai/build/actions.cljs
+msgid "penforge.actions.build-app"
+msgstr "Build app"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.title"
+msgstr "Build app"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.close"
+msgstr "Close"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.planning"
+msgstr "Looking at your design…"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.building"
+msgstr "Building your app…"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.stop"
+msgstr "Stop"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.hide"
+msgstr "Hide"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.status.new"
+msgstr "New"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.status.changed"
+msgstr "Changed"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.status.removed"
+msgstr "Removed"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.status.same"
+msgstr "No changes"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.plan.screens"
+msgstr "Screens"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.plan.question"
+msgstr "Build it?"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.plan.question-developer"
+msgstr "Generate the app with this plan?"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.plan.nothing-question"
+msgstr "Build everything again?"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.plan.confirm"
+msgstr "Build it"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.plan.rebuild"
+msgstr "Build everything again"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.plan.not-now"
+msgstr "Not now"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.dev.stack"
+msgstr "Stack"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.dev.routes"
+msgstr "Routes"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.dev.components"
+msgstr "Components"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.dev.tree"
+msgstr "Folder tree"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.dev.notes"
+msgstr "Extra instructions"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.dev.notes-placeholder"
+msgstr "Anything the build should know"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.dev.logs"
+msgstr "Logs"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.dev.details"
+msgstr "Details"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.dev.commit"
+msgstr "Commit %s"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.done.title"
+msgstr "Your app is ready"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.done.open-preview"
+msgstr "Open preview"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.error.generic"
+msgstr "Something went wrong while building. Your design is safe; please try again."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.error.not-connected"
+msgstr "Connect the AI assistant first, then press Build again."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.error.open-ai"
+msgstr "Open AI panel"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.error.retry"
+msgstr "Try again"
