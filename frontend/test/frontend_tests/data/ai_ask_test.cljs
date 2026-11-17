@@ -6,16 +6,20 @@
 
 (ns frontend-tests.data.ai-ask-test
   (:require
+   ["jsdom" :refer [JSDOM]]
    [app.common.data :as d]
    [app.common.uuid :as uuid]
    [app.main.data.ai.actions :as actions]
    [app.main.data.ai.actions.all]
    [app.main.data.ai.actions.ask :as ask]
    [app.main.data.ai.chat :as chat]
+   [app.main.data.ai.detached :as detached]
    [app.main.data.workspace.shortcuts :as wsc]
+   [app.util.globals :as globals]
    [beicon.v2.core :as rx]
    [cljs.test :as t :include-macros true]
    [frontend-tests.helpers.async :as async]
+   [frontend-tests.helpers.mock :as mock]
    [potok.v2.core :as ptk]))
 
 (def ^:private file-id (uuid/next))
@@ -161,3 +165,37 @@
     (await (async/observe (ptk/watch (ask/ask-selection) (state) (rx/subject))
                           :on-next #(swap! events conj %)))
     (t/is (= [::chat/open-chat ::ask/focus-chat-input] (mapv ptk/type @events)))))
+
+(t/deftest ^:async ask-selection-while-detached-keeps-the-sidebar
+  (let [state  (assoc-in (state :selected [board-id]
+                                :chat (assoc chat/empty-chat :conversation-id "c1"))
+                         [:penforge :detached] {:status :open :window-name "w"})
+        events (atom [])]
+    (await (async/observe (ptk/watch (ask/ask-selection) state (rx/subject))
+                          :on-next #(swap! events conj %)))
+    (t/is (= [::ask/add-attachments ::ask/focus-chat-input] (mapv ptk/type @events))
+          "no open-chat: the sidebar would only show the detached notice")))
+
+(defn- chat-dom
+  "A jsdom window holding a chat panel input."
+  []
+  (.-window (JSDOM. (str "<!doctype html><html><body>"
+                         "<article data-testid='ai-chat-panel'><textarea></textarea></article>"
+                         "</body></html>"))))
+
+(t/deftest ^:async chat-input-is-found-where-the-chat-lives
+  (let [sidebar (chat-dom)
+        popup   (chat-dom)
+        input   #(.querySelector (.-document ^js %) "textarea")]
+    (try
+      (await
+       (mock/with-mocks* {globals/document (.-document sidebar)
+                          detached/chat-document (constantly nil)}
+         (t/is (identical? (input sidebar) (ask/find-chat-input)) "docked: the sidebar")))
+      (await
+       (mock/with-mocks* {globals/document (.-document sidebar)
+                          detached/chat-document (constantly (.-document popup))}
+         (t/is (identical? (input popup) (ask/find-chat-input)) "detached: the window")))
+      (finally
+        (.close sidebar)
+        (.close popup)))))

@@ -146,6 +146,16 @@
     (when (window-open? window)
       (.focus ^js window))))
 
+(defn chat-document
+  "The document the chat lives in while it is detached (the detached
+  window's), or nil while it is in the sidebar or the window is gone."
+  []
+  (let [window @current-window]
+    (when (window-open? window)
+      (try
+        (.-document ^js window)
+        (catch :default _ nil)))))
+
 (defn notify-opener!
   "Called from the detached window page: tell the opener about a
   lifecycle event (`:ready` or `:unload`)."
