@@ -1,0 +1,335 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/typography.scss" as t;
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+@use "ds/_utils.scss" as *;
+@use "refactor/common-refactor.scss" as deprecated;
+
+.overlay {
+  @extend %modal-overlay-base;
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-m);
+  inline-size: min(px2rem(1040), 92vw);
+  block-size: min(px2rem(760), 88vh);
+  padding: var(--sp-xl);
+  border: $b-2 solid var(--color-background-quaternary);
+  border-radius: $br-8;
+  background-color: var(--color-background-primary);
+  color: var(--color-foreground-secondary);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-m);
+  color: var(--color-foreground-primary);
+}
+
+.header-text {
+  flex: 1;
+  display: grid;
+  gap: var(--sp-xxs);
+}
+
+.title {
+  margin: 0;
+  color: var(--color-foreground-primary);
+}
+
+.muted {
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr px2rem(300);
+  gap: var(--sp-l);
+  min-block-size: 0;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  min-block-size: 0;
+  min-inline-size: 0;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-l);
+  min-block-size: 0;
+  overflow-y: auto;
+}
+
+.side-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+}
+
+.side-title {
+  @include t.use-typography("headline-small");
+
+  margin: 0;
+  color: var(--color-foreground-primary);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-s);
+}
+
+.tabs {
+  display: flex;
+  gap: var(--sp-xxs);
+  padding: var(--sp-xxs);
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+}
+
+.tab {
+  @include t.use-typography("body-small");
+
+  padding: var(--sp-xs) var(--sp-m);
+  border: none;
+  border-radius: $br-6;
+  background: none;
+  color: var(--color-foreground-secondary);
+  cursor: pointer;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+}
+
+.tab-selected {
+  background-color: var(--color-background-quaternary);
+  color: var(--color-foreground-primary);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-s);
+}
+
+.input {
+  @include t.use-typography("body-medium");
+
+  inline-size: 100%;
+  padding: var(--sp-s);
+  border: $b-1 solid transparent;
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+  color: var(--color-foreground-primary);
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-accent-primary);
+  }
+
+  &:disabled {
+    color: var(--color-foreground-secondary);
+  }
+}
+
+.editor {
+  flex: 1;
+  min-block-size: 0;
+  font-family: monospace;
+  white-space: pre;
+  resize: none;
+}
+
+.draft-input {
+  resize: vertical;
+}
+
+.preview {
+  flex: 1;
+  min-block-size: 0;
+  padding: var(--sp-m);
+  overflow-y: auto;
+  border-radius: $br-8;
+  background-color: var(--color-background-secondary);
+  color: var(--color-foreground-primary);
+}
+
+.front-matter {
+  margin-block-end: var(--sp-m);
+}
+
+.front-matter-title {
+  @include t.use-typography("body-small");
+
+  color: var(--color-foreground-secondary);
+  cursor: pointer;
+}
+
+.code {
+  margin: var(--sp-s) 0 0;
+  padding: var(--sp-s);
+  overflow-x: auto;
+  border-radius: $br-6;
+  background-color: var(--color-background-tertiary);
+  font-family: monospace;
+  font-size: px2rem(12);
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-m);
+  text-align: center;
+  color: var(--color-foreground-primary);
+}
+
+.notice-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-s);
+  padding: var(--sp-s) var(--sp-m);
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+  color: var(--color-foreground-primary);
+
+  p {
+    flex: 1;
+    min-inline-size: px2rem(200);
+    margin: 0;
+  }
+}
+
+.notice-warning {
+  background-color: var(--color-background-warning);
+}
+
+.issues,
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.issue {
+  @include t.use-typography("body-small");
+
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-xs);
+  color: var(--color-foreground-secondary);
+}
+
+.issue-error {
+  color: var(--color-accent-error);
+}
+
+.history-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xxs);
+  inline-size: 100%;
+  padding: var(--sp-xs) var(--sp-s);
+  border: $b-1 solid transparent;
+  border-radius: $br-6;
+  background: none;
+  text-align: start;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background-color: var(--color-background-tertiary);
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
+.history-selected {
+  border-color: var(--color-accent-primary);
+}
+
+.history-subject {
+  @include t.use-typography("body-small");
+
+  color: var(--color-foreground-primary);
+}
+
+.history-date {
+  @include t.use-typography("body-small");
+
+  color: var(--color-foreground-secondary);
+}
+
+.report {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  padding: var(--sp-s) var(--sp-m);
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+  color: var(--color-foreground-primary);
+
+  p {
+    margin: 0;
+  }
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-m);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs);
+  min-inline-size: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.status-error {
+  color: var(--color-accent-error);
+}
+
+.spinner {
+  inline-size: px2rem(12);
+  block-size: px2rem(12);
+  border: $b-2 solid var(--color-background-quaternary);
+  border-block-start-color: var(--color-accent-primary);
+  border-radius: $br-circle;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

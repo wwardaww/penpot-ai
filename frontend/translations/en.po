@@ -11093,3 +11093,439 @@ msgstr "%s layers have a default name, such as %s."
 #: src/app/main/ui/workspace/ai/audit/panel.cljs
 msgid "penforge.audit.default-name.suggestion"
 msgstr "Give layers names that say what they are (Auto-name can do it for you)."
+# penforge:W22
+#: src/app/main/data/ai/actions/design_md.cljs:20
+msgid "penforge.actions.design-md"
+msgstr "Design system (DESIGN.md)"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.apply"
+msgstr "Apply to file"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.back"
+msgstr "Back to current"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.close"
+msgstr "Close"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.create-from-file"
+msgstr "Create from this file"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.discard"
+msgstr "Discard changes"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.draft.label"
+msgstr "Describe the design system"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.draft.placeholder"
+msgstr "A calm banking app: deep blue, lots of white space, rounded buttons…"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.draft.submit"
+msgstr "Draft with AI"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.edit"
+msgstr "Edit"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.empty.hint"
+msgstr "Create it from this file's colors, text styles and components, write it yourself, or describe the design system and let the AI draft it."
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.empty.title"
+msgstr "This project has no DESIGN.md yet"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.error"
+msgstr "Could not finish: %s"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.front-matter"
+msgstr "Tokens"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.history.current"
+msgstr "Current"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.history.empty"
+msgstr "No saved versions yet"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.history.title"
+msgstr "Versions"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.issues.errors"
+msgstr "Fix %s problems before applying"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.issues.title"
+msgstr "Problems"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.loading"
+msgstr "Loading DESIGN.md…"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.not-connected"
+msgstr "Connect the AI to see and edit the design system."
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.preview"
+msgstr "Preview"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.report.checkpoint"
+msgstr "A version of the file was saved first."
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.report.colors"
+msgstr "Colors: %s added, %s updated"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.report.components"
+msgstr "Components linked: %s"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.report.missing"
+msgstr "Not built yet: %s"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.report.tokens"
+msgstr "Tokens: %s added, %s updated"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.report.typographies"
+msgstr "Text styles: %s added, %s updated"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.restore"
+msgstr "Restore this version"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.save"
+msgstr "Save"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.subtitle"
+msgstr "DESIGN.md of this project, saved with its history on this computer"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.title"
+msgstr "Design system"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.unsaved"
+msgstr "Unsaved changes"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.update-from-file"
+msgstr "Update from file"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.viewing"
+msgstr "You are looking at an older version (%s)."
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.working"
+msgstr "Working…"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.write"
+msgstr "Write it yourself"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.apply.cancel"
+msgstr "Cancel"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.apply.confirm"
+msgstr "Apply DESIGN.md to this file? It adds or updates library colors, text styles and the \"DESIGN.md\" tokens, and turns those tokens on, so every token value is calculated again. A version of the file is saved first."
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.conflict"
+msgstr "DESIGN.md was changed outside this editor since you opened it. Nothing was overwritten; the other version is kept in the history."
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.conflict.overwrite"
+msgstr "Save mine over it"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.conflict.use-disk"
+msgstr "Load that version"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.not-in-file"
+msgstr "Kept from DESIGN.md, not found in the file: %s"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.not-in-file.remove"
+msgstr "Remove them from DESIGN.md"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.proposal.accept"
+msgstr "Show the new version"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.proposal.dismiss"
+msgstr "Keep my text"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.proposal.draft"
+msgstr "The AI saved a new DESIGN.md. Your unsaved text is still in the editor."
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.proposal.export"
+msgstr "DESIGN.md was updated from the file. Your unsaved text is still in the editor."
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.question.apply-anyway"
+msgstr "Apply anyway"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.question.checkpoint"
+msgstr "Could not save a version of the file before applying DESIGN.md. Apply it anyway?"
+
+#: src/app/main/ui/workspace/ai/design_md/panel.cljs
+msgid "penforge.design-md.question.stop"
+msgstr "Stop"
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.failure.connection-lost"
+msgstr "The connection to the AI dropped. Check the result once it is back."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.failure.has-errors"
+msgstr "DESIGN.md has %s problems to fix first (the first one is at %s)."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.failure.missing-content"
+msgstr "There was no text to save."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.failure.missing-prompt"
+msgstr "Describe the design system first."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.failure.no-draft"
+msgstr "The AI did not write a DESIGN.md. Try again."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.failure.no-file"
+msgstr "This project has no DESIGN.md yet."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.failure.penpot-answer"
+msgstr "Penpot gave an answer that could not be read."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.failure.penpot-refused"
+msgstr "Penpot refused the change: %s"
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.failure.stopped"
+msgstr "Stopped before changing the file."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.failure.too-large"
+msgstr "DESIGN.md is too large."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.color-unsupported"
+msgstr "%s is kept as a token, but library colors need hex, rgb() or hsl()."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.duplicate-section"
+msgstr "This section appears twice."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.entry-not-map"
+msgstr "This entry needs properties below it."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.font-weight"
+msgstr "Font weight must be a number from 1 to 1000."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.front-matter-missing"
+msgstr "The file must start with a --- block of tokens."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.front-matter-not-map"
+msgstr "The token block must list keys and values."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.front-matter-unclosed"
+msgstr "The token block has no closing --- line."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.group-not-map"
+msgstr "This group must list names and values."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.line-height"
+msgstr "Line height must be a number or a size."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.no-font-family"
+msgstr "No font family: the default font is used."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.no-font-size"
+msgstr "No font size: 14px is used."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.no-name"
+msgstr "The design system has no name."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.not-color"
+msgstr "%s is not a color."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.not-dimension"
+msgstr "%s is not a size such as 8px or 1rem."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.not-padding"
+msgstr "%s is not 1 to 4 sizes."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.not-text"
+msgstr "This must be text."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.omitted-entry"
+msgstr "Each entry must be a section name."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.omitted-not-list"
+msgstr "omitted must be a list."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.property-type"
+msgstr "This value must be text or a number."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.reference-cycle"
+msgstr "%s points back to itself."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.reference-group"
+msgstr "%s must point into %s."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.reference-missing"
+msgstr "%s points to a token that does not exist."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.section-order"
+msgstr "This section is out of the usual order."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.typography-reference"
+msgstr "Use a text style here, for example {typography.label-md}."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.unknown-key"
+msgstr "Unknown key; it is kept as it is."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.unknown-property"
+msgstr "Unknown property."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.issue.yaml-invalid"
+msgstr "The token block is not valid YAML: %s"
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.notice.applied"
+msgstr "DESIGN.md applied to the file."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.notice.created"
+msgstr "DESIGN.md created from the file."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.notice.done"
+msgstr "Done."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.notice.drafted"
+msgstr "The AI drafted DESIGN.md."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.notice.drafted-with-errors"
+msgstr "The AI drafted DESIGN.md, with problems to fix."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.notice.export-unchanged"
+msgstr "DESIGN.md already matches the file."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.notice.saved"
+msgstr "DESIGN.md saved."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.notice.unchanged"
+msgstr "Nothing changed."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.notice.updated"
+msgstr "DESIGN.md updated from the file."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.progress.build-components"
+msgstr "Building components…"
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.progress.checkpoint"
+msgstr "Saving a version of the file…"
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.progress.draft"
+msgstr "Writing DESIGN.md…"
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.progress.import-library"
+msgstr "Adding colors, text styles and tokens…"
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.progress.read-file"
+msgstr "Reading the file's design system…"
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.progress.write-notes"
+msgstr "Writing usage notes…"
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.report.activation-set"
+msgstr "The DESIGN.md tokens are turned on."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.report.activation-theme"
+msgstr "The DESIGN.md token theme is turned on, next to your own themes."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.warning.font-missing"
+msgstr "%s: the font %s was not found."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.warning.step-failed"
+msgstr "%s: %s"
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.warning.tokens-from-library"
+msgstr "This file takes its tokens from a library, so they were not changed."
+
+#: src/app/main/ui/workspace/ai/design_md/messages.cljs
+msgid "penforge.design-md.warning.weight-missing"
+msgstr "%s: %s has no weight %s."

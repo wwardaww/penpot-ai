@@ -19,4 +19,5 @@
    [app.main.data.ai.actions.adapt]
    [app.main.data.ai.actions.audit]
    ;; W15: registers the audit results modal
-   [app.main.ui.workspace.ai.audit.panel]))
+   [app.main.ui.workspace.ai.audit.panel]
+   [app.main.data.ai.actions.design-md]))

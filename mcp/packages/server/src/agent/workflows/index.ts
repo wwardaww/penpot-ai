@@ -15,3 +15,8 @@ export { workflow as fixComments } from "./fix-comments";
 export { workflow as generateScreen } from "./generate-screen";
 export { workflow as adaptResponsive } from "./adapt-responsive";
 export { workflow as audit } from "./audit";
+export { workflow as designMdRead } from "./design-md-read";
+export { workflow as designMdSave } from "./design-md-save";
+export { workflow as designMdDraft } from "./design-md-draft";
+export { workflow as designMdImport } from "./design-md-import";
+export { workflow as designMdExport } from "./design-md-export";
