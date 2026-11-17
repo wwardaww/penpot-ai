@@ -15,4 +15,5 @@
    [app.main.ui.workspace.ai.checkpoints.history]
    [app.main.data.ai.actions.auto-name]
    [app.main.data.ai.actions.comments]
-   [app.main.data.ai.actions.generate]))
+   [app.main.data.ai.actions.generate]
+   [app.main.data.ai.actions.adapt]))

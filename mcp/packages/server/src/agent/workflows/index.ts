@@ -13,3 +13,4 @@ export { workflow as autoName } from "./auto-name";
 export { workflow as fixComment } from "./fix-comment";
 export { workflow as fixComments } from "./fix-comments";
 export { workflow as generateScreen } from "./generate-screen";
+export { workflow as adaptResponsive } from "./adapt-responsive";

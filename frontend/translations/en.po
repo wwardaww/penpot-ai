@@ -10812,3 +10812,59 @@ msgstr "Created \"%s\" (%s)"
 #: src/app/main/data/ai/actions/generate.cljs
 msgid "penforge.generate.summary-details"
 msgstr "Created \"%s\" (%s) with %s component instances and %s tokens"
+# penforge:W14
+#: src/app/main/data/ai/actions/adapt.cljs:253
+msgid "penforge.actions.adapt-desktop"
+msgstr "Adapt to desktop with AI"
+
+#: src/app/main/data/ai/actions/adapt.cljs:243
+msgid "penforge.actions.adapt-mobile"
+msgstr "Adapt to mobile with AI"
+
+#: src/app/main/data/ai/actions/adapt.cljs:104
+msgid "penforge.adapt.exists-desktop"
+msgstr "\"%s\" already has a desktop version (%s). Make another one?"
+
+#: src/app/main/data/ai/actions/adapt.cljs:105
+msgid "penforge.adapt.exists-mobile"
+msgstr "\"%s\" already has a mobile version (%s). Make another one?"
+
+#: src/app/main/data/ai/actions/adapt.cljs:112
+msgid "penforge.adapt.option.cancel"
+msgstr "Cancel"
+
+#: src/app/main/data/ai/actions/adapt.cljs:111
+msgid "penforge.adapt.option.create"
+msgstr "Make another"
+
+#: src/app/main/data/ai/actions/adapt.cljs:94
+msgid "penforge.adapt.progress.check"
+msgstr "Checking the result"
+
+#: src/app/main/data/ai/actions/adapt.cljs:91
+msgid "penforge.adapt.progress.copy"
+msgstr "Copying the board"
+
+#: src/app/main/data/ai/actions/adapt.cljs:95
+msgid "penforge.adapt.progress.fix"
+msgstr "Fixing what sticks out"
+
+#: src/app/main/data/ai/actions/adapt.cljs:92
+msgid "penforge.adapt.progress.read"
+msgstr "Looking at the design"
+
+#: src/app/main/data/ai/actions/adapt.cljs:93
+msgid "penforge.adapt.progress.reflow"
+msgstr "Reflowing the layout"
+
+#: src/app/main/data/ai/actions/adapt.cljs:121
+msgid "penforge.adapt.summary.done"
+msgstr "Made \"%s\" (%s×%s)."
+
+#: src/app/main/data/ai/actions/adapt.cljs:120
+msgid "penforge.adapt.summary.issues"
+msgstr "Made \"%s\" (%s×%s). Layers to check: %s."
+
+#: src/app/main/data/ai/actions/adapt.cljs:122
+msgid "penforge.adapt.summary.kept"
+msgstr "Kept %s"

@@ -13,6 +13,7 @@
    [frontend-tests.data.ai-actions-test]
    [frontend-tests.data.ai-ask-test]
    [frontend-tests.data.ai-auto-name-test]
+   [frontend-tests.data.ai-adapt-test]
    [frontend-tests.data.ai-chat-test]
    [frontend-tests.data.ai-checkpoints-test]
    [frontend-tests.data.ai-comments-test]
@@ -236,6 +237,7 @@
    'frontend-tests.data.ai-actions-test
    'frontend-tests.data.ai-ask-test
    'frontend-tests.data.ai-auto-name-test
+   'frontend-tests.data.ai-adapt-test
    'frontend-tests.data.ai-chat-test
    'frontend-tests.data.ai-checkpoints-test
    'frontend-tests.data.ai-comments-test
