@@ -5,3 +5,7 @@
  * "./<name>";`. The registry picks up every export of this module (see `wiki/architecture.md` §7).
  */
 export { workflow as chat } from "./chat";
+export { workflow as checkpointCreate } from "./checkpoint-create";
+export { workflow as checkpointRestore } from "./checkpoint-restore";
+export { workflow as checkpointList } from "./checkpoint-list";
+export { workflow as checkpointDiff } from "./checkpoint-diff";
