@@ -179,6 +179,14 @@
   text-align: center;
 }
 
+.detail {
+  @include t.use-typography("code-font");
+
+  color: var(--color-foreground-secondary);
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+
 .spinner {
   inline-size: px2rem(20);
   block-size: px2rem(20);

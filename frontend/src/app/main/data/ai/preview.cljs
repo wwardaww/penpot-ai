@@ -15,8 +15,11 @@
   State lives under `[:penforge :preview]`:
 
   - `:status` `:idle` `:starting` `:ready` `:stopped` `:failed`
-  - `:url` preview URL, `:message` daemon message, `:code` error code
-    of a refused request, `:restarts` restarts after crashes
+  - `:url` preview URL, `:reason` daemon reason code (`:start-timeout`
+    `:crashed` `:command-failed` `:restarting` `:stopped`
+    `:project-closed` `:daemon-stopped`), `:code` error code of a refused
+    request, `:message` technical English detail (developer persona
+    only), `:restarts` restarts after crashes
   - `:rid` request id of the last `preview.start` / `preview.stop`
   - `:pane` `nil` (closed), `:split` or `:overlay`
   - `:device` `:desktop` or `:mobile` (390px frame)
@@ -85,13 +88,14 @@
     "preview.status"
     (-> preview
         (assoc :status (keyword (:state msg))
+               :reason (some-> (:reason msg) keyword)
                :message (:message msg)
                :restarts (or (:restarts msg) 0)
                :code nil)
         (cond-> (some? (:url msg)) (assoc :url (:url msg))))
 
     "preview.ready"
-    (assoc preview :status :ready :url (:url msg) :message nil :code nil)
+    (assoc preview :status :ready :url (:url msg) :reason nil :message nil :code nil)
 
     "preview.stopped"
     (cond-> preview
@@ -201,7 +205,7 @@
       ptk/UpdateEvent
       (update [_ state]
         (if (and (connected? state) (current-project-id state))
-          (update-preview state assoc :status :starting :rid rid :code nil :message nil)
+          (update-preview state assoc :status :starting :rid rid :code nil :reason nil :message nil)
           state))
 
       ptk/EffectEvent

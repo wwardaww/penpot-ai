@@ -10440,3 +10440,27 @@ msgstr "Preview"
 #: src/app/main/data/ai/actions/build.cljs:34
 msgid "penforge.preview.toggle"
 msgstr "Preview"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:70
+msgid "penforge.preview.reason.command-failed"
+msgstr "The app's start command could not run."
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:69
+msgid "penforge.preview.reason.crashed"
+msgstr "The app stopped and could not be restarted."
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:72
+msgid "penforge.preview.reason.daemon-stopped"
+msgstr "The preview stopped because Penforge was closed."
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:73
+msgid "penforge.preview.reason.invalid-setup"
+msgstr "The app settings are not valid. Build the app again."
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:71
+msgid "penforge.preview.reason.project-closed"
+msgstr "The preview stopped because the project was not open anywhere."
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs:68
+msgid "penforge.preview.reason.start-timeout"
+msgstr "The app did not start in time."

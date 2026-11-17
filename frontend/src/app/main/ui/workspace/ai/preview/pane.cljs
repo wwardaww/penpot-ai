@@ -48,9 +48,10 @@
   (* 0.7 (or (some-> js/window .-innerWidth) 1440)))
 
 (defn- status-label
-  [{:keys [status restarts]}]
+  [{:keys [status restarts reason]}]
   (cond
-    (and (= status :starting) (pos? (or restarts 0)))
+    (and (= status :starting)
+         (or (= reason :restarting) (pos? (or restarts 0))))
     (tr "penforge.preview.status.restarting")
 
     (= status :starting) (tr "penforge.preview.status.starting")
@@ -58,6 +59,20 @@
     (= status :stopped)  (tr "penforge.preview.status.stopped")
     (= status :failed)   (tr "penforge.preview.status.failed")
     :else                (tr "penforge.preview.status.idle")))
+
+(defn problem-text
+  "Plain-language text of a failed or stopped preview, from the daemon
+  reason or request error code (the daemon sends codes, not copy)."
+  [{:keys [status reason code]}]
+  (cond
+    (= reason :start-timeout)  (tr "penforge.preview.reason.start-timeout")
+    (= reason :crashed)        (tr "penforge.preview.reason.crashed")
+    (= reason :command-failed) (tr "penforge.preview.reason.command-failed")
+    (= reason :project-closed) (tr "penforge.preview.reason.project-closed")
+    (= reason :daemon-stopped) (tr "penforge.preview.reason.daemon-stopped")
+    (= code "bad-request")     (tr "penforge.preview.reason.invalid-setup")
+    (= status :failed)         (tr "penforge.preview.status.failed")
+    :else                      (tr "penforge.preview.stopped-hint")))
 
 (mf/defc device-switch*
   {::mf/private true}
@@ -137,10 +152,13 @@
 
 (mf/defc message*
   {::mf/private true}
-  [{:keys [text action-label on-action]}]
+  [{:keys [text detail action-label on-action]}]
   [:div {:class (stl/css :message)}
    [:> text* {:as "p" :typography t/body-medium :class (stl/css :muted)}
     text]
+   ;; technical detail, in English, for the developer persona only
+   (when (some? detail)
+     [:code {:class (stl/css :detail)} detail])
    (when on-action
      [:> button* {:variant "secondary" :on-click on-action}
       action-label])])
@@ -165,6 +183,7 @@
   {::mf/private true}
   [{:keys [preview dragging]}]
   (let [connected?   (mf/deref connected-ref)
+        developer?   (mf/deref developer-ref)
         {:keys [status url code message device reload-key]} preview
         on-connect   (mf/use-fn #(st/emit! (chat/open-chat)))
         on-start     (mf/use-fn #(st/emit! (preview/start-preview)))
@@ -193,12 +212,13 @@
                     :on-action on-build}]
 
       (= status :failed)
-      [:> message* {:text (or message (tr "penforge.preview.status.failed"))
+      [:> message* {:text (problem-text preview)
+                    :detail (when developer? message)
                     :action-label (tr "penforge.preview.retry")
                     :on-action on-start}]
 
       :else
-      [:> message* {:text (tr "penforge.preview.stopped-hint")
+      [:> message* {:text (problem-text preview)
                     :action-label (tr "penforge.preview.start")
                     :on-action on-start}])))
 

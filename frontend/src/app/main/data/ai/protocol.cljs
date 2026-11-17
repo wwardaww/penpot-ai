@@ -193,6 +193,8 @@
      [:project-id :string]
      [:state [:enum "starting" "ready" "stopped" "failed"]]
      [:url {:optional true} :string]
+     ;; unknown future reasons must not drop the message: a string
+     [:reason {:optional true} :string]
      [:message {:optional true} :string]
      [:restarts {:optional true} :int]]]
 

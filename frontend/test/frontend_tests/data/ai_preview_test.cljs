@@ -25,6 +25,9 @@
            (proto/decode (json {"type" "preview.log" "projectId" "p1"
                                 "stream" "stderr" "text" "boom"}))))
   (t/is (nil? (proto/decode (json {"type" "preview.status" "projectId" "p1" "state" "weird"}))))
+  (t/testing "unknown reasons still decode"
+    (t/is (= "brand-new" (:reason (proto/decode (json {"type" "preview.status" "projectId" "p1"
+                                                       "state" "failed" "reason" "brand-new"}))))))
   (t/testing "requests carry an optional rid"
     (t/is (= {:type "preview.start" :project-id "p1" :rid "r1"} (proto/preview-start "p1" "r1")))
     (t/is (= {:type "preview.stop" :project-id "p1"} (proto/preview-stop "p1")))
@@ -46,8 +49,9 @@
       (t/testing "a crash restart keeps the url and counts the restart"
         (let [restarting (preview/apply-message ready {:type "preview.status" :project-id "p"
                                                        :state "starting" :restarts 1
-                                                       :message "Restarting the app"})]
+                                                       :reason "restarting"})]
           (t/is (= :starting (:status restarting)))
+          (t/is (= :restarting (:reason restarting)))
           (t/is (= 1 (:restarts restarting)))
           (t/is (= "http://localhost:5201/" (:url restarting)))))
 

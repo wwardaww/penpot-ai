@@ -74,11 +74,32 @@
     (t/is (str/includes? markup "penforge.build"))))
 
 (t/deftest a-failed-preview-shows-the-reason-and-a-retry
-  (let [markup (render-pane {:pane :split :status :failed
-                             :message "The app did not start in time."})]
-    (t/is (str/includes? markup "The app did not start in time."))
+  (let [state  {:pane :split :status :failed :reason :start-timeout
+                :message "The app did not answer in time"}
+        markup (render-pane state)]
+    (t/is (str/includes? markup "penforge.preview.reason.start-timeout"))
     (t/is (str/includes? markup "penforge.preview.retry"))
-    (t/is (str/includes? markup "penforge.preview.start"))))
+    (t/is (not (str/includes? markup "did not answer"))
+          "designers never see the English daemon detail")
+    (t/is (str/includes? (render-pane state {:developer true}) "did not answer")
+          "developers see the technical detail")))
+
+(t/deftest every-daemon-reason-has-its-own-text
+  (with-redefs [i18n/tr (mock/stub (fn [key] key))]
+    (t/is (= "penforge.preview.reason.crashed"
+             (pane/problem-text {:status :failed :reason :crashed})))
+    (t/is (= "penforge.preview.reason.command-failed"
+             (pane/problem-text {:status :failed :reason :command-failed})))
+    (t/is (= "penforge.preview.reason.project-closed"
+             (pane/problem-text {:status :stopped :reason :project-closed})))
+    (t/is (= "penforge.preview.reason.daemon-stopped"
+             (pane/problem-text {:status :stopped :reason :daemon-stopped})))
+    (t/is (= "penforge.preview.reason.invalid-setup"
+             (pane/problem-text {:status :failed :code "bad-request"})))
+    (t/is (= "penforge.preview.status.failed"
+             (pane/problem-text {:status :failed :reason :something-new})))
+    (t/is (= "penforge.preview.stopped-hint"
+             (pane/problem-text {:status :stopped :reason :stopped})))))
 
 (t/deftest without-the-daemon-the-preview-asks-to-connect
   (let [markup (render-pane {:pane :split :status :idle} {:connected false})]
