@@ -10363,3 +10363,7 @@ msgstr "Fixing…"
 #: src/app/main/ui/workspace/ai/comments/fix_button.cljs
 msgid "penforge.comments.no-change"
 msgstr "No change"
+
+#: src/app/main/ui/workspace/ai/comments/fix_button.cljs
+msgid "penforge.comments.unchanged"
+msgstr "Not changed"

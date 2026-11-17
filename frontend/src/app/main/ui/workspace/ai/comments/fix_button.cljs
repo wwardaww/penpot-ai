@@ -23,6 +23,7 @@
     (= status :running)   (tr "penforge.comments.fixing")
     (= status :fixed)     (tr "penforge.comments.fixed")
     (= status :no-change) (tr "penforge.comments.no-change")
+    (= status :unchanged) (tr "penforge.comments.unchanged")
     (some? status)        (tr "penforge.comments.fix-failed")
     :else                 (tr "penforge.comments.fix-with-ai")))
 
@@ -37,10 +38,11 @@
 (mf/defc fix-with-ai-button*
   "Asks the AI to apply the change the thread asks for. Shown only with
   the `:ai` flag, a connected daemon and edit rights; keeps showing the
-  outcome of the last fix."
+  outcome of the last fix. Disabled while a \"Fix comments\" batch runs."
   [{:keys [thread]}]
   (let [thread-id (:id thread)
         can-fix   (mf/deref (mf/with-memo [] (l/derived ai-comments/can-fix? st/state)))
+        batch     (mf/deref (mf/with-memo [] (l/derived ai-comments/batch-running? st/state)))
         fix-ref   (mf/with-memo [thread-id]
                     (l/derived #(ai-comments/get-thread-fix % thread-id) st/state))
         fix       (mf/deref fix-ref)
@@ -48,6 +50,7 @@
         resolved  (:is-resolved thread)
 
         disabled  (or (not can-fix)
+                      batch
                       (= status :running)
                       (and resolved (= status :fixed)))
 
