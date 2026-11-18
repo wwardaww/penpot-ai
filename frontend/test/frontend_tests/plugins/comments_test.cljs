@@ -11,6 +11,7 @@
    [app.common.test-helpers.files :as thf]
    [app.common.test-helpers.ids-map :as thi]
    [app.common.uuid :as uuid]
+   [app.config :as cf]
    [app.main.data.comments :as dc]
    [app.main.repo :as rp]
    [app.main.store :as st]
@@ -260,3 +261,74 @@
        (await (-> (.findCommentThreadById page "not-a-uuid")
                   (.catch #(reset! rejected %))))))
     (t/is (= "Thread id not valid" @rejected))))
+
+;; --- Penforge bot author (W26)
+
+(def ^:private third-party-plugin-id "5a8c5a64-0000-4000-8000-000000000001")
+
+(def ^:private ai-flags (conj cf/flags :ai))
+(def ^:private no-ai-flags (disj cf/flags :ai))
+
+(t/deftest penforge-author-only-for-the-mcp-plugin-with-the-ai-flag
+  (with-redefs [cf/flags ai-flags]
+    (t/is (true? (comments/penforge-author? r/mcp-plugin-id)))
+    (t/is (false? (comments/penforge-author? third-party-plugin-id)))
+    (t/is (false? (comments/penforge-author? plugin-id))))
+  (with-redefs [cf/flags no-ai-flags]
+    (t/is (false? (comments/penforge-author? r/mcp-plugin-id))
+          "with the :ai flag off the MCP plugin writes as the user")))
+
+(defn- reply-command
+  "Replies on a thread as `pid` with `flags` and returns (a promise of)
+  the RPC command it used."
+  [flags pid]
+  (let [calls  (atom [])
+        thread (comments/comment-thread-proxy
+                pid (random-uuid) (random-uuid) {:id (random-uuid)})]
+    (-> (mock/with-mocks*
+          {cf/flags           flags
+           r/check-permission (constantly true)
+           st/emit!           mock/noop
+           rp/cmd!            (mock/stub
+                               (fn [cmd params]
+                                 (swap! calls conj [cmd params])
+                                 (->> (rx/of {:id (random-uuid)})
+                                      (rx/observe-on :async))))}
+          (await (.reply thread "Done.")))
+        (.then (fn [] (ffirst @calls))))))
+
+(t/deftest ^:async thread-reply-picks-the-author-command
+  (t/is (= :create-penforge-comment (await (reply-command ai-flags r/mcp-plugin-id))))
+  (t/is (= :create-comment (await (reply-command ai-flags third-party-plugin-id)))
+        "a third-party plugin never posts as Penforge")
+  (t/is (= :create-comment (await (reply-command no-ai-flags r/mcp-plugin-id)))
+        "with the :ai flag off the MCP plugin posts as the user"))
+
+(defn- add-thread-options
+  "Adds a thread on a page as `pid` with `flags` and returns (a promise
+  of) the options it passed to `create-thread-on-workspace`."
+  [flags pid]
+  (let [options (atom ::not-called)
+        page    (page/page-proxy pid (random-uuid) (random-uuid))]
+    (-> (mock/with-mocks*
+          {cf/flags           flags
+           r/check-permission (constantly true)
+           st/emit!           mock/noop
+           dc/create-thread-on-workspace
+           (mock/stub (fn [params _ _ opts]
+                        (reset! options opts)
+                        [:create-thread params]))}
+          ;; The promise only settles once the thread is created, which
+          ;; the stub never does: do not await it.
+          (.addCommentThread page "[Audit] Low contrast" #js {:x 10 :y 20})
+          nil)
+        (.then (fn [] @options)))))
+
+(t/deftest ^:async page-add-comment-thread-picks-the-author
+  (t/is (= {:penforge-bot? true} (await (add-thread-options ai-flags r/mcp-plugin-id))))
+  (t/is (= {:penforge-bot? false} (await (add-thread-options ai-flags third-party-plugin-id))))
+  (t/is (= {:penforge-bot? false} (await (add-thread-options no-ai-flags r/mcp-plugin-id)))))
+
+(t/deftest penforge-bot-owner
+  (t/is (true? (dc/penforge-bot? (dc/get-owner {:owner-id dc/penforge-bot-id}))))
+  (t/is (false? (dc/penforge-bot? (dc/get-owner {:owner-id (random-uuid)})))))

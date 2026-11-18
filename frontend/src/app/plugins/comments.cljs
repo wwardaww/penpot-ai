@@ -13,6 +13,7 @@
    [app.common.schema :as sm]
    [app.common.types.shape-tree :as ctst]
    [app.common.uuid :as uuid]
+   [app.config :as cf]
    [app.main.data.comments :as dc]
    [app.main.data.workspace.comments :as dwc]
    [app.main.repo :as rp]
@@ -80,6 +81,14 @@
                    (get objects uuid/zero))]
     (when (some? start)
       (get-top-shape-id-at objects start position))))
+
+(defn penforge-author?
+  "True when the comments `plugin-id` writes are authored by the Penforge
+  bot: only the bundled MCP plugin (the Penforge AI) with the `:ai` flag
+  on. Third-party plugins always write as the user."
+  [plugin-id]
+  (and (contains? cf/flags :ai)
+       (= plugin-id r/mcp-plugin-id)))
 
 (defn comment-proxy? [p]
   (obj/type-of? p "CommentProxy"))
@@ -265,7 +274,10 @@
           :else
           (js/Promise.
            (fn [resolve reject]
-             (->> (rp/cmd! :create-comment {:thread-id (:id data) :content content})
+             (->> (rp/cmd! (if (penforge-author? plugin-id)
+                             :create-penforge-comment
+                             :create-comment)
+                           {:thread-id (:id data) :content content})
                   (rx/subs!
                    (fn [result]
                      (st/emit! (se/event plugin-id "create-comment"

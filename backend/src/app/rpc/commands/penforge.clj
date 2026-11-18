@@ -9,14 +9,20 @@
   flag is enabled."
   (:require
    [app.common.exceptions :as ex]
+   [app.common.geom.point :as gpt]
    [app.common.schema :as sm]
    [app.config :as cf]
    [app.db :as db]
+   [app.db.sql :as-alias sql]
+   [app.penforge.bot :as bot]
    [app.penforge.project-settings :as pps]
    [app.rpc :as-alias rpc]
+   [app.rpc.commands.comments :as comments]
+   [app.rpc.commands.files :as files]
    [app.rpc.commands.projects :as projects]
    [app.rpc.commands.teams :as teams]
    [app.rpc.doc :as-alias doc]
+   [app.rpc.retry :as rtry]
    [app.util.services :as sv]))
 
 (defn- check-enabled!
@@ -80,3 +86,54 @@
   (pps/upsert-project-settings! conn {:project-id project-id
                                       :platform platform
                                       :timestamp request-at}))
+
+;; --- MUTATION: Comments authored by the Penforge bot
+;;
+;; The Penforge AI writes its comments (fix notes, replies, audit
+;; findings) through these commands so that they show the bot profile
+;; as their author. Only the bundled MCP plugin uses them, and only with
+;; the `:ai` flag on (the frontend picks them in `app.plugins.comments`);
+;; here the caller needs edition permission on the file, never a share
+;; link. The caller still pays the comment quotes and stays recorded as
+;; the actor of the request in the audit log.
+
+(def ^:private schema:create-penforge-comment-thread
+  [:map {:title "create-penforge-comment-thread"}
+   [:file-id ::sm/uuid]
+   [:position ::gpt/point]
+   [:content [:string {:max comments/comment-max-length}]]
+   [:page-id ::sm/uuid]
+   [:frame-id ::sm/uuid]
+   [:mentions {:optional true} [::sm/set ::sm/uuid]]])
+
+(sv/defmethod ::create-penforge-comment-thread
+  "Creates a comment thread authored by the Penforge bot. Same params
+  and result as `create-comment-thread`, without share links."
+  {::doc/added "2.20"
+   ::rtry/enabled true
+   ::rtry/when rtry/conflict-exception?
+   ::sm/params schema:create-penforge-comment-thread}
+  [cfg {:keys [::rpc/profile-id file-id] :as params}]
+  (check-enabled!)
+  (files/check-edition-permissions! cfg profile-id file-id)
+  (let [author-id (bot/ensure-profile! cfg)]
+    (comments/create-comment-thread! cfg params author-id)))
+
+(def ^:private schema:create-penforge-comment
+  [:map {:title "create-penforge-comment"}
+   [:thread-id ::sm/uuid]
+   [:content [:string {:max comments/comment-max-length}]]
+   [:mentions {:optional true} [::sm/set ::sm/uuid]]])
+
+(sv/defmethod ::create-penforge-comment
+  "Adds a comment authored by the Penforge bot to a thread. Same params
+  and result as `create-comment`, without share links."
+  {::doc/added "2.20"
+   ::sm/params schema:create-penforge-comment
+   ::db/transaction true}
+  [{:keys [::db/conn] :as cfg} {:keys [::rpc/profile-id thread-id] :as params}]
+  (check-enabled!)
+  (let [thread (comments/get-comment-thread conn thread-id ::sql/for-update true)]
+    (files/check-edition-permissions! conn profile-id (:file-id thread))
+    (let [author-id (bot/ensure-profile! conn)]
+      (comments/create-comment! cfg thread params author-id))))

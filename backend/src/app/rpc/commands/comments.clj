@@ -198,7 +198,7 @@
           (bfc/file->response)))))
 
 ;; FIXME: rename
-(defn- get-comment-thread
+(defn get-comment-thread
   [conn thread-id & {:as opts}]
   (-> (db/get-by-id conn :comment-thread thread-id opts)
       (decode-row)))
@@ -500,6 +500,27 @@
       (assoc :owner-email (:email profile))
       (assoc :owner-photo-id (:photo-id profile))))
 
+(defn create-comment-thread!
+  "Creates a comment thread with its first comment once the caller
+  (`::rpc/profile-id`) passed the permission checks. `author-id` is the
+  profile recorded as the owner of the thread and of the comment: the
+  caller for the upstream command, another profile only on the
+  Penforge path. The quotes are always checked for the caller."
+  [cfg {:keys [::rpc/profile-id file-id page-id] :as params} author-id]
+  (let [{:keys [team-id project-id] :as file} (get-file cfg file-id page-id)]
+    (-> cfg
+        (assoc ::quotes/profile-id profile-id)
+        (assoc ::quotes/team-id team-id)
+        (assoc ::quotes/project-id project-id)
+        (assoc ::quotes/file-id file-id)
+        (quotes/check! {::quotes/id ::quotes/comment-threads-per-file}
+                       {::quotes/id ::quotes/comments-per-file}))
+
+    (let [params (assoc params ::file file)
+          thread (db/tx-run! cfg create-comment-thread params author-id)]
+
+      (vary-meta thread assoc ::audit/props (assoc thread :team-id team-id)))))
+
 (sv/defmethod ::create-comment-thread
   {::doc/added "1.15"
    ::webhooks/event? true
@@ -509,24 +530,12 @@
   [cfg {:keys [::rpc/profile-id file-id page-id share-id] :as params}]
   (let [perms (files/check-comment-permissions! cfg profile-id file-id share-id)]
     (check-page-scope perms page-id)
-
-    (let [{:keys [team-id project-id] :as file} (get-file cfg file-id page-id)]
-      (-> cfg
-          (assoc ::quotes/profile-id profile-id)
-          (assoc ::quotes/team-id team-id)
-          (assoc ::quotes/project-id project-id)
-          (assoc ::quotes/file-id file-id)
-          (quotes/check! {::quotes/id ::quotes/comment-threads-per-file}
-                         {::quotes/id ::quotes/comments-per-file}))
-
-      (let [params (assoc params ::file file)
-            thread (db/tx-run! cfg create-comment-thread params)]
-
-        (vary-meta thread assoc ::audit/props (assoc thread :team-id team-id))))))
+    (create-comment-thread! cfg params profile-id)))
 
 (defn- create-comment-thread
   [{:keys [::db/conn] :as cfg}
-   {:keys [::rpc/profile-id ::rpc/request-at ::file position content mentions frame-id] :as params}]
+   {:keys [::rpc/request-at ::file position content mentions frame-id] :as params}
+   profile-id]
 
   (let [;; NOTE: we take the next seq number from a separate query
         ;; because we need to lock the file for avoid race conditions
@@ -622,6 +631,8 @@
 
 ;; --- COMMAND: Add Comment
 
+(declare create-comment!)
+
 (def ^:private
   schema:create-comment
   [:map {:title "create-comment"}
@@ -635,19 +646,37 @@
    ::webhooks/event? true
    ::sm/params schema:create-comment
    ::db/transaction true}
-  [{:keys [::db/conn] :as cfg} {:keys [::rpc/profile-id ::rpc/request-at thread-id share-id content mentions]}]
+  [{:keys [::db/conn] :as cfg} {:keys [::rpc/profile-id thread-id share-id] :as params}]
   (let [{:keys [file-id page-id] :as thread}
         (get-comment-thread conn thread-id ::sql/for-update true)
 
         perms (files/check-comment-permissions! cfg profile-id file-id share-id)]
 
     (check-page-scope perms page-id)
+    (create-comment! cfg thread params profile-id)))
 
+(defn create-comment!
+  "Adds a comment to `thread` (read with `get-comment-thread` and locked
+  for update in the same transaction) once the caller
+  (`::rpc/profile-id`) passed the permission checks. `author-id` is the
+  profile recorded as the owner of the comment and added to the thread
+  participants: the caller for the upstream command, another profile
+  only on the Penforge path. The quote is checked for the caller."
+  [{:keys [::db/conn] :as cfg}
+   {:keys [file-id page-id] thread-id :id :as thread}
+   {:keys [::rpc/profile-id ::rpc/request-at content mentions]}
+   author-id]
+  ;; `profile-id` names the author below; the nested let keeps the
+  ;; upstream body of `create-comment` as it was.
+  (let [caller-id  profile-id
+        profile-id author-id]
+
+    #_{:clj-kondo/ignore [:redundant-let]}
     (let [{:keys [team-id project-id] :as file}
           (get-file cfg file-id page-id)]
 
       (quotes/check! cfg {::quotes/id ::quotes/comments-per-file
-                          ::quotes/profile-id profile-id
+                          ::quotes/profile-id caller-id
                           ::quotes/team-id team-id
                           ::quotes/project-id project-id
                           ::quotes/file-id file-id})
