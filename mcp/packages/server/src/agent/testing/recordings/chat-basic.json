@@ -1,0 +1,82 @@
+{
+    "turns": [
+        {
+            "match": "^make the button blue",
+            "events": [
+                {
+                    "kind": "session",
+                    "sessionId": "rec-session-1"
+                },
+                {
+                    "kind": "tool",
+                    "toolUseId": "t1",
+                    "toolName": "mcp__penpot__get_node_properties",
+                    "status": "running"
+                },
+                {
+                    "kind": "tool",
+                    "toolUseId": "t1",
+                    "toolName": "mcp__penpot__get_node_properties",
+                    "status": "done"
+                },
+                {
+                    "kind": "tool",
+                    "toolUseId": "t2",
+                    "toolName": "mcp__penpot__update_design_node",
+                    "status": "running"
+                },
+                {
+                    "kind": "tool",
+                    "toolUseId": "t2",
+                    "toolName": "mcp__penpot__update_design_node",
+                    "status": "done"
+                },
+                {
+                    "kind": "text",
+                    "messageId": "m",
+                    "text": "I made the "
+                },
+                {
+                    "kind": "text",
+                    "messageId": "m",
+                    "text": "button blue."
+                },
+                {
+                    "kind": "done",
+                    "messageId": "m",
+                    "text": "I made the button blue.",
+                    "usage": {
+                        "inputTokens": 120,
+                        "outputTokens": 12
+                    }
+                }
+            ]
+        },
+        {
+            "match": "^break",
+            "events": [
+                {
+                    "kind": "session",
+                    "sessionId": "rec-session-2"
+                },
+                {
+                    "kind": "tool",
+                    "toolUseId": "t1",
+                    "toolName": "mcp__penpot__execute_code",
+                    "status": "running"
+                },
+                {
+                    "kind": "tool",
+                    "toolUseId": "t1",
+                    "toolName": "mcp__penpot__execute_code",
+                    "status": "error",
+                    "detail": "Tool execution failed: Error: boom"
+                },
+                {
+                    "kind": "error",
+                    "message": "Claude stopped: tool failed"
+                }
+            ]
+        }
+    ]
+}
