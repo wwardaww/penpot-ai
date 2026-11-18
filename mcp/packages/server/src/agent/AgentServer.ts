@@ -7,6 +7,15 @@ import { createLogger } from "../logger";
 import { AgentConfig } from "./AgentConfig";
 import { AgentSession, type AgentSessionDeps } from "./AgentSession";
 import type { DownloadRegistry } from "./publish/DownloadRegistry";
+import type { SessionGateFactory } from "./SessionGate";
+
+/** Additions of a hosting mode (W24 server mode) to the endpoint. */
+export interface AgentServerHosting {
+    /** access control of each connection, instead of the pairing token */
+    gates: SessionGateFactory;
+    /** extra HTTP routes (e.g. the admin page), installed after the Host/Origin checks */
+    routes?: (app: Express) => void;
+}
 
 /**
  * Ephemeral pairing token of the daemon.
@@ -94,13 +103,15 @@ export class AgentServer {
      * @param sessionDeps - services passed to each session
      * @param health - extra fields reported by `/health`
      * @param downloads - files the browser may download once
+     * @param hosting - additions of a hosting mode
      */
     constructor(
         private readonly config: AgentConfig,
         private readonly token: PairingToken,
         private readonly sessionDeps: Omit<AgentSessionDeps, "verifyToken">,
         private readonly health: () => Record<string, unknown>,
-        private readonly downloads?: DownloadRegistry
+        private readonly downloads?: DownloadRegistry,
+        private readonly hosting?: AgentServerHosting
     ) {
         this.allowedOrigins = new Set(config.allowedOrigins);
         this.wsServer = new WebSocketServer({ noServer: true, maxPayload: 32 * 1024 * 1024 });
@@ -156,7 +167,10 @@ export class AgentServer {
         });
         this.httpServer = server;
         const hostNames = new Set([...AgentServer.LOOPBACK_HOSTS, this.config.host.toLowerCase()]);
-        this.allowedHosts = new Set([...hostNames].map((host) => `${host}:${this.port}`));
+        this.allowedHosts = new Set([
+            ...[...hostNames].map((host) => `${host}:${this.port}`),
+            ...this.config.allowedHosts,
+        ]);
         this.logger.info("Penforge agent endpoint: ws://%s:%d/agent", this.config.host, this.port);
     }
 
@@ -182,7 +196,13 @@ export class AgentServer {
         app.get("/health", (_req, res) => {
             res.json({ ok: true, ...this.health() });
         });
+        this.hosting?.routes?.(app);
         app.get("/pair", (req, res) => {
+            if (this.hosting) {
+                // hosting modes authenticate through Penpot, there is nothing to pair
+                res.status(404).json({ error: "not found" });
+                return;
+            }
             this.token.announce(this.config.publicUri);
             this.logger.info("Pairing URL printed on the console: %s", this.token.maskedPairUrl(this.config.publicUri));
             if (req.headers.origin === undefined) {
@@ -256,6 +276,7 @@ export class AgentServer {
         this.wsServer.handleUpgrade(request, socket, head, (ws) => {
             const session = new AgentSession(ws, {
                 ...this.sessionDeps,
+                gate: this.hosting?.gates.open(request),
                 // The upgrade passed the Origin check above; without required pairing that is
                 // enough (see AgentConfig.requirePairing).
                 verifyToken: (candidate) => !this.config.requirePairing || this.token.verify(candidate),

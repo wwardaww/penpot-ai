@@ -100,8 +100,8 @@ export class LocalCliRunner implements ClaudeRunner {
         const permissions = opts.permissions;
         return {
             cwd: opts.cwd,
-            env: ClaudeEnvironment.forChild(),
-            model: this.settings.model,
+            env: opts.env ?? ClaudeEnvironment.forChild(),
+            model: opts.model ?? this.settings.model,
             pathToClaudeCodeExecutable: this.settings.claudePath,
             abortController: abort,
             includePartialMessages: true,
@@ -111,7 +111,9 @@ export class LocalCliRunner implements ClaudeRunner {
             strictMcpConfig: true,
             permissionMode: "default",
             mcpServers: {
-                [PENPOT_MCP_SERVER_NAME]: { type: "http", url: this.settings.mcpUrl },
+                [PENPOT_MCP_SERVER_NAME]: opts.mcpHeaders
+                    ? { type: "http", url: this.settings.mcpUrl, headers: opts.mcpHeaders }
+                    : { type: "http", url: this.settings.mcpUrl },
             },
             systemPrompt: { type: "preset", preset: "claude_code", append: opts.systemPromptAppend },
             canUseTool: async (toolName, toolInput, { signal }) => {

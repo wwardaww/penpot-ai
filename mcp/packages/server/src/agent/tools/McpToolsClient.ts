@@ -13,8 +13,12 @@ export class McpToolsClient {
 
     /**
      * @param mcpUrl - URL of the Penpot MCP endpoint
+     * @param headers - headers sent with every request (server mode: the user's bridge token)
      */
-    constructor(private readonly mcpUrl: string) {}
+    constructor(
+        private readonly mcpUrl: string,
+        private readonly headers?: Record<string, string>
+    ) {}
 
     /**
      * Calls a tool.
@@ -77,7 +81,12 @@ export class McpToolsClient {
         if (!this.client) {
             this.client = (async () => {
                 const client = new Client({ name: "penforge-daemon", version: "1.0.0" });
-                await client.connect(new StreamableHTTPClientTransport(new URL(this.mcpUrl)));
+                await client.connect(
+                    new StreamableHTTPClientTransport(
+                        new URL(this.mcpUrl),
+                        this.headers ? { requestInit: { headers: this.headers } } : undefined
+                    )
+                );
                 this.logger.info("Connected to Penpot MCP endpoint %s", this.mcpUrl);
                 return client;
             })();

@@ -367,7 +367,11 @@ export type AgentErrorCode =
     | "busy"
     | "not-configured"
     | "not-implemented"
-    | "internal";
+    | "internal"
+    /** W24 server mode: a limit refused the request */
+    | "rate-limited"
+    /** W24 server mode: the user may not use the project */
+    | "forbidden";
 
 export interface ErrorMessage {
     type: "error";

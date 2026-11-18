@@ -6,6 +6,7 @@ import { ChatService } from "./chat/ChatService";
 import { TurnRunner } from "./chat/TurnRunner";
 import { DevServerManager } from "./process/DevServerManager";
 import { PreviewService } from "./process/PreviewService";
+import type { ServerHosting } from "./hosting/ServerHosting";
 import { DownloadRegistry } from "./publish/DownloadRegistry";
 import { PublishServices } from "./publish/PublishServices";
 import { SecretStore } from "./publish/SecretStore";
@@ -35,6 +36,8 @@ export interface PenforgeDaemonParts {
     /** MCP plugin sessions of this process, to route tabs that did not send their session */
     pluginSessions?: PluginSessionDirectory;
     authTimeoutMs?: number;
+    /** server mode (W24); local mode when unset */
+    hosting?: ServerHosting | null;
 }
 
 /**
@@ -55,6 +58,7 @@ export class PenforgeDaemon {
     private readonly visualQa: VisualQaServices;
     private readonly server: AgentServer;
     private readonly publish: PublishServices;
+    private readonly hosting: ServerHosting | null;
 
     /**
      * @param config - the daemon configuration
@@ -65,14 +69,15 @@ export class PenforgeDaemon {
         parts: PenforgeDaemonParts = {}
     ) {
         this.token = new PairingToken(config.fixedToken);
-        this.runner = parts.runner ?? createRunner(config);
+        this.hosting = parts.hosting ?? null;
+        this.runner = parts.runner ?? createRunner(config, this.hosting?.turns());
         this.registry = parts.registry ?? WorkflowRegistry.withShippedWorkflows();
         this.tools = parts.tools === undefined ? new McpToolsClient(config.mcpUrl) : parts.tools;
         const turns = new TurnRunner(this.runner, parts.prompts ?? PromptRegistry.locate());
         this.chat = new ChatService(turns);
         this.workflows = new WorkflowEngine(this.registry, turns);
         const devServers = parts.devServers ?? new DevServerManager();
-        const workspaces = new WorkspaceManager(config.projectsDir);
+        const workspaces = this.hosting?.workspaces ?? new WorkspaceManager(config.projectsDir);
         this.previews = new PreviewService(devServers);
         const downloads = new DownloadRegistry();
         // W18: the visual QA (workflow and chat tool) uses the same dev servers as the preview
@@ -100,10 +105,12 @@ export class PenforgeDaemon {
             () => ({
                 service: "penforge-agent",
                 daemonVersion: PENFORGE_DAEMON_VERSION,
+                mode: this.hosting ? "server" : "local",
                 runner: this.runner.kind,
                 workflows: this.registry.names(),
             }),
-            downloads
+            downloads,
+            this.hosting?.endpoint()
         );
         const downloadUrl = (id: string) => `${this.server.baseUrl}/download/${id}`;
         this.publish =
@@ -126,10 +133,13 @@ export class PenforgeDaemon {
      * Starts the agent endpoint and prints the pairing URL.
      */
     public async start(): Promise<void> {
+        await this.hosting?.start();
         await this.server.start();
         VisualQaHost.install(this.visualQa);
         this.logger.info("Penforge home: %s; runner: %s", this.config.home, this.runner.kind);
-        if (this.config.requirePairing) {
+        if (this.hosting) {
+            this.logger.info("Server mode: users sign in through Penpot at %s", this.config.publicUri);
+        } else if (this.config.requirePairing) {
             this.token.announce(this.config.publicUri);
             this.logger.info("Pairing URL printed on the console: %s", this.token.maskedPairUrl(this.config.publicUri));
         } else {
@@ -150,6 +160,7 @@ export class PenforgeDaemon {
         await this.server.stop();
         PublishServices.uninstall(this.publish);
         await this.tools?.close();
+        await this.hosting?.stop();
     }
 }
 

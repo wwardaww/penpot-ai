@@ -9,6 +9,7 @@ import {
     type LogLine,
     type PreviewStatus,
 } from "./DevServer";
+import { CodeExecutionGate } from "../hosting/CodeExecutionGate";
 import { CommandPolicy } from "./CommandPolicy";
 import { PortPool } from "./PortPool";
 import { StackConfig } from "./StackConfig";
@@ -107,6 +108,8 @@ export class DevServerManager {
      * @throws AgentError `not-configured` when the project has no generated app
      */
     public async start(workspace: ProjectWorkspace, options: DevServerStartOptions = {}): Promise<PreviewStatus> {
+        // W24: closed in server mode, where generated apps run in the sandbox only
+        CodeExecutionGate.check();
         const projectId = workspace.projectId;
         const wanted = options.exposure;
         await this.pending.get(projectId)?.catch(() => undefined);

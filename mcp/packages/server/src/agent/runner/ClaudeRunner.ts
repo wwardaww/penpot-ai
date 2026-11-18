@@ -89,6 +89,15 @@ export interface RunnerOptions {
      * replacing their default list; runners that ask `permissions` for every use ignore it.
      */
     allowedTools?: readonly string[];
+    /**
+     * Complete environment of the Claude process (API key runner); the daemon's own
+     * environment, without nested-session variables, when omitted.
+     */
+    env?: Record<string, string>;
+    /** headers Claude sends to the Penpot MCP endpoint (server mode: the user's bridge token) */
+    mcpHeaders?: Record<string, string>;
+    /** model of this turn, over the runner's configured one */
+    model?: string;
 }
 
 /**

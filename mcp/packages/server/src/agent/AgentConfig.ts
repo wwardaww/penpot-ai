@@ -9,8 +9,9 @@ export const PENFORGE_DAEMON_VERSION = "0.1.0";
  * Kind of Claude runner.
  *
  * `local-cli` drives the user's local Claude Code login through the Claude Agent SDK, `local-cli-spawn`
- * spawns `claude -p` directly (no interactive permissions), `api-key` is the product runner (not configured
- * yet) and `fake` replies with canned text (for frontend work without Claude).
+ * spawns `claude -p` directly (no interactive permissions), `api-key` is the product runner (an Anthropic
+ * API key: `ANTHROPIC_API_KEY` locally, the admin's key in server mode) and `fake` replies with canned text
+ * (for frontend work without Claude).
  */
 export type RunnerKind = "local-cli" | "local-cli-spawn" | "api-key" | "fake";
 
@@ -27,6 +28,7 @@ interface ConfigFile {
     model?: string;
     requirePairing?: boolean;
     fakeRecording?: string;
+    allowedHosts?: string[];
 }
 
 /**
@@ -73,6 +75,14 @@ export class AgentConfig {
      * turns, see `ReplayScript`); the fake runner echoes when unset.
      */
     public readonly fakeRecording?: string;
+    /**
+     * Extra `Host` header values the endpoint accepts (`PENFORGE_ALLOWED_HOSTS`, comma separated
+     * `host[:port]`), e.g. the daemon's service name behind a reverse proxy; loopback names and
+     * the bind address are always accepted.
+     */
+    public readonly allowedHosts: string[];
+    /** Run mode (`PENFORGE_MODE`): `local` (desktop/devenv) or `server` (team install, W24). */
+    public readonly mode: "local" | "server";
 
     constructor(values: {
         home: string;
@@ -87,6 +97,8 @@ export class AgentConfig {
         mcpUrl: string;
         requirePairing?: boolean;
         fakeRecording?: string;
+        allowedHosts?: string[];
+        mode?: "local" | "server";
     }) {
         this.home = values.home;
         this.host = values.host;
@@ -100,6 +112,8 @@ export class AgentConfig {
         this.mcpUrl = values.mcpUrl;
         this.requirePairing = (values.requirePairing ?? false) || !AgentConfig.isLoopbackHost(values.host);
         this.fakeRecording = values.fakeRecording;
+        this.allowedHosts = (values.allowedHosts ?? []).map((host) => host.trim().toLowerCase()).filter(Boolean);
+        this.mode = values.mode ?? "local";
     }
 
     /**
@@ -116,7 +130,12 @@ export class AgentConfig {
             .map((origin) => origin.trim())
             .filter((origin) => origin.length > 0) ??
             file.allowedOrigins ?? ["https://localhost:3449"];
-        const runner = (AgentConfig.nonBlank(env.PENFORGE_RUNNER) ?? file.runner ?? "local-cli") as RunnerKind;
+        const mode = AgentConfig.nonBlank(env.PENFORGE_MODE)?.toLowerCase() === "server" ? "server" : "local";
+        // server mode never uses a `claude` login (Anthropic terms); `fake` stays for tests
+        const configured = AgentConfig.nonBlank(env.PENFORGE_RUNNER) ?? file.runner;
+        const runner = (
+            mode === "server" ? (configured === "fake" ? "fake" : "api-key") : (configured ?? "local-cli")
+        ) as RunnerKind;
         if (!RUNNER_KINDS.includes(runner)) {
             throw new Error(`Unknown PENFORGE_RUNNER ${JSON.stringify(runner)}; use one of ${RUNNER_KINDS.join(", ")}`);
         }
@@ -133,6 +152,14 @@ export class AgentConfig {
             mcpUrl,
             requirePairing: AgentConfig.flag(env.PENFORGE_REQUIRE_PAIRING) ?? file.requirePairing ?? false,
             fakeRecording: AgentConfig.nonBlank(env.PENFORGE_FAKE_RECORDING) ?? file.fakeRecording,
+            allowedHosts:
+                AgentConfig.nonBlank(env.PENFORGE_ALLOWED_HOSTS)?.split(",") ??
+                file.allowedHosts ??
+                // behind the server-mode reverse proxy, requests name the public host
+                (mode === "server"
+                    ? AgentConfig.hostsOf(AgentConfig.nonBlank(env.PENFORGE_PUBLIC_URI) ?? file.publicUri)
+                    : []),
+            mode,
         });
     }
 
@@ -156,6 +183,20 @@ export class AgentConfig {
             .toLowerCase()
             .replace(/^\[(.*)\]$/, "$1");
         return value === "localhost" || value === "::1" || /^127(\.\d{1,3}){3}$/.test(value);
+    }
+
+    /**
+     * `Host` header values of a public URI: `host:port`, plus the bare host for a default port.
+     *
+     * @param uri - the public URI, if any
+     */
+    private static hostsOf(uri: string | undefined): string[] {
+        try {
+            const url = new URL(uri ?? "");
+            return url.port ? [url.host] : [url.hostname, `${url.hostname}:${url.protocol === "https:" ? 443 : 80}`];
+        } catch {
+            return [];
+        }
     }
 
     /** Folder holding the per-project folders. */
