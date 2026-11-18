@@ -1,7 +1,12 @@
-import type { WorkflowToolsApi } from "@penpot/mcp-common";
+import type { AgentContext, WorkflowToolsApi, WorkflowWorkspaceApi } from "@penpot/mcp-common";
+import { createLogger } from "../../logger";
 import { BuildLock } from "../build/BuildLock";
-import type { WorkspaceManager } from "../workspace/WorkspaceManager";
-import { BrowserUnavailableError, type AppScreenshotter, type AppScreenshotterFactory } from "./ChromeScreenshotter";
+import {
+    BrowserUnavailableError,
+    ChromeScreenshotter,
+    type AppScreenshotter,
+    type AppScreenshotterFactory,
+} from "./ChromeScreenshotter";
 import { PngImages } from "./PngImages";
 import { PreviewUnavailableError, type PreviewAccess, type PreviewLease } from "./PreviewAccess";
 import type { QaSettings } from "./QaConfig";
@@ -13,12 +18,18 @@ export interface VisualQaServices {
     previews: PreviewAccess;
     /** headless browsers */
     browsers: AppScreenshotterFactory;
-    /** project workspaces (the chat tool finds its project there) */
-    workspaces: Pick<WorkspaceManager, "get">;
-    /** folder of the project folders */
-    projectsDir: string;
-    /** the daemon's Penpot tools, routed to one session */
-    tools: { forSession(sessionId: () => string | undefined): WorkflowToolsApi } | null;
+    /**
+     * Finds the browser tab whose Penpot MCP session made a tool call (the chat tool serves that
+     * tab's project only); null when no connected tab has that session.
+     */
+    clientForMcpSession(mcpSessionId: string): Promise<QaClientSetup | null>;
+}
+
+/** Context, project and tools of one connected browser tab. */
+export interface QaClientSetup {
+    context: AgentContext;
+    workspace: WorkflowWorkspaceApi;
+    tools: WorkflowToolsApi | null;
 }
 
 /**
@@ -26,21 +37,48 @@ export interface VisualQaServices {
  * `penforge_visual_qa` MCP tool (which runs inside the MCP server) reach the same dev servers.
  */
 export class VisualQaHost {
+    private static readonly logger = createLogger("VisualQaHost");
     private static current: VisualQaServices | null = null;
+    /** sessions that hold a browser, a dev server lease and a build lock */
+    private static readonly runs = new Set<QaRun>();
 
+    /**
+     * Installs the services and removes headless browser profiles left by a daemon that crashed.
+     */
     public static install(services: VisualQaServices): void {
         VisualQaHost.current = services;
+        ChromeScreenshotter.cleanStaleProfiles().catch((error) =>
+            VisualQaHost.logger.warn("Could not remove old browser profiles: %s", String(error))
+        );
     }
 
-    /** Removes the services (only when they are still the installed ones). */
-    public static uninstall(services: VisualQaServices): void {
+    /**
+     * Removes the services (only when they are still the installed ones) and closes every open
+     * QA session: browsers, dev server leases and locks.
+     */
+    public static async shutdown(services: VisualQaServices): Promise<void> {
         if (VisualQaHost.current === services) {
             VisualQaHost.current = null;
         }
+        await Promise.all([...VisualQaHost.runs].map((run) => run.close().catch(() => undefined)));
     }
 
     public static get(): VisualQaServices | null {
         return VisualQaHost.current;
+    }
+
+    /** Number of open QA sessions (for tests). */
+    public static get openRuns(): number {
+        return VisualQaHost.runs.size;
+    }
+
+    /** @internal */
+    public static track(run: QaRun, open: boolean): void {
+        if (open) {
+            VisualQaHost.runs.add(run);
+        } else {
+            VisualQaHost.runs.delete(run);
+        }
     }
 }
 
@@ -76,12 +114,16 @@ export class QaRun {
     /** width of the previews sent to the client */
     public static readonly THUMBNAIL_WIDTH = 360;
 
+    private closing: Promise<void> | null = null;
+
     private constructor(
         public readonly qa: VisualQa,
         private readonly lease: PreviewLease,
         private readonly browser: AppScreenshotter,
         private readonly unlock: () => void
-    ) {}
+    ) {
+        VisualQaHost.track(this, true);
+    }
 
     /**
      * Starts a session.
@@ -119,14 +161,18 @@ export class QaRun {
         }
     }
 
-    /** Ends the session (idempotent). */
-    public async close(): Promise<void> {
-        try {
-            await this.browser.close();
-        } finally {
-            this.lease.release();
-            this.unlock();
-        }
+    /** Ends the session (idempotent; concurrent calls share one close). */
+    public close(): Promise<void> {
+        this.closing ??= (async () => {
+            try {
+                await this.browser.close();
+            } finally {
+                this.lease.release();
+                this.unlock();
+                VisualQaHost.track(this, false);
+            }
+        })();
+        return this.closing;
     }
 
     /**

@@ -1,9 +1,11 @@
 import { writeFile } from "fs/promises";
-import type { WorkflowContext } from "@penpot/mcp-common";
+import type { Attachment, WorkflowContext } from "@penpot/mcp-common";
 import { AppSourceGit } from "../build/AppSourceGit";
+import { DesignToolFilter } from "../tools/DesignToolFilter";
 import type { Region } from "./PixelCompare";
+import { PngImages } from "./PngImages";
+import type { QaBudget } from "./QaBudget";
 import type { QaSettings } from "./QaConfig";
-import { QaToolFilter } from "./QaToolFilter";
 import type { QaShot, VisualQa } from "./VisualQa";
 
 /** Outcome of the fix loop of one screen. */
@@ -18,26 +20,42 @@ export interface ScreenFix {
     changedFiles: string[];
 }
 
+/** One earlier try of a screen, told to the next fresh turn. */
+interface TryNote {
+    attempt: number;
+    from: number;
+    to: number;
+    files: string[];
+}
+
 /**
  * Fix loop of the visual QA: for each screen below the threshold, Claude gets the design, the
  * app screenshot, the heatmap and the screen's files, changes the code (and only the code), and
  * the daemon checks again. A change that does not raise the score is reverted at once, and the
- * loop of a screen ends when it matches, after `maxIterations` turns, or when a turn changes
- * nothing or does not help.
+ * loop of a screen ends when it matches, after `maxIterations` turns, when a turn changes nothing
+ * or does not help, or when the run's {@link QaBudget} is spent.
+ *
+ * Every turn is a fresh Claude session with only the current three images (scaled to the API
+ * limits); what earlier tries did is summed up in the prompt instead.
  */
 export class QaFixer {
     private readonly git: AppSourceGit;
-    private readonly filter: QaToolFilter;
+    private readonly filter: DesignToolFilter;
 
     constructor(
         private readonly ctx: WorkflowContext,
         private readonly qa: VisualQa,
         private readonly settings: QaSettings,
+        private readonly budget: QaBudget,
         /** sleeps between a fix and the next screenshot (hot reload); replaceable in tests */
         private readonly wait: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))
     ) {
         this.git = new AppSourceGit(ctx.workspace.appSrcDir);
-        this.filter = new QaToolFilter(ctx.workspace.root, ctx.workspace.appSrcDir);
+        this.filter = new DesignToolFilter(
+            ctx.workspace.root,
+            ctx.workspace.appSrcDir,
+            "Not available during a visual check: Penforge reloads and checks the app itself."
+        );
     }
 
     /**
@@ -50,10 +68,9 @@ export class QaFixer {
         const { screen } = first;
         let best = first;
         let attempts = 0;
-        let sessionId: string | undefined;
         const kept = new Set<string>();
-        while (attempts < maxIterations && !best.passed) {
-            this.checkAborted();
+        const notes: TryNote[] = [];
+        while (attempts < maxIterations && !best.passed && this.budget.takeTurn()) {
             attempts++;
             this.ctx.emit("progress", {
                 step: "fix",
@@ -61,26 +78,35 @@ export class QaFixer {
                 text: `Fixing ${screen.name} (try ${attempts} of ${maxIterations})`,
             });
             const before = await this.git.snapshot();
-            const turn = await this.ctx.runner.run({
-                prompt: QaFixer.prompt(best, attempts, this.qa),
-                promptName: "visual-qa",
-                resumeSessionId: sessionId,
-                attachments: [
-                    { kind: "image", mime: "image/png", base64: best.design.toString("base64") },
-                    { kind: "image", mime: "image/png", base64: best.app.toString("base64") },
-                    { kind: "image", mime: "image/png", base64: best.diff.toString("base64") },
-                ],
-                toolFilter: this.filter,
-            });
-            sessionId = turn.sessionId ?? sessionId;
-            this.checkAborted();
-            const changed = await this.git.changedFiles(before, await this.git.snapshot());
+            let changed: string[];
+            try {
+                await this.ctx.runner.run({
+                    prompt: QaFixer.prompt(best, attempts, this.qa, notes),
+                    promptName: "visual-qa",
+                    attachments: await QaFixer.images(best),
+                    toolFilter: this.filter,
+                });
+                this.checkAborted();
+                changed = await this.git.changedFiles(before, await this.git.snapshot());
+            } catch (error) {
+                // stopped or failed mid-try: never leave half-made edits behind
+                await this.revertSince(before);
+                throw error;
+            }
             if (changed.length === 0) {
                 break;
             }
             await this.wait(this.settings.reloadDelayMs);
-            const next = await this.qa.check(screen);
+            let next: QaShot;
+            try {
+                this.checkAborted();
+                next = await this.qa.check(screen);
+            } catch (error) {
+                await this.revertSince(before);
+                throw error;
+            }
             if (next.score > best.score) {
+                notes.push({ attempt: attempts, from: best.score, to: next.score, files: changed });
                 best = next;
                 changed.forEach((file) => kept.add(file));
                 continue;
@@ -102,25 +128,42 @@ export class QaFixer {
     /**
      * User prompt of one fix turn; the three images follow in the order named here.
      */
-    public static prompt(shot: QaShot, attempt: number, qa: VisualQa): string {
+    public static prompt(shot: QaShot, attempt: number, qa: VisualQa, notes: TryNote[] = []): string {
         const { screen } = shot;
         const lines = [
-            attempt === 1
-                ? `Make the screen "${screen.name}" of the app look like its design board.`
-                : `The app now scores ${shot.score}. Keep going: make "${screen.name}" closer to the design.`,
+            `Make the screen "${screen.name}" of the app look like its design board.`,
             "",
             `- Route: ${screen.route}; viewport ${screen.width}×${screen.height} px (the board size).`,
             `- Match score: ${shot.score} / 100 (pixels that differ: ${(shot.diffRatio * 100).toFixed(1)} %, ` +
                 `structure similarity: ${shot.ssim.toFixed(3)}). Goal: at least ${qa.threshold}.`,
             `- Screen files (in app-src/): ${screen.files.length > 0 ? screen.files.join(", ") : "unknown; find them from the route"}.`,
             `- Design board id: ${screen.boardId} (read it with get_node_properties / generate_code_hints for exact values).`,
-            `- Areas that differ most (x, y, width × height in px): ${QaFixer.regions(shot.regions)}.`,
-            `- Saved images: ${qa.projectPath(shot.paths.design)}, ${qa.projectPath(shot.paths.app)}, ${qa.projectPath(shot.paths.diff)}.`,
+            `- Areas that differ most (x, y, width × height in board px): ${QaFixer.regions(shot.regions)}.`,
+            `- Saved full-size images: ${qa.projectPath(shot.paths.design)}, ${qa.projectPath(shot.paths.app)}, ${qa.projectPath(shot.paths.diff)}.`,
+        ];
+        if (attempt > 1 && notes.length > 0) {
+            lines.push(
+                `- This is try ${attempt}. Earlier tries (already in the code): ` +
+                    notes
+                        .map(
+                            (n) => `try ${n.attempt} raised the score from ${n.from} to ${n.to} (${n.files.join(", ")})`
+                        )
+                        .join("; ") +
+                    "."
+            );
+        }
+        lines.push(
             "",
             "Images attached, in this order: 1. the design, 2. the app as it renders now, " +
-                "3. the differences (red = pixels that differ, grey = the design).",
-        ];
+                "3. the differences (red = pixels that differ, grey = the design). Large images are scaled down."
+        );
         return lines.join("\n");
+    }
+
+    /** The three images of a comparison, within Claude's image limits. */
+    private static async images(shot: QaShot): Promise<Attachment[]> {
+        const parts = await Promise.all([shot.design, shot.app, shot.diff].map((png) => PngImages.forClaude(png)));
+        return parts.map((part) => ({ kind: "image", mime: part.mime, base64: part.base64 }));
     }
 
     private static regions(regions: Region[]): string {
@@ -128,6 +171,15 @@ export class QaFixer {
             return "none found";
         }
         return regions.map((r) => `(${r.x}, ${r.y}, ${r.width} × ${r.height})`).join(", ");
+    }
+
+    /** Puts back every file changed since a snapshot (best effort while stopping). */
+    private async revertSince(before: string): Promise<void> {
+        try {
+            await this.git.restore(before, await this.git.changedFiles(before, await this.git.snapshot()));
+        } catch {
+            // the run is ending anyway; the checkpoint taken first can restore the code
+        }
     }
 
     private checkAborted(): void {

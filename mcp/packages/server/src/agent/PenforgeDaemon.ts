@@ -12,6 +12,7 @@ import { PromptRegistry } from "./prompts/promptRegistry";
 import type { ClaudeRunner } from "./runner/ClaudeRunner";
 import { createRunner } from "./runner/createRunner";
 import { McpToolsClient } from "./tools/McpToolsClient";
+import type { PluginSessionDirectory } from "./tools/PluginSessions";
 import { WorkflowEngine } from "./workflows/WorkflowEngine";
 import { WorkflowRegistry } from "./workflows/WorkflowRegistry";
 import { WorkspaceManager } from "./workspace/WorkspaceManager";
@@ -25,6 +26,8 @@ export interface PenforgeDaemonParts {
     tools?: McpToolsClient | null;
     /** dev server manager of the previews */
     devServers?: DevServerManager;
+    /** MCP plugin sessions of this process, to route tabs that did not send their session */
+    pluginSessions?: PluginSessionDirectory;
     authTimeoutMs?: number;
 }
 
@@ -68,9 +71,10 @@ export class PenforgeDaemon {
         this.visualQa = {
             previews: new DevServerPreviewAccess(devServers, workspaces),
             browsers: new ChromeScreenshotterFactory(),
-            workspaces,
-            projectsDir: config.projectsDir,
-            tools: this.tools,
+            clientForMcpSession: async (mcpSessionId) => {
+                const client = this.server.clientForMcpSession(mcpSessionId);
+                return client ? client.setup() : null;
+            },
         };
         this.server = new AgentServer(
             config,
@@ -82,6 +86,7 @@ export class PenforgeDaemon {
                 previews: this.previews,
                 workspaces,
                 tools: this.tools,
+                pluginSessions: parts.pluginSessions,
                 authTimeoutMs: parts.authTimeoutMs ?? 10_000,
             },
             () => ({
@@ -124,7 +129,8 @@ export class PenforgeDaemon {
         this.workflows.cancelAll();
         this.chat.cancelAll();
         this.runner.cancel();
-        VisualQaHost.uninstall(this.visualQa);
+        // closes the QA browsers and releases their dev servers before those stop
+        await VisualQaHost.shutdown(this.visualQa);
         await this.previews.stopAll();
         await this.server.stop();
         await this.tools?.close();

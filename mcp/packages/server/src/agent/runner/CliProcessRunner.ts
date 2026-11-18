@@ -118,7 +118,7 @@ export class CliProcessRunner implements ClaudeRunner {
             "--permission-mode",
             "default",
             "--allowedTools",
-            CliProcessRunner.ALLOWED_TOOLS.join(","),
+            (opts.allowedTools ?? CliProcessRunner.ALLOWED_TOOLS).join(","),
             "--append-system-prompt",
             opts.systemPromptAppend,
         ];

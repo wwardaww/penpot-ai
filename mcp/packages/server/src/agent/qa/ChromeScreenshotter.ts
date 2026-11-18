@@ -1,5 +1,5 @@
 import { existsSync } from "fs";
-import { mkdtemp, rm } from "fs/promises";
+import { mkdtemp, readdir, rm, stat } from "fs/promises";
 import { tmpdir } from "os";
 import { delimiter, join } from "path";
 import type { Readable, Writable } from "stream";
@@ -10,6 +10,8 @@ import { ProcessTree } from "../process/ProcessTree";
 export interface AppShotRequest {
     /** page to open; must be a loopback http(s) URL */
     url: string;
+    /** origin the page must have (the dev server's: scheme, host and port) */
+    origin?: string;
     /** viewport size in CSS pixels (= the design board size) */
     width: number;
     height: number;
@@ -104,6 +106,10 @@ export class ChromeScreenshotter implements AppScreenshotter {
         "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;" +
         "transition:none!important;caret-color:transparent!important}";
 
+    private static readonly PROFILE_PREFIX = "penforge-qa-";
+    private static readonly live = new Set<ChromeScreenshotter>();
+    private static exitHookInstalled = false;
+
     private nextId = 1;
     private buffer = "";
     private closed = false;
@@ -118,7 +124,24 @@ export class ChromeScreenshotter implements AppScreenshotter {
     ) {
         reader.setEncoding("utf8");
         reader.on("data", (chunk: string) => this.receive(chunk));
-        tree.child.once("exit", () => this.failAll(new BrowserUnavailableError("The browser closed")));
+        ChromeScreenshotter.live.add(this);
+        ChromeScreenshotter.installExitHook();
+        tree.child.once("exit", () => {
+            ChromeScreenshotter.live.delete(this);
+            this.failAll(new BrowserUnavailableError("The browser closed"));
+        });
+    }
+
+    /** Kills every browser still running when the node process exits (daemon crash, Ctrl+C). */
+    private static installExitHook(): void {
+        if (!ChromeScreenshotter.exitHookInstalled) {
+            ChromeScreenshotter.exitHookInstalled = true;
+            process.once("exit", () => {
+                for (const browser of ChromeScreenshotter.live) {
+                    browser.tree.killSync();
+                }
+            });
+        }
     }
 
     /**
@@ -133,7 +156,7 @@ export class ChromeScreenshotter implements AppScreenshotter {
                 "No Chrome, Edge or Chromium found. Install one, or set PENFORGE_QA_BROWSER to its path."
             );
         }
-        const profileDir = await mkdtemp(join(tmpdir(), "penforge-qa-"));
+        const profileDir = await mkdtemp(join(tmpdir(), ChromeScreenshotter.PROFILE_PREFIX));
         const args = [
             "--headless=new",
             "--remote-debugging-pipe",
@@ -176,7 +199,7 @@ export class ChromeScreenshotter implements AppScreenshotter {
     }
 
     public async capture(request: AppShotRequest): Promise<Buffer> {
-        ChromeScreenshotter.checkUrl(request.url);
+        ChromeScreenshotter.checkUrl(request.url, request.origin);
         const { targetId } = await this.send("Target.createTarget", { url: "about:blank" });
         const { sessionId } = await this.send("Target.attachToTarget", { targetId, flatten: true });
         try {
@@ -193,13 +216,17 @@ export class ChromeScreenshotter implements AppScreenshotter {
                 sessionId
             );
             const loaded = this.waitForLoad(sessionId);
-            const navigation = await this.send("Page.navigate", { url: request.url }, sessionId);
-            if (navigation?.errorText) {
+            try {
+                const navigation = await this.send("Page.navigate", { url: request.url }, sessionId);
+                if (navigation?.errorText) {
+                    throw new Error(`The app page did not open: ${navigation.errorText}`);
+                }
+                loaded.setLoader(navigation?.loaderId);
+                await loaded.done;
+            } finally {
+                // on every path: no load timer may outlive the capture
                 loaded.cancel();
-                throw new Error(`The app page did not open: ${navigation.errorText}`);
             }
-            loaded.setLoader(navigation?.loaderId);
-            await loaded.done;
             await this.send(
                 "Runtime.evaluate",
                 {
@@ -238,13 +265,14 @@ export class ChromeScreenshotter implements AppScreenshotter {
         if (!this.tree.hasExited) {
             await this.tree.kill();
         }
+        ChromeScreenshotter.live.delete(this);
         await rm(this.profileDir, { recursive: true, force: true, maxRetries: 3 }).catch(() => {});
     }
 
     /**
      * Refuses anything but http(s) pages on the loopback interface.
      */
-    public static checkUrl(url: string): void {
+    public static checkUrl(url: string, origin?: string): void {
         let parsed: URL;
         try {
             parsed = new URL(url);
@@ -254,6 +282,34 @@ export class ChromeScreenshotter implements AppScreenshotter {
         if (!["http:", "https:"].includes(parsed.protocol) || !ChromeScreenshotter.LOOPBACK.has(parsed.hostname)) {
             throw new Error(`Only pages of this machine can be checked, not ${parsed.origin}`);
         }
+        if (origin !== undefined && parsed.origin !== new URL(origin).origin) {
+            throw new Error(`Only pages of the app's dev server can be checked, not ${parsed.origin}`);
+        }
+    }
+
+    /**
+     * Deletes `penforge-qa-*` browser profiles left in the temp folder by a daemon that did not
+     * stop cleanly (older than `maxAgeMs`, so profiles of running browsers stay).
+     */
+    public static async cleanStaleProfiles(maxAgeMs = 60 * 60 * 1000, dir = tmpdir()): Promise<number> {
+        const now = Date.now();
+        let removed = 0;
+        for (const name of await readdir(dir)) {
+            if (!name.startsWith(ChromeScreenshotter.PROFILE_PREFIX)) {
+                continue;
+            }
+            const path = join(dir, name);
+            try {
+                const info = await stat(path);
+                if (info.isDirectory() && now - info.mtimeMs > maxAgeMs) {
+                    await rm(path, { recursive: true, force: true, maxRetries: 2 });
+                    removed++;
+                }
+            } catch {
+                // in use or gone: leave it
+            }
+        }
+        return removed;
     }
 
     /**
@@ -307,6 +363,8 @@ export class ChromeScreenshotter implements AppScreenshotter {
             };
             this.on(sessionId, "Page.lifecycleEvent", onLifecycle);
         });
+        // a rejection nobody awaits any more must never reach the process
+        done.catch(() => undefined);
         return {
             done,
             setLoader: (loaderId) => {

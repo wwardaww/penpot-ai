@@ -13,6 +13,7 @@ import {
     type Stack,
     StackSchema,
 } from "./BuildFiles";
+import { DesignToolFilter } from "../tools/DesignToolFilter";
 import { BuildError } from "./BuildError";
 import { BuildLock } from "./BuildLock";
 import { BuildText } from "./BuildText";
@@ -158,7 +159,9 @@ export class BuildPlanner {
     private async fullPlan(design: DesignSnapshot, previous: Stack | null): Promise<Plan> {
         this.progress("plan", "running");
         const prompt = this.planPrompt(design, previous);
-        let result = await this.ctx.runner.run({ prompt, promptName: "build-plan" });
+        // planning only reads: no design change, no file written (`execute_code` is denied)
+        const toolFilter = new DesignToolFilter(this.ctx.workspace.root, null, "Planning only reads the design.");
+        let result = await this.ctx.runner.run({ prompt, promptName: "build-plan", toolFilter });
         let reply = JsonReply.parse(result.text, BuildPlanner.ReplySchema);
         if (reply === null && !this.ctx.signal.aborted) {
             result = await this.ctx.runner.run({
@@ -167,6 +170,7 @@ export class BuildPlanner {
                     "Reply again with only that block.",
                 promptName: "build-plan",
                 resumeSessionId: result.sessionId,
+                toolFilter,
             });
             reply = JsonReply.parse(result.text, BuildPlanner.ReplySchema);
         }

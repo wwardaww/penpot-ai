@@ -5,7 +5,8 @@ import { ensureCheckpoint } from "../checkpoints";
 import { QaConfig, type QaSettings, type QaSettingsPatch } from "./QaConfig";
 import { QaFixer, type ScreenFix } from "./QaFixer";
 import { QaRun, type QaScreenReport, VisualQaHost } from "./QaRun";
-import { QaSessionTools } from "./QaSessionTools";
+import { QaBudget, type QaLimit } from "./QaBudget";
+import { QaGit } from "./QaGit";
 import { QaError, type QaEnv, type QaShot, VisualQa } from "./VisualQa";
 
 /** Params of the `visual-qa` workflow (see `wiki/architecture.md` §7). */
@@ -30,13 +31,20 @@ export interface VisualQaResult {
     runName: string;
     trigger: "user" | "build";
     threshold: number;
-    settings: Pick<QaSettings, "threshold" | "maxIterations" | "autoRunAfterBuild">;
+    settings: Pick<
+        QaSettings,
+        "threshold" | "maxIterations" | "autoRunAfterBuild" | "maxScreens" | "maxClaudeTurns" | "maxMinutes"
+    >;
     score: number;
     passed: boolean;
     screens: QaScreenReport[];
     skippedScreens: { boardId: string; name: string; route: string | null; reason: string }[];
     commit: string | null;
     checkpoint: string | null;
+    /** limit the run stopped at, if any */
+    limit: QaLimit | null;
+    /** Claude turns the run used */
+    claudeTurns: number;
 }
 
 /**
@@ -49,7 +57,9 @@ export class VisualQaFlow {
     constructor(
         private readonly ctx: WorkflowContext,
         /** pause between a fix and the next screenshot; replaceable in tests */
-        private readonly wait?: (ms: number) => Promise<void>
+        private readonly wait?: (ms: number) => Promise<void>,
+        /** clock of the run's time limit; replaceable in tests */
+        private readonly now: () => number = Date.now
     ) {}
 
     public async run(params: VisualQaParams): Promise<{ summary: string }> {
@@ -96,23 +106,39 @@ export class VisualQaFlow {
             throw new QaError("The app preview is not available in this daemon.", "no-preview");
         }
         const { ctx } = this;
+        const budget = new QaBudget(settings, this.now);
         const env: QaEnv = {
             workspace: ctx.workspace,
-            tools: new QaSessionTools(ctx.tools, ctx.context.fileId),
+            // routed to the tab that started the run (its MCP session is in the context)
+            tools: ctx.tools,
             fileId: ctx.context.fileId,
             signal: ctx.signal,
             progress: (step, stepParams, text) => ctx.emit("progress", { step, params: stepParams, text }),
         };
         const boardIds = Array.isArray(params.boardIds) ? params.boardIds.map(String) : [];
-        const { screens, skipped } = await VisualQa.screens(env, boardIds);
+        const listed = await VisualQa.screens(env, boardIds);
+        const skipped = [...listed.skipped];
+        const screens = listed.screens.slice(0, settings.maxScreens);
+        for (const screen of listed.screens.slice(settings.maxScreens)) {
+            skipped.push({ boardId: screen.boardId, name: screen.name, route: screen.route, reason: "limit" });
+            budget.screensCut();
+        }
         if (screens.length === 0) {
             throw new QaError("None of the screens can be opened in the app.", "no-screens");
+        }
+        const git = new QaGit(ctx.workspace.appSrcDir);
+        if (mode === "fix" && !(await this.confirmDirty(git))) {
+            mode = "check";
         }
         const developer = ctx.context.persona === "developer";
         const run = await QaRun.start(env, services, settings);
         try {
             const first: QaShot[] = [];
             for (const screen of screens) {
+                if (!budget.hasTime()) {
+                    skipped.push({ boardId: screen.boardId, name: screen.name, route: screen.route, reason: "limit" });
+                    continue;
+                }
                 first.push(await run.qa.check(screen, mode === "fix" ? "-before" : ""));
             }
             const fixes = new Map<string, ScreenFix>();
@@ -123,16 +149,22 @@ export class VisualQaFlow {
                 env.progress("checkpoint", {}, "Saving a checkpoint");
                 checkpoint =
                     (await ensureCheckpoint(ctx, "Before matching the app to the design", "visual-qa"))?.id ?? null;
-                const fixer = new QaFixer(ctx, run.qa, settings, this.wait);
+                // changes the checkpoint could not save stay out of the QA commit
+                const foreign = new Set(await git.dirtyFiles());
+                const fixer = new QaFixer(ctx, run.qa, settings, budget, this.wait);
                 const rounds = VisualQaFlow.rounds(params.maxIterations, settings);
                 for (const shot of failing) {
+                    if (!budget.hasTime()) {
+                        break;
+                    }
                     fixes.set(shot.screen.boardId, await fixer.fix(shot, rounds));
                 }
                 const improved = [...fixes.values()].filter((fix) => fix.changedFiles.length > 0);
-                if (improved.length > 0) {
+                const files = [...new Set(improved.flatMap((fix) => fix.changedFiles))].filter((f) => !foreign.has(f));
+                if (files.length > 0) {
                     env.progress("save", {}, "Saving the code");
                     const names = improved.map((fix) => fix.after.screen.name).join(", ");
-                    commit = await ctx.workspace.commitAll("app-src", `penforge(qa): match ${names} to the design`);
+                    commit = await git.commitFiles(files, `penforge(qa): match ${names} to the design`);
                 }
             }
             const finals = first.map((shot) => fixes.get(shot.screen.boardId)?.after ?? shot);
@@ -161,16 +193,49 @@ export class VisualQaFlow {
                 skippedScreens: QaRun.skippedReport(skipped),
                 commit,
                 checkpoint,
+                limit: budget.hit,
+                claudeTurns: budget.turns,
             };
             await run.qa.writeReport({ ...QaRun.fileReport(result), createdAt: new Date().toISOString() });
             await VisualQa.prune(ctx.workspace);
             ctx.emit("result", result);
             const matching = finals.filter((shot) => shot.passed).length;
-            return { summary: `${matching} of ${finals.length} screens match the design (score ${result.score})` };
+            const limit = budget.hit ? `; stopped at the limit of ${VisualQaFlow.LIMIT_TEXT[budget.hit]}` : "";
+            return {
+                summary: `${matching} of ${finals.length} screens match the design (score ${result.score})${limit}`,
+            };
         } finally {
             await run.close();
         }
     }
+
+    /**
+     * Asks before fixing when `app-src/` has uncommitted changes (they stay out of the QA commit).
+     *
+     * @returns whether to fix
+     */
+    private async confirmDirty(git: QaGit): Promise<boolean> {
+        const dirty = await git.dirtyFiles();
+        if (dirty.length === 0) {
+            return true;
+        }
+        const answer = await this.ctx.ask({
+            text:
+                `The app's code has ${dirty.length} changed file(s) that are not saved in git. ` +
+                "Penforge saves them in a checkpoint first and leaves them out of its own commit. Fix anyway?",
+            options: [
+                { id: "fix", label: "Fix anyway" },
+                { id: "check", label: "Only check" },
+            ],
+        });
+        return answer === "fix";
+    }
+
+    private static readonly LIMIT_TEXT: Record<QaLimit, string> = {
+        screens: "screens per check",
+        turns: "AI fix turns per check",
+        time: "time per check",
+    };
 
     /** Marks a run's report as accepted by the user. */
     private async accept(runName: string | undefined): Promise<{ summary: string }> {
@@ -200,6 +265,9 @@ export class VisualQaFlow {
             threshold: settings.threshold,
             maxIterations: settings.maxIterations,
             autoRunAfterBuild: settings.autoRunAfterBuild,
+            maxScreens: settings.maxScreens,
+            maxClaudeTurns: settings.maxClaudeTurns,
+            maxMinutes: settings.maxMinutes,
         };
     }
 }

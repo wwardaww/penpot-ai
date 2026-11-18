@@ -478,3 +478,48 @@ test("the registry is append-only and reserves answer", () => {
     assert.throws(() => registry.register({ ...dummyWorkflow, name: "chat" }), /already registered/);
     assert.throws(() => registry.register({ ...dummyWorkflow, name: "answer" }), /reserved/);
 });
+
+test("a tab without its own MCP session gets the plugin session of its file", async () => {
+    const config = new AgentConfig({
+        home,
+        host: "127.0.0.1",
+        port: 0,
+        allowedOrigins: [ORIGIN],
+        publicUri: ORIGIN,
+        runner: "fake",
+        mcpUrl: "http://127.0.0.1:1/mcp",
+        requirePairing: true,
+    });
+    const registry = WorkflowRegistry.withShippedWorkflows();
+    registry.register({
+        name: "which-session",
+        description: "Reports the MCP session of the run's context",
+        run: async (ctx) => ({ summary: String(ctx.context.mcpSessionId) }),
+    });
+    const routed = new PenforgeDaemon(config, {
+        runner,
+        registry,
+        tools: null,
+        authTimeoutMs: 500,
+        pluginSessions: { sessionForFile: (fileId) => (fileId === "file-1" ? "plugin-7" : undefined) },
+    });
+    await routed.start();
+    try {
+        const client = await AgentTestClient.connect(`ws://127.0.0.1:${routed.port}/agent`, ORIGIN);
+        clients.push(client);
+        client.send({ type: "auth", token: routed.token.value });
+        await client.next("auth.ok");
+        const { mcpSessionId: _none, ...withoutSession } = CONTEXT;
+        client.send(withoutSession);
+
+        client.send({ type: "workflow.run", rid: "r1", name: "which-session", params: {} });
+        assert.equal((await client.next("workflow.done")).summary, "plugin-7");
+
+        // a session the tab sent itself wins
+        client.send(CONTEXT);
+        client.send({ type: "workflow.run", rid: "r2", name: "which-session", params: {} });
+        assert.equal((await client.next("workflow.done")).summary, "tab-1");
+    } finally {
+        await routed.stop();
+    }
+});

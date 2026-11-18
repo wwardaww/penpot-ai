@@ -25,6 +25,8 @@ export interface TurnRequest {
     noteMissingSelection?: boolean;
     /** the user removed the selected layers from the message (with `noteMissingSelection`) */
     selectionDismissed?: boolean;
+    /** tools runners without a permission channel may approve (see `RunnerOptions.allowedTools`) */
+    allowedTools?: readonly string[];
 }
 
 /**
@@ -65,6 +67,7 @@ export class TurnRunner {
         yield* this.runner.send(conversation, input, {
             cwd: setup.workspace.root,
             systemPromptAppend: systemPrompt,
+            allowedTools: request.allowedTools,
             permissions: setup.permissions,
             signal: setup.signal,
         });

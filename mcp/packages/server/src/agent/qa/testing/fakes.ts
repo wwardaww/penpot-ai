@@ -58,16 +58,13 @@ export function parseCss(css: string): ScreenLook {
  */
 export class FakePenpot implements WorkflowToolsApi {
     public readonly calls: { name: string; args: Record<string, unknown> }[] = [];
-    /** answer every call without `sessionId` with the "Multiple Penpot sessions" error */
-    public multipleSessions: string | null = null;
+    /** board sizes that differ from {@link SCREENS} (e.g. broken ones) */
+    public readonly sizes: Record<string, { width: unknown; height: unknown }> = {};
 
     constructor(private readonly designs: Record<string, Buffer>) {}
 
     public async call(name: string, args: Record<string, unknown> = {}): Promise<WorkflowToolResult> {
         this.calls.push({ name, args });
-        if (this.multipleSessions && args.sessionId === undefined) {
-            return { isError: true, content: [], text: this.multipleSessions };
-        }
         switch (name) {
             case "list_boards":
                 return FakePenpot.json(
@@ -78,8 +75,8 @@ export class FakePenpot implements WorkflowToolsApi {
                         pageName: "Screens",
                         x: 0,
                         y: 0,
-                        width: screen.width,
-                        height: screen.height,
+                        width: this.sizes[screen.boardId]?.width ?? screen.width,
+                        height: this.sizes[screen.boardId]?.height ?? screen.height,
                     }))
                 );
             case "capture_node_screenshot": {

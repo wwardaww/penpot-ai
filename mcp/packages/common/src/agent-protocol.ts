@@ -461,6 +461,13 @@ export interface WorkflowToolFilter {
      *   when the use is denied
      */
     check(toolName: string, input: Record<string, unknown>): string | null;
+    /**
+     * Tools a runner without a per-use permission channel (`local-cli-spawn`) may approve up front
+     * for this turn, in Claude Code permission rule syntax (e.g. `Read`, `Edit(app-src/**)`,
+     * `mcp__penpot__list_boards`); every other tool is then denied. Without it such a runner keeps
+     * its fixed default list, which ignores {@link check}.
+     */
+    readonly allowedTools?: readonly string[];
 }
 
 /** Claude turn requested by a workflow. */

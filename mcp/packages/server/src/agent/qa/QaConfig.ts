@@ -7,6 +7,12 @@ export const QaSettingsSchema = z.object({
     threshold: z.number().int().min(50).max(100).default(90),
     /** fix rounds per screen before the loop gives up */
     maxIterations: z.number().int().min(1).max(10).default(3),
+    /** screens compared in one run; the others are reported as skipped */
+    maxScreens: z.number().int().min(1).max(50).default(20),
+    /** Claude turns in one run, all screens together */
+    maxClaudeTurns: z.number().int().min(1).max(40).default(12),
+    /** wall-clock limit of one run, in minutes (no new screen or fix starts after it) */
+    maxMinutes: z.number().int().min(1).max(60).default(20),
     /** check the app against the design after every successful build */
     autoRunAfterBuild: z.boolean().default(false),
     /** colour tolerance of the pixel comparison, 0..1 (pixelmatch's `threshold`) */

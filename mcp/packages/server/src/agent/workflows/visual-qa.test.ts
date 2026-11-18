@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, test } from "node:test";
 import type { Persona, WorkflowClaudeRequest, WorkflowContext, WorkflowEventKind } from "@penpot/mcp-common";
 import { BuildLock } from "../build/BuildLock";
 import { VisualQaHost, type VisualQaServices } from "../qa/QaRun";
+import { VisualQaFlow } from "../qa/VisualQaFlow";
 import {
     FakeBrowser,
     FakePenpot,
@@ -78,15 +79,13 @@ beforeEach(async () => {
     services = {
         previews,
         browsers: browser,
-        workspaces: { get: async () => workspace },
-        projectsDir,
-        tools: { forSession: () => penpot },
+        clientForMcpSession: async () => null,
     };
     VisualQaHost.install(services);
 });
 
-afterEach(() => {
-    VisualQaHost.uninstall(services);
+afterEach(async () => {
+    await VisualQaHost.shutdown(services);
     rmSync(projectsDir, { recursive: true, force: true });
 });
 
@@ -96,10 +95,20 @@ interface Harness {
     turns: WorkflowClaudeRequest[];
 }
 
+interface HarnessOptions {
+    /** answer to every question (default "fix") */
+    answer?: string;
+    /** aborts the run while Claude works on the given turn */
+    abortOnTurn?: number;
+}
+
 function harness(
     onTurn: (request: WorkflowClaudeRequest, n: number) => void = () => {},
-    persona: Persona = "designer"
-): Harness {
+    persona: Persona = "designer",
+    options: HarnessOptions = {}
+): Harness & { questions: string[] } {
+    const abort = new AbortController();
+    const questions: string[] = [];
     const events: Harness["events"] = [];
     const turns: WorkflowClaudeRequest[] = [];
     const ctx: WorkflowContext = {
@@ -117,16 +126,23 @@ function harness(
             run: async (request) => {
                 turns.push(request);
                 onTurn(request, turns.length);
+                if (options.abortOnTurn === turns.length) {
+                    abort.abort();
+                    throw new Error("cancelled");
+                }
                 return { text: "Changed the button.", sessionId: "claude-session-1" };
             },
         },
         tools: penpot,
         workspace,
-        signal: new AbortController().signal,
+        signal: abort.signal,
         emit: (kind, payload) => events.push({ kind, payload }),
-        ask: async () => "cancel",
+        ask: async (question) => {
+            questions.push(question.text);
+            return options.answer ?? "fix";
+        },
     };
-    return { ctx, events, turns };
+    return { ctx, events, turns, questions };
 }
 
 function result(events: Harness["events"]): any {
@@ -197,20 +213,40 @@ describe("visual-qa check", () => {
         assert.ok(existsSync(join(workspace.root, home.paths.app)));
     });
 
-    test("finds the tab's Penpot session when several are connected", async () => {
-        penpot.multipleSessions =
-            "Tool execution failed: Error: Multiple Penpot sessions are connected. Ask the user to select one " +
-            "of the active sessions, then retry with its sessionId:\n" +
-            'session-a: "Other" (file file-9)\n' +
-            'session-b: "Shop" (file file-1)';
+    test("skips screens with a foreign route or a broken size", async () => {
+        await workspace.writeJson("map.json", {
+            schemaVersion: 1,
+            builtAt: "x",
+            fileId: "file-1",
+            commit: null,
+            boards: {
+                [SCREENS.home.boardId]: { name: "Home", hash: "h1", route: "//evil.test/x", files: [] },
+                [SCREENS.login.boardId]: { name: "Login", hash: "h2", route: "/login", files: [] },
+            },
+        });
+        penpot.sizes[SCREENS.login.boardId] = { width: "wide", height: 300 };
         const { ctx, events } = harness();
 
-        await workflow.run(ctx, {});
+        await assert.rejects(workflow.run(ctx, {}));
 
-        assert.equal(result(events).screens.length, 2);
-        const routed = penpot.calls.filter((c) => c.args.sessionId !== undefined);
-        assert.ok(routed.length >= 3);
-        assert.ok(routed.every((c) => c.args.sessionId === "session-b"));
+        assert.equal(events.find((e) => e.kind === "failed")?.payload.code, "no-screens");
+        assert.equal(browser.shots.length, 0);
+    });
+
+    test("compares at most maxScreens screens", async () => {
+        await workspace.writeJson("qa.json", { threshold: 95, reloadDelayMs: 0, settleMs: 0, maxScreens: 1 });
+        const { ctx, events } = harness();
+
+        const done = await workflow.run(ctx, {});
+
+        const payload = result(events);
+        assert.equal(payload.screens.length, 1);
+        assert.deepEqual(
+            payload.skippedScreens.map((s: any) => [s.name, s.reason]),
+            [["Login", "limit"]]
+        );
+        assert.equal(payload.limit, "screens");
+        assert.match(done!.summary, /stopped at the limit of screens per check/);
     });
 
     test("reports a project that was not built", async () => {
@@ -314,7 +350,10 @@ describe("visual-qa fix", () => {
         await workflow.run(ctx, { mode: "fix", maxIterations: 2 });
 
         assert.equal(turns.length, 2);
-        assert.equal(turns[1].resumeSessionId, "claude-session-1");
+        // every try is a fresh session with only the current images
+        assert.equal(turns[1].resumeSessionId, undefined);
+        assert.equal(turns[1].attachments?.length, 3);
+        assert.match(turns[1].prompt, /try 1 raised the score/);
         const home = result(events).screens.find((s: any) => s.name === "Home");
         assert.equal(home.attempts, 2);
         assert.ok(home.score > home.before);
@@ -353,5 +392,92 @@ describe("visual-qa settings", () => {
         const report = JSON.parse(readFileSync(join(workspace.metaDir, "qa", runName, "report.json"), "utf8"));
         assert.ok(report.acceptedAt);
         await assert.rejects(workflow.run(harness().ctx, { mode: "accept", runName: "../../x" }));
+    });
+});
+
+describe("visual-qa limits and safety", () => {
+    /** Makes both screens fail: Login gets the wrong colour too. */
+    async function bothFailing(): Promise<void> {
+        writeLook("login", { ...LOGIN_DESIGN, buttonColor: "#ff3333", buttonTop: 120 });
+        await workspace.commitAll("app-src", "penforge(build): login");
+    }
+
+    test("stops fixing when the run's Claude turns are spent", async () => {
+        await bothFailing();
+        await workspace.writeJson("qa.json", { threshold: 95, reloadDelayMs: 0, settleMs: 0, maxClaudeTurns: 1 });
+        // every turn helps a bit, so only the turn limit ends the loop
+        const { ctx, events, turns } = harness((_request, n) =>
+            writeLook("home", { ...HOME_DESIGN, buttonTop: HOME_SEEDED.buttonTop + 30 * n })
+        );
+
+        const done = await workflow.run(ctx, { mode: "fix" });
+
+        assert.equal(turns.length, 1);
+        assert.equal(result(events).limit, "turns");
+        assert.equal(result(events).claudeTurns, 1);
+        assert.match(done!.summary, /stopped at the limit of AI fix turns/);
+    });
+
+    test("stops fixing when the run's time is up", async () => {
+        let clock = 0;
+        const { ctx, events, turns } = harness(() => {
+            writeLook("home", { ...HOME_DESIGN, buttonTop: 150 });
+            clock += 21 * 60_000;
+        });
+
+        await new VisualQaFlow(
+            ctx,
+            async () => {},
+            () => clock
+        ).run({ mode: "fix", maxIterations: 3 });
+
+        assert.equal(turns.length, 1);
+        assert.equal(result(events).limit, "time");
+    });
+
+    test("asks before fixing an app with uncommitted changes and can only check", async () => {
+        writeFileSync(join(workspace.appSrcDir, "notes.txt"), "my own edit\n");
+        const { ctx, events, turns, questions } = harness(() => writeLook("home", HOME_DESIGN), "designer", {
+            answer: "check",
+        });
+
+        await workflow.run(ctx, { mode: "fix" });
+
+        assert.equal(questions.length, 1);
+        assert.match(questions[0], /1 changed file/);
+        assert.equal(turns.length, 0);
+        assert.equal(result(events).mode, "check");
+    });
+
+    test("commits only the files the fix changed", async () => {
+        const { ctx, events } = harness(() => writeLook("home", HOME_DESIGN));
+
+        await workflow.run(ctx, { mode: "fix" });
+
+        const files = execFileSync("git", ["show", "--name-only", "--format=", result(events).commit], {
+            cwd: workspace.appSrcDir,
+            encoding: "utf8",
+        })
+            .trim()
+            .split("\n");
+        assert.deepEqual(files, ["src/home.css"]);
+    });
+
+    test("stopping during a fix puts the code back", async () => {
+        const { ctx, turns } = harness(
+            () => writeLook("home", { ...HOME_SEEDED, buttonColor: "#000000" }),
+            "designer",
+            {
+                abortOnTurn: 1,
+            }
+        );
+
+        await assert.rejects(workflow.run(ctx, { mode: "fix" }), /cancelled/);
+
+        assert.equal(turns.length, 1);
+        assert.equal(readFileSync(appFile("home.css"), "utf8").replace(/\r\n/g, "\n"), screenCss(HOME_SEEDED));
+        assert.equal(VisualQaHost.openRuns, 0);
+        assert.equal(browser.closed, 1);
+        assert.equal(previews.released, 1);
     });
 });

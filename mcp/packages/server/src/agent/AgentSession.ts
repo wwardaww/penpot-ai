@@ -10,6 +10,7 @@ import { PermissionBroker } from "./permissions/PermissionBroker";
 import { ToolPermissionPolicy } from "./permissions/ToolPermissionPolicy";
 import type { PreviewService } from "./process/PreviewService";
 import type { McpToolsClient } from "./tools/McpToolsClient";
+import type { PluginSessionDirectory } from "./tools/PluginSessions";
 import type { WorkflowEngine } from "./workflows/WorkflowEngine";
 import type { ProjectWorkspace } from "./workspace/ProjectWorkspace";
 import type { WorkspaceManager } from "./workspace/WorkspaceManager";
@@ -24,6 +25,8 @@ export interface AgentSessionDeps {
     previews: PreviewService;
     workspaces: WorkspaceManager;
     tools: McpToolsClient | null;
+    /** finds the MCP plugin session of a file when the tab did not send its own */
+    pluginSessions?: PluginSessionDirectory;
     /** time the client has to send `auth` */
     authTimeoutMs: number;
 }
@@ -80,11 +83,30 @@ export class AgentSession implements AgentClient {
         if (this.policy?.projectId !== workspace.projectId) {
             this.policy = {
                 projectId: workspace.projectId,
-                policy: new ToolPermissionPolicy(workspace.guard, this.broker, () => this.context?.mcpSessionId),
+                policy: new ToolPermissionPolicy(workspace.guard, this.broker, () => this.mcpSessionId()),
             };
         }
-        const tools = this.deps.tools?.forSession(() => this.context?.mcpSessionId) ?? null;
-        return { context, workspace, permissions: this.policy.policy, tools };
+        const tools = this.deps.tools?.forSession(() => this.mcpSessionId()) ?? null;
+        const mcpSessionId = this.mcpSessionId();
+        // runs and turns carry the tab's MCP session, so their tools reach this tab's plugin
+        return {
+            context: mcpSessionId ? { ...context, mcpSessionId } : context,
+            workspace,
+            permissions: this.policy.policy,
+            tools,
+        };
+    }
+
+    /**
+     * The Penpot MCP session of this tab: the one the tab sent in `context.set`, else the session of
+     * a tab showing the same file (the plugin may connect after the context was sent).
+     */
+    public mcpSessionId(): string | undefined {
+        const context = this.context;
+        if (!context) {
+            return undefined;
+        }
+        return context.mcpSessionId ?? this.deps.pluginSessions?.sessionForFile(context.fileId);
     }
 
     private receive(data: RawData, isBinary: boolean): void {

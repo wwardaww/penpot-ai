@@ -92,6 +92,16 @@ export class AgentServer {
     }
 
     /**
+     * Finds the connected client (browser tab) whose Penpot MCP session is the given one, so that
+     * an MCP tool call made by that tab's Claude turn is served with that tab's context.
+     *
+     * @param mcpSessionId - the Penpot MCP plugin session
+     */
+    public clientForMcpSession(mcpSessionId: string): AgentSession | undefined {
+        return [...this.sessions].find((session) => session.mcpSessionId() === mcpSessionId);
+    }
+
+    /**
      * Starts listening.
      */
     public async start(): Promise<void> {

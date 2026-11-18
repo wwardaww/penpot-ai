@@ -25,7 +25,7 @@ export interface QaSkippedScreen {
     boardId: string;
     name: string;
     route: string | null;
-    reason: "board-missing" | "dynamic-route";
+    reason: "board-missing" | "dynamic-route" | "bad-route" | "bad-size" | "limit";
 }
 
 /** Comparison of one screen. */
@@ -150,18 +150,24 @@ export class VisualQa {
         for (const [boardId, entry] of built) {
             const board = boards.get(boardId);
             const route = entry.route as string;
+            const width = Math.round(Number(board?.width));
+            const height = Math.round(Number(board?.height));
             if (!board) {
                 skipped.push({ boardId, name: entry.name, route, reason: "board-missing" });
+            } else if (!VisualQa.isPlainRoute(route)) {
+                skipped.push({ boardId, name: entry.name, route, reason: "bad-route" });
             } else if (route.includes(":")) {
                 skipped.push({ boardId, name: entry.name, route, reason: "dynamic-route" });
+            } else if (!VisualQa.isViewportSide(width) || !VisualQa.isViewportSide(height)) {
+                skipped.push({ boardId, name: entry.name, route, reason: "bad-size" });
             } else {
                 screens.push({
                     boardId,
                     name: String(board.name ?? entry.name),
                     route,
                     pageId: board.pageId ? String(board.pageId) : null,
-                    width: Math.max(1, Math.round(Number(board.width))),
-                    height: Math.max(1, Math.round(Number(board.height))),
+                    width,
+                    height,
                     files: entry.files,
                 });
             }
@@ -178,8 +184,12 @@ export class VisualQa {
     public async check(screen: QaScreen, suffix = ""): Promise<QaShot> {
         const design = await this.designShot(screen);
         this.env.progress("app", { name: screen.name }, `Opening ${screen.name} in the app`);
+        if (!VisualQa.isPlainRoute(screen.route)) {
+            throw new Error(`Not a route of the app: ${screen.route}`);
+        }
         const app = await this.browser.capture({
             url: new URL(screen.route, this.appUrl).toString(),
+            origin: new URL(this.appUrl).origin,
             width: screen.width,
             height: screen.height,
             settleMs: this.settings.settleMs,
@@ -275,6 +285,18 @@ export class VisualQa {
         const bytes = Buffer.from(image.data, "base64");
         this.designCache.set(screen.boardId, bytes);
         return bytes;
+    }
+
+    /** largest board side the QA opens as a viewport */
+    public static readonly MAX_VIEWPORT_SIDE = 8000;
+
+    /** A path on the app's own server: `/…`, never `//host` or a URL. */
+    public static isPlainRoute(route: string): boolean {
+        return /^\/(?![/\\])[^\s\\]*$/.test(route);
+    }
+
+    private static isViewportSide(value: number): boolean {
+        return Number.isFinite(value) && value >= 1 && value <= VisualQa.MAX_VIEWPORT_SIDE;
     }
 
     private static slug(screen: QaScreen): string {

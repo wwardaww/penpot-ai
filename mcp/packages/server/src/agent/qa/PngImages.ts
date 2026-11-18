@@ -51,6 +51,31 @@ export class PngImages {
             .toBuffer();
     }
 
+    /** longest side of an image sent to Claude (larger ones are scaled down by the API anyway) */
+    public static readonly CLAUDE_MAX_SIDE = 1568;
+    /** largest raw size of an image sent to Claude (5 MB once base64-encoded) */
+    public static readonly CLAUDE_MAX_BYTES = 3_750_000;
+
+    /**
+     * Prepares an image for Claude: long side at most {@link CLAUDE_MAX_SIDE} px, at most
+     * {@link CLAUDE_MAX_BYTES} (PNG, or JPEG when the PNG stays too big).
+     */
+    public static async forClaude(png: Buffer): Promise<{ mime: "image/png" | "image/jpeg"; base64: string }> {
+        const max = PngImages.CLAUDE_MAX_SIDE;
+        const resized = sharp(png).resize({ width: max, height: max, fit: "inside", withoutEnlargement: true });
+        const small = await resized.clone().png({ compressionLevel: 9 }).toBuffer();
+        if (small.length <= PngImages.CLAUDE_MAX_BYTES) {
+            return { mime: "image/png", base64: small.toString("base64") };
+        }
+        for (const quality of [85, 70, 50]) {
+            const jpeg = await resized.clone().flatten({ background: PngImages.WHITE }).jpeg({ quality }).toBuffer();
+            if (jpeg.length <= PngImages.CLAUDE_MAX_BYTES) {
+                return { mime: "image/jpeg", base64: jpeg.toString("base64") };
+            }
+        }
+        throw new Error("The image is too large to send to Claude");
+    }
+
     /**
      * Makes a small PNG preview as a `data:` URL (for the report UI).
      *

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,13 +11,24 @@ import { PngImages } from "./PngImages";
 import { DevServerPreviewAccess, PreviewUnavailableError } from "./PreviewAccess";
 import { QaChat } from "./QaChat";
 import type { VisualQaServices } from "./QaRun";
-import { QaSessionTools } from "./QaSessionTools";
-import { QaToolFilter } from "./QaToolFilter";
+import type { AgentContext } from "@penpot/mcp-common";
 import { FakeBrowser, FakePenpot, FakePreviews, renderScreen, SCREENS, screenCss } from "./testing/fakes";
 import { CommandPolicy } from "../process/CommandPolicy";
 import { DevServerManager } from "../process/DevServerManager";
 import { PortPool } from "../process/PortPool";
+import { DesignToolFilter } from "../tools/DesignToolFilter";
+import { BridgeSessionDirectory } from "../tools/PluginSessions";
 import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
+
+const CONTEXT: AgentContext = {
+    fileId: "file-1",
+    fileName: "Shop",
+    projectId: "project-1",
+    teamId: "team-1",
+    pageId: "page-1",
+    persona: "developer",
+    platform: "web",
+};
 
 /** Solid image of one colour. */
 function solid(width: number, height: number, rgba: [number, number, number, number]): RgbaImage {
@@ -108,9 +119,9 @@ describe("PngImages", () => {
     });
 });
 
-describe("QaToolFilter", () => {
+describe("DesignToolFilter", () => {
     const root = join(tmpdir(), "project-x");
-    const filter = new QaToolFilter(root, join(root, "app-src"));
+    const filter = new DesignToolFilter(root, join(root, "app-src"));
 
     test("allows reading and changing the app only", () => {
         assert.equal(filter.check("Read", { file_path: join(root, "design", "DESIGN.md") }), null);
@@ -136,34 +147,55 @@ describe("QaToolFilter", () => {
             assert.notEqual(filter.check(`mcp__penpot__${tool}`, {}), null, tool);
         }
     });
-});
 
-describe("QaSessionTools", () => {
-    const error =
-        "Tool execution failed: Error: Multiple Penpot sessions are connected. Ask the user to select one of " +
-        "the active sessions, then retry with its sessionId:\n" +
-        's-1: "A" (file f-a)\n' +
-        "s-2: no active workspace\n" +
-        's-3: "B (copy)" (file f-b)';
-
-    test("finds the session of a file in the dispatcher's error", () => {
-        assert.equal(QaSessionTools.sessionOfFile(error, "f-b"), "s-3");
-        assert.equal(QaSessionTools.sessionOfFile(error, "f-x"), null);
-        assert.equal(QaSessionTools.sessionOfFile("Tool execution failed: node not found", "f-a"), null);
+    test("lists the same rules for runners that approve tools up front", () => {
+        assert.ok(filter.allowedTools.includes("Read"));
+        assert.ok(filter.allowedTools.includes("Edit(app-src/**)"));
+        assert.ok(filter.allowedTools.includes("mcp__penpot__list_boards"));
+        assert.ok(!filter.allowedTools.some((tool) => tool === "Edit" || tool.startsWith("mcp__penpot__execute")));
+        assert.ok(!filter.allowedTools.includes("mcp__penpot"));
     });
 
-    test("keeps the session of the tab when it is known", async () => {
-        const penpot = new FakePenpot({});
-        penpot.multipleSessions = error;
-        const tools = new QaSessionTools(penpot, "f-a", "s-1");
+    test("a planning filter allows no change at all", () => {
+        const planning = new DesignToolFilter(root, null);
+        assert.notEqual(planning.check("Write", { file_path: join(root, "app-src", "a.ts") }), null);
+        assert.notEqual(planning.check("mcp__penpot__execute_code", { code: "1" }), null);
+        assert.equal(planning.check("mcp__penpot__list_boards", {}), null);
+        assert.ok(!planning.allowedTools.some((tool) => /^(Edit|Write|MultiEdit)/.test(tool)));
+    });
+});
 
-        const result = await tools.call("list_boards");
+describe("BridgeSessionDirectory", () => {
+    test("finds the plugin session showing a file", () => {
+        const directory = new BridgeSessionDirectory({
+            getUserConnections: () => ({
+                getSessions: () => [
+                    { sessionId: "s-1", fileId: "f-a", fileName: "A" },
+                    { sessionId: "s-2", fileId: null, fileName: null },
+                    { sessionId: "s-3", fileId: "f-b", fileName: "B" },
+                ],
+            }),
+        });
 
-        assert.equal(result.isError, false);
-        assert.deepEqual(
-            penpot.calls.map((c) => c.args.sessionId),
-            ["s-1"]
+        assert.equal(directory.sessionForFile("f-b"), "s-3");
+        assert.equal(directory.sessionForFile("f-x"), undefined);
+        assert.equal(
+            new BridgeSessionDirectory({ getUserConnections: () => undefined }).sessionForFile("f-a"),
+            undefined
         );
+    });
+});
+
+describe("PngImages.forClaude", () => {
+    test("scales long images down to the API limits", async () => {
+        const tall = await renderScreen({ headerColor: "#222222", buttonColor: "#3366ff", buttonTop: 200 }, 390, 4000);
+
+        const image = await PngImages.forClaude(tall);
+
+        const decoded = await PngImages.decode(Buffer.from(image.base64, "base64"));
+        assert.equal(decoded.height, PngImages.CLAUDE_MAX_SIDE);
+        assert.ok(decoded.width < 390);
+        assert.ok(Buffer.from(image.base64, "base64").length <= PngImages.CLAUDE_MAX_BYTES);
     });
 });
 
@@ -225,6 +257,7 @@ describe("QaChat (penforge_visual_qa)", () => {
         const good = { headerColor: "#222222", buttonColor: "#3366ff", buttonTop: 200 };
         writeFileSync(join(workspace.appSrcDir, "src", "home.css"), screenCss({ ...good, buttonColor: "#ff0000" }));
         writeFileSync(join(workspace.appSrcDir, "src", "login.css"), screenCss(good));
+        await workspace.commitAll("app-src", "penforge(build): build app");
         await workspace.writeJson("map.json", {
             schemaVersion: 1,
             builtAt: "x",
@@ -239,18 +272,25 @@ describe("QaChat (penforge_visual_qa)", () => {
         services = {
             previews: new FakePreviews(),
             browsers: new FakeBrowser(workspace.appSrcDir),
-            workspaces: { get: async (id: string) => (id === "project-7" ? workspace : Promise.reject(new Error(id))) },
-            projectsDir,
-            tools: {
-                forSession: () => new FakePenpot({ [SCREENS.home.boardId]: design, [SCREENS.login.boardId]: design }),
-            },
+            clientForMcpSession: async (id: string) =>
+                id === "tab-7"
+                    ? {
+                          context: { ...CONTEXT, fileId: "file-7", projectId: "project-7" },
+                          workspace,
+                          tools: new FakePenpot({ [SCREENS.home.boardId]: design, [SCREENS.login.boardId]: design }),
+                      }
+                    : null,
         };
+        QaChat.reset();
     });
 
-    afterEach(() => rmSync(projectsDir, { recursive: true, force: true }));
+    afterEach(() => {
+        QaChat.reset();
+        rmSync(projectsDir, { recursive: true, force: true });
+    });
 
     test("checks the project of the file and returns scores and the worst screen's images", async () => {
-        const content = await new QaChat(services).handle({ fileId: "file-7" });
+        const content = await new QaChat(services).handle({ fileId: "file-7", sessionId: "tab-7" });
 
         const summary = JSON.parse((content[0] as { text: string }).text);
         assert.equal(summary.screens.length, 2);
@@ -262,22 +302,48 @@ describe("QaChat (penforge_visual_qa)", () => {
         assert.match((content.at(-1) as { text: string }).text, /commit: true/);
     });
 
-    test("commits the code changes on request", async () => {
-        const content = await new QaChat(services).handle({ fileId: "file-7", commit: true });
+    test("commits only the files changed since the first check", async () => {
+        const chat = new QaChat(services);
+        writeFileSync(join(workspace.appSrcDir, "mine.txt"), "the user's own edit\n");
+        await chat.handle({ fileId: "file-7", sessionId: "tab-7" });
+        // Claude fixes the screen between two checks
+        writeFileSync(
+            join(workspace.appSrcDir, "src", "home.css"),
+            screenCss({ headerColor: "#222222", buttonColor: "#3366ff", buttonTop: 200 })
+        );
 
-        assert.ok(JSON.parse((content[0] as { text: string }).text).commit);
+        const content = await chat.handle({ fileId: "file-7", sessionId: "tab-7", commit: true });
+
+        const answer = JSON.parse((content[0] as { text: string }).text);
+        assert.ok(answer.commit);
+        assert.deepEqual(answer.files, ["src/home.css"]);
+        const nothing = await chat.handle({ fileId: "file-7", sessionId: "tab-7", commit: true });
+        assert.equal(JSON.parse((nothing[0] as { text: string }).text).commit, null);
+    });
+
+    test("refuses more re-checks than maxIterations in one round", async () => {
+        await workspace.writeJson("qa.json", { threshold: 95, settleMs: 0, maxIterations: 1 });
+        const chat = new QaChat(services);
+
+        await chat.handle({ fileId: "file-7", sessionId: "tab-7" });
+        await chat.handle({ fileId: "file-7", sessionId: "tab-7" });
+        const third = await chat.handle({ fileId: "file-7", sessionId: "tab-7" });
+
+        assert.equal(JSON.parse((third[0] as { text: string }).text).error, "limit");
     });
 
     test("explains a known failure instead of throwing", async () => {
         rmSync(join(workspace.metaDir, "map.json"));
 
-        const content = await new QaChat(services).handle({ fileId: "file-7" });
+        const content = await new QaChat(services).handle({ fileId: "file-7", sessionId: "tab-7" });
 
         assert.equal(JSON.parse((content[0] as { text: string }).text).error, "not-built");
     });
 
-    test("needs a project that opened the file", async () => {
-        await assert.rejects(new QaChat(services).handle({ fileId: "file-unknown" }), /No Penforge project/);
+    test("serves only the calling tab and its file", async () => {
+        await assert.rejects(new QaChat(services).handle({ fileId: "file-7" }), /sessionId/);
+        await assert.rejects(new QaChat(services).handle({ fileId: "file-7", sessionId: "tab-x" }), /No Penforge tab/);
+        await assert.rejects(new QaChat(services).handle({ fileId: "file-8", sessionId: "tab-7" }), /No Penforge tab/);
     });
 });
 
@@ -288,6 +354,30 @@ describe("ChromeScreenshotter", () => {
         assert.throws(() => ChromeScreenshotter.checkUrl("http://192.168.1.4:5200/"), /this machine/);
         assert.throws(() => ChromeScreenshotter.checkUrl("file:///etc/passwd"), /this machine/);
         assert.throws(() => ChromeScreenshotter.checkUrl("not a url"), /valid/);
+        // a route must stay on the dev server: same scheme, host and port
+        assert.doesNotThrow(() => ChromeScreenshotter.checkUrl("http://127.0.0.1:5200/a", "http://127.0.0.1:5200/"));
+        assert.throws(
+            () => ChromeScreenshotter.checkUrl("http://127.0.0.1:4410/health", "http://127.0.0.1:5200/"),
+            /dev server/
+        );
+    });
+
+    test("removes old browser profiles only", async () => {
+        const dir = mkdtempSync(join(tmpdir(), "penforge-qa-tmp-"));
+        try {
+            mkdirSync(join(dir, "penforge-qa-old"));
+            mkdirSync(join(dir, "penforge-qa-new"));
+            mkdirSync(join(dir, "other-old"));
+            const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+            utimesSync(join(dir, "penforge-qa-old"), old, old);
+            utimesSync(join(dir, "other-old"), old, old);
+
+            assert.equal(await ChromeScreenshotter.cleanStaleProfiles(60 * 60 * 1000, dir), 1);
+
+            assert.deepEqual(readdirSync(dir).sort(), ["other-old", "penforge-qa-new"]);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     test("finds a configured browser and ignores a missing one", () => {
