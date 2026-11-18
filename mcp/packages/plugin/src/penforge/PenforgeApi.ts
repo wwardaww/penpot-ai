@@ -27,13 +27,21 @@ export class PenforgeApi {
     /**
      * Returns the property snapshot of a node.
      *
-     * @param params - `nodeId` and optional `depth` (levels serialized in full, default 1)
+     * @param params - `nodeId`, optional `depth` (levels serialized in full, default 1) and optional
+     *   `childOffset`/`childLimit` (one page of direct children; all of them when `childLimit` is unset)
      */
-    public static getNodeProperties(params: { nodeId: string; depth?: number }): JsonObject {
+    public static getNodeProperties(params: {
+        nodeId: string;
+        depth?: number;
+        childOffset?: number;
+        childLimit?: number;
+    }): JsonObject {
         const located = PenforgeApi.locator().require(params.nodeId);
+        const page =
+            params.childLimit === undefined ? undefined : { offset: params.childOffset, limit: params.childLimit };
         return {
             pageId: located.page.id,
-            ...NodeSerializer.serializeNode(located.shape, params.depth ?? 1),
+            ...NodeSerializer.serializeNode(located.shape, params.depth ?? 1, page),
         };
     }
 

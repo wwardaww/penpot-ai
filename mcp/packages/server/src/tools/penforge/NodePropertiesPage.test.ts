@@ -83,3 +83,22 @@ test("a node too large on its own is truncated with a note", () => {
     assert.ok(text.startsWith('{"id":"t"'));
     assert.match(text, /\[truncated: \d+ more characters/);
 });
+
+test("a page the plugin already cut keeps the plugin's range", () => {
+    const data = board(100);
+    data.childrenPage = { offset: 200, returned: 100, total: 450, nextOffset: 300 };
+    const page = JSON.parse(NodePropertiesPage.render(data, 200, 100));
+    assert.equal(page.children.length, 100);
+    assert.equal(page.children[0].id, "c0");
+    assert.deepEqual(page.childrenPage, { offset: 200, returned: 100, total: 450, nextOffset: 300 });
+});
+
+test("a plugin page that is still too large is shrunk from the plugin's offset", () => {
+    const data = board(100, 2000);
+    data.childrenPage = { offset: 300, returned: 100, total: 400, nextOffset: null };
+    const page = JSON.parse(NodePropertiesPage.render(data, 300, 100, 3_000));
+    assert.ok(page.childrenPage.returned < 100);
+    assert.equal(page.childrenPage.offset, 300);
+    assert.equal(page.childrenPage.summarized, true);
+    assert.equal(page.childrenPage.nextOffset, 300 + page.childrenPage.returned);
+});

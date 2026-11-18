@@ -77,7 +77,12 @@ export class GetNodePropertiesTool extends PenforgePluginTool<GetNodePropertiesA
     protected async executeCore(args: GetNodePropertiesArgs): Promise<ToolResponse> {
         const data = await this.callPlugin(
             "getNodeProperties",
-            { nodeId: args.nodeId, depth: args.depth ?? 1 },
+            {
+                nodeId: args.nodeId,
+                depth: args.depth ?? 1,
+                childOffset: args.childOffset ?? 0,
+                childLimit: args.childLimit ?? NodePropertiesPage.DEFAULT_LIMIT,
+            },
             args.sessionId
         );
         return new TextResponse(NodePropertiesPage.render(data, args.childOffset ?? 0, args.childLimit));
