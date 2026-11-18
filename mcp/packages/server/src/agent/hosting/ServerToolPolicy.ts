@@ -7,14 +7,16 @@ import type { PathGuard } from "../workspace/pathGuard";
  * The daemon container holds every team's project folders and the install's master key, so
  * Claude may not run commands there (`Bash`, `PowerShell`), may not fetch URLs from there
  * (`WebFetch` could reach internal services such as the Penpot backend or the database), and
- * may not touch files outside its project folder or inside a `.git` folder (a written git config
- * can make the daemon's own `git` calls run commands); these are refused without asking the user.
+ * may not touch files outside its project folder, inside a `.git` folder (a written git config
+ * can make the daemon's own `git` calls run commands) or inside a `.claude` folder (project
+ * settings can declare hooks, which Claude Code would run in the daemon container); these are
+ * refused without asking the user.
  * Everything else goes to the local policy.
  */
 export class ServerToolPolicy implements ToolPermissionHandler {
     private static readonly REFUSED_TOOLS = new Set(["Bash", "PowerShell", "BashOutput", "KillShell", "WebFetch"]);
     private static readonly PATH_FIELDS = ["file_path", "path", "notebook_path"];
-    private static readonly GIT_DIR = /(^|[\\/])\.git([\\/]|$)/i;
+    private static readonly CONTROL_DIR = /(^|[\\/])\.(git|claude)([\\/]|$)/i;
     private static readonly COMMAND_REFUSED =
         "Commands and web requests do not run on this server. Edit the project files instead; builds and " +
         "previews run in the sandbox.";
@@ -37,7 +39,7 @@ export class ServerToolPolicy implements ToolPermissionHandler {
             (value) =>
                 typeof value === "string" &&
                 value.length > 0 &&
-                (!this.guard.contains(value) || ServerToolPolicy.GIT_DIR.test(value))
+                (!this.guard.contains(value) || ServerToolPolicy.CONTROL_DIR.test(value))
         );
         if (outside) {
             return Promise.resolve({ allow: false, message: ServerToolPolicy.OUTSIDE_REFUSED });

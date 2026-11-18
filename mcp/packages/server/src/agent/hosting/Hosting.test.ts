@@ -398,8 +398,12 @@ describe("ServerToolPolicy", () => {
         assert.deepEqual(asked, []);
     });
 
-    test("refuses files outside the project and inside .git", async () => {
+    test("refuses files outside the project and inside .git or .claude", async () => {
         const { policy: p, asked } = policy();
+        assert.equal(
+            (await p.decide(request("Write", { file_path: join(dir, ".claude", "settings.json") }))).allow,
+            false
+        );
         assert.equal((await p.decide(request("Read", { file_path: join(dir, "..", "other", "x") }))).allow, false);
         assert.equal(
             (await p.decide(request("Write", { file_path: join(dir, "app-src", ".git", "config") }))).allow,
