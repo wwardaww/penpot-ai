@@ -29,12 +29,39 @@ export class PairingToken {
     }
 
     /**
+     * Prints the pairing URL on the daemon's terminal only.
+     *
+     * The URL holds the token, so it never goes through the logger, whose file and Loki
+     * transports would keep it; the log gets the URL with the token masked.
+     *
+     * @param publicUri - public URI of the Penpot frontend
+     * @param write - console writer (standard error by default)
+     */
+    public announce(publicUri: string, write: (line: string) => void = PairingToken.writeStderr): void {
+        write(`Pair Penforge with your browser: ${this.pairUrl(publicUri)}
+`);
+    }
+
+    /**
+     * Gets the pairing URL with the token masked, for logs.
+     *
+     * @param publicUri - public URI of the Penpot frontend
+     */
+    public maskedPairUrl(publicUri: string): string {
+        return `${publicUri}/#/penforge/pair?token=<printed on the daemon console>`;
+    }
+
+    /**
      * Gets the URL that pairs a browser with the daemon.
      *
      * @param publicUri - public URI of the Penpot frontend
      */
     public pairUrl(publicUri: string): string {
         return `${publicUri}/#/penforge/pair?token=${encodeURIComponent(this.value)}`;
+    }
+
+    private static writeStderr(line: string): void {
+        process.stderr.write(line);
     }
 
     private static hash(value: string): Buffer {
@@ -156,7 +183,8 @@ export class AgentServer {
             res.json({ ok: true, ...this.health() });
         });
         app.get("/pair", (req, res) => {
-            this.logger.info("Pair Penforge with your browser: %s", this.pairUrl);
+            this.token.announce(this.config.publicUri);
+            this.logger.info("Pairing URL printed on the console: %s", this.token.maskedPairUrl(this.config.publicUri));
             if (req.headers.origin === undefined) {
                 res.json({ printed: true, pairUrl: this.pairUrl });
             } else {

@@ -62,20 +62,27 @@ async function main(): Promise<void> {
             await daemon.start();
         }
 
-        // keep the process alive
-        process.on("SIGINT", async () => {
-            logger.info("Received SIGINT, shutting down gracefully...");
+        // keep the process alive; stop child processes (Claude, dev servers) on every way out.
+        // On Windows, closing the console window sends SIGHUP and Ctrl+Break sends SIGBREAK; by
+        // default both end node without its exit handlers, leaving the dev servers running.
+        let stopping = false;
+        const shutdown = async (signal: NodeJS.Signals) => {
+            if (stopping) {
+                return;
+            }
+            stopping = true;
+            logger.info("Received %s, shutting down gracefully...", signal);
             await daemon?.stop();
             await server.stop();
             process.exit(0);
-        });
-
-        process.on("SIGTERM", async () => {
-            logger.info("Received SIGTERM, shutting down gracefully...");
-            await daemon?.stop();
-            await server.stop();
-            process.exit(0);
-        });
+        };
+        const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
+        if (process.platform === "win32") {
+            signals.push("SIGBREAK");
+        }
+        for (const signal of signals) {
+            process.on(signal, () => void shutdown(signal));
+        }
     } catch (error) {
         logger.error(error, "Failed to start MCP server");
         process.exit(1);
