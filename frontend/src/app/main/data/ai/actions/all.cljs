@@ -19,6 +19,7 @@
    [app.main.data.ai.actions.design-md]
    [app.main.data.ai.actions.detached]
    [app.main.data.ai.actions.generate]
+   [app.main.data.ai.actions.token-sync]
    ;; W15: registers the audit results modal
    [app.main.ui.workspace.ai.audit.panel]
    [app.main.ui.workspace.ai.build.actions]
