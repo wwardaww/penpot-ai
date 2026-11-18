@@ -5,9 +5,10 @@ import type { WorkflowContext } from "@penpot/mcp-common";
  *
  * - `penpot-unreachable`: the tokens could not be read (no plugin connected, script failed)
  * - `broken-block`: the theme file has a begin marker without an end marker (or the reverse)
- * - `unsafe-theme-path`: `stack.json` `themeFile` points outside `app-src/`
+ * - `unsafe-theme-path`: `stack.json` `themeFile` points outside `app-src/`, or the theme file is a link
+ * - `theme-check-failed`: the app did not type-check with the new tokens; the theme was put back
  */
-export type TokenSyncErrorCode = "penpot-unreachable" | "broken-block" | "unsafe-theme-path";
+export type TokenSyncErrorCode = "penpot-unreachable" | "broken-block" | "unsafe-theme-path" | "theme-check-failed";
 
 /**
  * Known failure of a token sync, reported to the client as a `failed` event `{code, message}`

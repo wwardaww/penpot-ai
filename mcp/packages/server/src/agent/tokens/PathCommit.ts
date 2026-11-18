@@ -7,10 +7,12 @@ const execFileAsync = promisify(execFile);
 
 /**
  * Commit of given files of one project repository (`design/` or `app-src/`), leaving every other
- * change of the working tree alone (`git commit --only` semantics through a pathspec).
+ * change of the working tree alone (`git commit --only` semantics through a pathspec). Paths are
+ * literal (`--literal-pathspecs`), never globs.
  *
- * A sync commits only what it wrote, so edits the user or another workflow has pending in the
- * same repository are never swept into a `penforge(token-sync)` commit.
+ * A sync commits only what it wrote: callers first ask {@link dirty} and leave out files that
+ * already had uncommitted changes, so a user's pending edits never end up in a
+ * `penforge(token-sync)` commit.
  */
 export class PathCommit {
     private static readonly MAX_SUBJECT = 72;
@@ -23,6 +25,32 @@ export class PathCommit {
     /** Tells whether the folder is a git repository. */
     public get isRepository(): boolean {
         return existsSync(join(this.dir, ".git"));
+    }
+
+    /**
+     * Lists the files with uncommitted changes (staged or not, or untracked).
+     *
+     * @param files - paths relative to the repository, forward slashes
+     */
+    public async dirty(files: string[]): Promise<Set<string>> {
+        if (files.length === 0 || !this.isRepository) {
+            return new Set();
+        }
+        const out = await this.git(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ...files]);
+        const dirty = new Set<string>();
+        const entries = out.split("\0");
+        for (let index = 0; index < entries.length; index++) {
+            const entry = entries[index];
+            if (entry.length < 4) {
+                continue;
+            }
+            dirty.add(entry.slice(3));
+            if (entry[0] === "R" || entry[0] === "C") {
+                // a rename or copy is followed by its source path
+                index++;
+            }
+        }
+        return dirty;
     }
 
     /**
@@ -56,7 +84,7 @@ export class PathCommit {
     }
 
     private async git(args: string[]): Promise<string> {
-        const { stdout } = await execFileAsync("git", ["-c", "core.quotepath=off", ...args], {
+        const { stdout } = await execFileAsync("git", ["--literal-pathspecs", "-c", "core.quotepath=off", ...args], {
             cwd: this.dir,
             windowsHide: true,
             maxBuffer: 16 * 1024 * 1024,

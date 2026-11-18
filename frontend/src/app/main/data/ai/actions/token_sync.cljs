@@ -19,10 +19,14 @@
     file's tokens (an edit, a theme or set switch, a chat turn that
     changes tokens) starts a quiet sync a moment later, so the app
     follows the tokens without a click. Projects without an app are
-    skipped by the daemon.
+    skipped by the daemon, and so is a switch to other token sets (the
+    app keeps the sets of the last manual sync). A quiet sync that
+    needs attention (a hand-edited block, a theme that broke the type
+    check) leaves a notice in the AI tab.
 
   After a sync that changed the theme, a live preview is reloaded."
   (:require
+   [app.common.uuid :as uuid]
    [app.main.data.ai.actions :as actions]
    [app.main.data.ai.actions.generate :as generate]
    [app.main.data.ai.chat :as chat]
@@ -34,6 +38,7 @@
    [app.main.ui.ds.foundations.assets.icon :as i]
    [app.util.i18n :refer [tr]]
    [beicon.v2.core :as rx]
+   [cuerdas.core :as str]
    [potok.v2.core :as ptk]))
 
 (def workflow-name "token-sync")
@@ -74,23 +79,39 @@
     "reverted" (tr "penforge.token-sync.summary.reverted")
     nil))
 
+(defn- extra-texts
+  "Notes on tokens kept or left out and on files left uncommitted."
+  [{:keys [deprecated refused uncommitted]}]
+  (cond-> []
+    (seq deprecated)
+    (conj (tr "penforge.token-sync.summary.deprecated" (count deprecated)))
+
+    (seq refused)
+    (conj (tr "penforge.token-sync.summary.refused" (count refused)))
+
+    (seq uncommitted)
+    (conj (tr "penforge.token-sync.summary.uncommitted" (str/join ", " uncommitted)))))
+
 (defn summary-text
   "Translated summary of a run from its `result` payload."
   [{:keys [outcome token-count theme-file] :as result}]
   (let [total (or token-count 0)
         main  (case outcome
-                "updated"   (tr "penforge.token-sync.summary.updated" theme-file total)
-                "unchanged" (tr "penforge.token-sync.summary.unchanged" total)
-                "no-tokens" (tr "penforge.token-sync.summary.no-tokens")
-                "no-app"    (if (pos? total)
-                              (tr "penforge.token-sync.summary.no-app" total)
-                              (tr "penforge.token-sync.summary.no-app-empty"))
-                "busy"      (tr "penforge.token-sync.summary.busy")
+                "updated"           (tr "penforge.token-sync.summary.updated" theme-file total)
+                "unchanged"         (tr "penforge.token-sync.summary.unchanged" total)
+                "no-tokens"         (tr "penforge.token-sync.summary.no-tokens")
+                "no-app"            (if (pos? total)
+                                      (tr "penforge.token-sync.summary.no-app" total)
+                                      (tr "penforge.token-sync.summary.no-app-empty"))
+                "no-theme"          (tr "penforge.token-sync.summary.no-theme")
+                "selection-changed" (tr "penforge.token-sync.summary.selection-changed")
+                "block-edited"      (tr "penforge.token-sync.summary.block-edited" theme-file)
+                "busy"              (tr "penforge.token-sync.summary.busy")
                 nil)]
     (when (some? main)
-      (if-let [extra (link-text result)]
-        (str main " " extra)
-        main))))
+      (str/join " " (concat [main]
+                            (some-> (link-text result) vector)
+                            (extra-texts result))))))
 
 (defn failed-text
   "Translated text of a `failed` event code, or nil for an unknown one."
@@ -99,6 +120,22 @@
     "penpot-unreachable" (tr "penforge.token-sync.failed.penpot-unreachable")
     "broken-block"       (tr "penforge.token-sync.failed.broken-block")
     "unsafe-theme-path"  (tr "penforge.token-sync.failed.unsafe-theme-path")
+    "theme-check-failed" (tr "penforge.token-sync.failed.theme-check-failed")
+    nil))
+
+(defn watch-notice-text
+  "Text the AI tab shows after a quiet sync that needs the user's
+  attention (a hand-edited block left alone, a theme that broke the
+  type check), or nil."
+  [{:keys [result failed]}]
+  (cond
+    (= "theme-check-failed" failed)
+    (failed-text failed)
+
+    (= "block-edited" (:outcome result))
+    (summary-text result)
+
+    :else
     nil))
 
 ;; --- Run
@@ -112,6 +149,44 @@
       (if (preview/live? (get-in state [:penforge :preview]))
         (rx/of (preview/reload))
         (rx/empty)))))
+
+(defn notice
+  "Show a notice in the AI tab, once per distinct text."
+  [text]
+  (ptk/reify ::notice
+    ptk/UpdateEvent
+    (update [_ state]
+      (if (and (some? (get-in state [:penforge :chat]))
+               (not= text (get-in state [:penforge :token-sync :last-notice])))
+        (-> state
+            (assoc-in [:penforge :token-sync :last-notice] text)
+            (update-in [:penforge :chat :entries] (fnil conj [])
+                       {:kind :error :id (str (uuid/next)) :message text}))
+        state))))
+
+(defn watch-events
+  "Events for one daemon message of a quiet (watcher) sync: the preview
+  reload when the theme changed, and a notice at the end when the sync
+  needs the user's attention."
+  [state* {:keys [type kind payload]}]
+  (cond
+    (and (= "workflow.event" type) (= "result" kind))
+    (do (vswap! state* assoc :result payload)
+        (if (:theme-changed payload)
+          [(reload-preview)]
+          []))
+
+    (and (= "workflow.event" type) (= "failed" kind))
+    (do (vswap! state* assoc :failed (:code payload))
+        [])
+
+    (= "workflow.done" type)
+    (if-let [text (watch-notice-text @state*)]
+      [(notice text)]
+      [])
+
+    :else
+    []))
 
 (defn run-events
   "Events for one daemon message of a sync: translated progress, the
@@ -149,14 +224,15 @@
     []))
 
 (defn- follow-run
-  "Start the workflow and follow its messages with `run-events`."
-  [stream params opts]
+  "Start the workflow and follow its messages with `handle`
+  (`run-events` or `watch-events`)."
+  [stream params opts handle]
   (let [rid    (proto/next-rid)
         state* (volatile! {})]
     (rx/merge
      ;; subscribed before the run starts, so no reply is missed
      (->> (chat/workflow-messages stream rid)
-          (rx/mapcat #(rx/from (run-events state* %))))
+          (rx/mapcat #(rx/from (handle state* %))))
      (rx/of (chat/run-workflow workflow-name params (assoc opts :rid rid))))))
 
 (defn sync-tokens
@@ -169,7 +245,7 @@
       (rx/concat
        (rx/of (chat/open-chat))
        (if (connected? state)
-         (follow-run stream {:link "auto"} {})
+         (follow-run stream {:link "auto"} {} run-events)
          ;; `run-workflow` shows the "not connected" notice
          (rx/of (chat/run-workflow workflow-name {:link "auto"})))))))
 
@@ -180,7 +256,7 @@
     ptk/WatchEvent
     (watch [_ state stream]
       (if (and (connected? state) (can-edit? state))
-        (follow-run stream {:trigger "watch"} {:silent true})
+        (follow-run stream {:trigger "watch"} {:silent true} watch-events)
         (rx/empty)))))
 
 ;; --- Watcher

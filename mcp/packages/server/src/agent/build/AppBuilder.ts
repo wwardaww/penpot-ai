@@ -146,12 +146,16 @@ export class AppBuilder {
         this.step("prepare", "done");
 
         let stack = plan.stack;
-        await this.runPreBuild(stack);
-        this.themeNote = await TokenThemeNote.forBuild(this.ctx.workspace);
+        // pre-build workflows work on the app: on a full build they run once it is scaffolded
+        if (!full) {
+            await this.runPreBuild(stack);
+        }
         const start = await this.git.snapshot();
         if (full) {
             stack = await this.scaffold(plan, screens, overrides.data);
+            await this.runPreBuild(stack);
         }
+        this.themeNote = await TokenThemeNote.forBuild(this.ctx.workspace);
 
         const targets = screens.filter((screen) =>
             full ? screen.status !== "removed" : screen.status === "new" || screen.status === "changed"

@@ -1,4 +1,5 @@
 import type { DesignToken, DesignTokens, TokenCategory } from "./DesignTokens";
+import type { ManifestToken } from "./TokenManifest";
 
 /** Token placed in the generated theme: `tokens.<category>.<key>` or `--<prefix>-<cssName>`. */
 export interface ThemeEntry {
@@ -8,6 +9,8 @@ export interface ThemeEntry {
     key: string;
     /** name part of the CSS variable, e.g. `primary-500` */
     cssName: string;
+    /** the token left Penpot but the code still uses it, so it stays with its last value */
+    deprecated: boolean;
 }
 
 /**
@@ -15,8 +18,10 @@ export interface ThemeEntry {
  *
  * Names come from the Penpot token names. A leading segment that repeats the category is dropped
  * (`color.primary` → `tokens.color.primary`, `--color-primary`), the rest becomes a camelCase key
- * and a kebab-case CSS name, accents are folded to ASCII, and clashes get a number. The order is
- * the token name order, so the output stays stable between runs.
+ * and a kebab-case CSS name, accents are folded to ASCII, and clashes get a number. Names given by
+ * an earlier sync (the theme manifest) are kept, and a name an earlier token had is never given to
+ * another token, so references in the code never move to a different token. The order is the
+ * token name order, so the output stays stable between runs.
  */
 export class ThemeModel {
     /** Category order of the generated code. */
@@ -68,29 +73,69 @@ export class ThemeModel {
      *
      * @param tokens - the resolved tokens
      */
-    public static build(tokens: DesignTokens): ThemeModel {
+    public static build(
+        tokens: DesignTokens,
+        previous: ReadonlyMap<string, ManifestToken> = new Map(),
+        kept: ThemeEntry[] = []
+    ): ThemeModel {
         const groups = new Map<TokenCategory, ThemeEntry[]>();
         for (const category of ThemeModel.ORDER) {
             const members = tokens.tokens.filter((token) => token.category === category);
-            if (members.length === 0) {
+            const keptHere = kept.filter((entry) => entry.category === category);
+            if (members.length === 0 && keptHere.length === 0) {
                 continue;
             }
-            const keys = new Set<string>();
-            const cssNames = new Set<string>();
-            groups.set(
-                category,
-                members.map((token) => {
-                    const words = ThemeModel.words(token.name, category);
-                    return {
-                        token,
-                        category,
-                        key: ThemeModel.unique(ThemeModel.camel(words), keys),
-                        cssName: ThemeModel.unique(words.join("-"), cssNames, "-"),
-                    };
-                })
-            );
+            // names an earlier sync gave in this category stay reserved for their token
+            const earlier = [...previous.entries()].filter(([, entry]) => entry.category === category);
+            const keys = new Set(earlier.map(([, entry]) => entry.key));
+            const cssNames = new Set(earlier.map(([, entry]) => entry.cssName));
+            const entries: ThemeEntry[] = members.map((token) => {
+                const before = previous.get(token.name);
+                if (before !== undefined && before.category === category) {
+                    return { token, category, key: before.key, cssName: before.cssName, deprecated: false };
+                }
+                const words = ThemeModel.words(token.name, category);
+                return {
+                    token,
+                    category,
+                    key: ThemeModel.unique(ThemeModel.camel(words), keys),
+                    cssName: ThemeModel.unique(words.join("-"), cssNames, "-"),
+                    deprecated: false,
+                };
+            });
+            entries.push(...keptHere);
+            entries.sort((a, b) => a.token.name.localeCompare(b.token.name));
+            groups.set(category, entries);
         }
         return new ThemeModel(groups);
+    }
+
+    /**
+     * Entries of tokens an earlier sync wrote that are not in the file any more (removed, renamed,
+     * unresolved or of another type now), with their last value, marked deprecated.
+     *
+     * @param tokens - the current tokens
+     * @param previous - the manifest's tokens
+     */
+    public static removed(tokens: DesignTokens, previous: ReadonlyMap<string, ManifestToken>): ThemeEntry[] {
+        const current = new Map(tokens.tokens.map((token) => [token.name, token.category]));
+        return [...previous.entries()]
+            .filter(([name, entry]) => current.get(name) !== entry.category)
+            .map(([name, entry]) => ({
+                token: {
+                    name,
+                    type: entry.type,
+                    category: entry.category,
+                    value: entry.value,
+                    raw: undefined,
+                    description: "",
+                    set: "",
+                },
+                category: entry.category,
+                key: entry.key,
+                cssName: entry.cssName,
+                deprecated: true,
+            }));
     }
 
     /** All entries, in output order. */

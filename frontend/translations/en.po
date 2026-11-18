@@ -12082,4 +12082,32 @@ msgstr "The token part of the app's theme file is damaged: one of its penforge:t
 
 #: src/app/main/data/ai/actions/token_sync.cljs
 msgid "penforge.token-sync.failed.unsafe-theme-path"
-msgstr "The theme file set for this project is outside the app folder."
+msgstr "The theme file set for this project is outside the app folder or is a link."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.failed.theme-check-failed"
+msgstr "The app stopped compiling with the new design tokens, so its theme was left as it was."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.no-theme"
+msgstr "The app has no theme file to put the tokens in yet."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.selection-changed"
+msgstr "Other token sets are active than the ones the app uses, so the app theme was left as it is. Sync design tokens to code to switch."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.block-edited"
+msgstr "The token part of %s was edited by hand, so it was left as it is. Sync design tokens to code to replace it."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.deprecated"
+msgstr "%s token(s) no longer in this file stay because the code still uses them."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.refused"
+msgstr "%s token(s) were left out: their name or value cannot go into code."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.uncommitted"
+msgstr "Not saved to the app history because they had other unsaved changes: %s."

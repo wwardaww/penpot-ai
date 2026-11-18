@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
@@ -9,6 +9,7 @@ import type {
     WorkflowClaudeRequest,
     WorkflowClaudeResult,
     WorkflowContext,
+    WorkflowQuestion,
     WorkflowToolResult,
 } from "@penpot/mcp-common";
 import { BuildLock } from "../build/BuildLock";
@@ -16,10 +17,12 @@ import type { CommandExecutor, CommandOptions, CommandOutcome } from "../build/C
 import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import { DesignTokens, type PenpotTokenSnapshot } from "./DesignTokens";
 import { PenpotTokenReader } from "./PenpotTokenReader";
+import { SourceFiles } from "./SourceFiles";
 import { ThemeBlock } from "./ThemeBlock";
 import { ThemeGenerator } from "./ThemeGenerator";
 import { ThemeModel } from "./ThemeModel";
 import { ThemeLocator } from "./ThemeTarget";
+import { TokenManifest } from "./TokenManifest";
 import { TokenSync, type TokenSyncParams, type TokenSyncResult } from "./TokenSync";
 import { TokenSyncError } from "./TokenSyncError";
 import { TokenThemeNote } from "./TokenThemeNote";
@@ -60,6 +63,12 @@ class FakePenpot {
         return found;
     }
 
+    public remove(name: string): void {
+        for (const set of this.sets) {
+            set.tokens = set.tokens.filter((t) => t.name !== name);
+        }
+    }
+
     public async call(tool: string, args: Record<string, unknown> = {}): Promise<WorkflowToolResult> {
         assert.equal(tool, "execute_code");
         this.calls++;
@@ -98,7 +107,7 @@ class FakeExecutor implements CommandExecutor {
         this.calls.push(argv.join(" "));
         if (this.failures > 0) {
             this.failures--;
-            return { code: 2, output: "src/theme.ts(3,1): error TS2304", timedOut: false };
+            return { code: 2, output: "src/theme.ts(3,1): error TS2451: Cannot redeclare", timedOut: false };
         }
         return { code: 0, output: "ok", timedOut: false };
     }
@@ -110,6 +119,8 @@ let penpot: FakePenpot;
 let claude: FakeClaude;
 let executor: FakeExecutor;
 let events: { kind: string; payload: any }[];
+let answers: string[];
+let questions: WorkflowQuestion[];
 
 function context(persona: Persona = "developer"): WorkflowContext {
     return {
@@ -130,8 +141,13 @@ function context(persona: Persona = "developer"): WorkflowContext {
         emit: (kind, payload) => {
             events.push({ kind, payload });
         },
-        ask: async () => {
-            throw new Error("no questions expected");
+        ask: async (question) => {
+            questions.push(question);
+            const answer = answers.shift();
+            if (answer === undefined) {
+                throw new Error("no questions expected");
+            }
+            return answer;
         },
     };
 }
@@ -153,7 +169,12 @@ function read(file: string): string {
 }
 
 function git(dir: string, ...args: string[]): string {
-    return execFileSync("git", args, { cwd: dir, encoding: "utf8" });
+    return execFileSync("git", ["-c", "core.autocrlf=false", ...args], { cwd: dir, encoding: "utf8" });
+}
+
+function commitAll(message = "build"): void {
+    git(workspace.appSrcDir, "add", "-A");
+    git(workspace.appSrcDir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", message);
 }
 
 const EXPO_THEME = `import type { TextStyle } from 'react-native';
@@ -165,17 +186,7 @@ export const colors = {
 } as const;
 `;
 
-/** Expo app like the one W08 builds, with its own `src/theme.ts`, committed. */
-async function expoApp(): Promise<void> {
-    write("package.json", JSON.stringify({ dependencies: { expo: "~54.0.0", "react-native": "0.81.0" } }));
-    write("tsconfig.json", "{}\n");
-    write("src/theme.ts", EXPO_THEME);
-    write(
-        "src/components/Card.tsx",
-        "import { colors } from '../theme';\nexport const card = { backgroundColor: '#ffffff' };\n"
-    );
-    git(workspace.appSrcDir, "add", "-A");
-    git(workspace.appSrcDir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "build");
+async function stackJson(extra: Record<string, unknown> = {}): Promise<void> {
     await workspace.writeJson("stack.json", {
         schemaVersion: 1,
         platform: "mobile",
@@ -192,7 +203,21 @@ async function expoApp(): Promise<void> {
         readyPath: "/",
         preBuild: [],
         dev: "npx expo start --web --port {port}",
+        ...extra,
     });
+}
+
+/** Expo app like the one W08 builds, with its own `src/theme.ts`, committed. */
+async function expoApp(theme: string = EXPO_THEME): Promise<void> {
+    write("package.json", JSON.stringify({ dependencies: { expo: "~54.0.0", "react-native": "0.81.0" } }));
+    write("tsconfig.json", "{}\n");
+    write("src/theme.ts", theme);
+    write(
+        "src/components/Card.tsx",
+        "import { colors } from '../theme';\nexport const card = { backgroundColor: '#ffffff' };\n"
+    );
+    commitAll();
+    await stackJson();
 }
 
 function tokens(): void {
@@ -230,6 +255,8 @@ beforeEach(async () => {
     claude = new FakeClaude();
     executor = new FakeExecutor();
     events = [];
+    answers = [];
+    questions = [];
 });
 
 afterEach(() => {
@@ -290,6 +317,14 @@ function snapshot(): PenpotTokenSnapshot {
     };
 }
 
+function single(name: string, type: string, resolved: unknown): PenpotTokenSnapshot {
+    return {
+        fileName: "",
+        activeThemes: [],
+        sets: [{ name: "s", active: true, tokens: [{ name, type, value: "", resolved, description: "" }] }],
+    };
+}
+
 test("tokens: later active sets win, inactive sets and unresolved tokens are left out", () => {
     const tokens = DesignTokens.fromSnapshot(snapshot());
     const primary = tokens.tokens.find((t) => t.name === "color.primary");
@@ -306,7 +341,7 @@ test("tokens: later active sets win, inactive sets and unresolved tokens are lef
 
 test("tokens: W3C export nests groups, keeps references in extensions, and diffs by value", () => {
     const tokens = DesignTokens.fromSnapshot(snapshot());
-    const dtcg = tokens.toDtcg() as any;
+    const dtcg = JSON.parse(JSON.stringify(tokens.toDtcg()));
     assert.equal(dtcg.color.primary.$root.$value, "#6c5ce7", "a token that is also a group sits in $root");
     assert.equal(dtcg.color.primary["500"].$extensions.penpot.value, "{color.primary}");
     assert.equal(dtcg.space["4"].$type, "dimension");
@@ -322,6 +357,67 @@ test("tokens: W3C export nests groups, keeps references in extensions, and diffs
         removed: ["color.extra"],
     });
     assert.deepEqual(tokens.changesSince(dtcg), { added: [], changed: [], removed: [] });
+});
+
+test("tokens: prototype names are refused and never reach Object.prototype", () => {
+    const tokens = DesignTokens.fromSnapshot({
+        fileName: "",
+        activeThemes: [],
+        sets: [
+            {
+                name: "s",
+                active: true,
+                tokens: [
+                    { name: "__proto__.isError", type: "color", value: "", resolved: "#ffffff", description: "" },
+                    { name: "color.constructor.x", type: "color", value: "", resolved: "#ffffff", description: "" },
+                    { name: "color.prototype", type: "color", value: "", resolved: "#ffffff", description: "" },
+                    { name: "color.$value", type: "color", value: "", resolved: "#ffffff", description: "" },
+                    { name: "bad\nname", type: "color", value: "", resolved: "#ffffff", description: "" },
+                    { name: "color.ok", type: "color", value: "", resolved: "#ffffff", description: "" },
+                ],
+            },
+        ],
+    });
+    assert.deepEqual(
+        tokens.tokens.map((t) => t.name),
+        ["color.ok"]
+    );
+    assert.deepEqual(
+        tokens.refused.map((t) => t.reason),
+        ["name", "name", "name", "name", "name"]
+    );
+    const dtcg = tokens.toDtcg();
+    assert.equal(({} as any).isError, undefined);
+    assert.equal(Object.getPrototypeOf(dtcg), null);
+    assert.equal(JSON.parse(JSON.stringify(dtcg)).color.ok.$value, "#ffffff");
+});
+
+test("tokens: values that are not plain values of their type are refused", () => {
+    const refused = (type: string, resolved: unknown) =>
+        DesignTokens.fromSnapshot(single("t", type, resolved)).refused.length === 1;
+    assert.ok(refused("color", "red;} body{background:url(x)"));
+    assert.ok(refused("color", '@plugin "./x.js"'));
+    assert.ok(refused("color", "#12345"));
+    assert.ok(refused("textCase", "uppercase;}"));
+    assert.ok(refused("textDecoration", "underline\n}"));
+    assert.ok(refused("fontFamilies", ['Inter", sans-serif; } @import "x']));
+    assert.ok(refused("spacing", "16px; color: red"));
+    assert.ok(refused("shadow", [{ color: "red;}", offsetX: 0, offsetY: 0, blur: 0, spread: 0 }]));
+    assert.ok(
+        refused("typography", [{ fontFamilies: ["Inter"], fontSizes: 16, textCase: "upper}" }]),
+        "a bad part refuses the whole typography"
+    );
+    const ok = (type: string, resolved: unknown) =>
+        DesignTokens.fromSnapshot(single("t", type, resolved)).tokens[0]?.value;
+    assert.deepEqual(ok("color", "rgba(0, 0, 0, 0.5)"), { kind: "color", value: "rgba(0, 0, 0, 0.5)" });
+    assert.deepEqual(ok("color", "Transparent"), { kind: "color", value: "transparent" });
+    assert.deepEqual(ok("textCase", "Uppercase"), { kind: "string", value: "uppercase" });
+    assert.deepEqual(ok("fontFamilies", ["Plus Jakarta Sans", "sans-serif"]), {
+        kind: "fontFamily",
+        value: ["Plus Jakarta Sans", "sans-serif"],
+    });
+    assert.equal(DesignTokens.checkValue({ kind: "color", value: "red;}" }), null);
+    assert.equal(DesignTokens.checkValue({ kind: "string", value: "x" }), null);
 });
 
 test("theme model: drops the repeated category, folds accents and numbers clashes", () => {
@@ -351,7 +447,7 @@ test("theme model: drops the repeated category, folds accents and numbers clashe
     ]);
     const spacing = model.groups.get("spacing")![0];
     assert.equal(spacing.key, "2xl");
-    assert.equal(ThemeGenerator.create("react-native").reference(spacing), "tokens.spacing['2xl']");
+    assert.equal(ThemeGenerator.create("react-native").reference(spacing), 'tokens.spacing["2xl"]');
 });
 
 function sampleModel(): ThemeModel {
@@ -365,23 +461,24 @@ function sampleModel(): ThemeModel {
     return ThemeModel.build(DesignTokens.fromSnapshot({ fileName: "Todo", activeThemes: [], sets }));
 }
 
-test("generator: React Native theme object uses numbers and px line heights", () => {
+test("generator: React Native theme object uses numbers, px line heights and JSON strings", () => {
     const text = ThemeGenerator.create("react-native", "ts").render(sampleModel()).join("\n");
     assert.match(text, /^export const tokens = \{/);
-    assert.match(text, /primary: '#6c5ce7',/);
+    assert.match(text, /primary: "#6c5ce7",/);
     assert.match(text, /md: 16,/);
     assert.match(text, /card: 24,/);
-    assert.match(text, /card: '0px 4px 14px 0px rgba\(26, 27, 46, 0\.05\)',/);
+    assert.match(text, /card: "0px 4px 14px 0px rgba\(26, 27, 46, 0\.05\)",/);
     assert.match(
         text,
-        /title: \{ fontFamily: 'Plus Jakarta Sans', fontSize: 24, fontWeight: '700', lineHeight: 29, letterSpacing: 0 \},/
+        /title: \{ fontFamily: "Plus Jakarta Sans", fontSize: 24, fontWeight: "700", lineHeight: 29, letterSpacing: 0 \},/
     );
     assert.match(text, /\} as const;$/);
+    assert.match(ThemeGenerator.create("react-native", "ts", "designTokens").render(sampleModel())[0], /designTokens/);
 });
 
 test("generator: web object, CSS variables and Tailwind v4 theme", () => {
     const model = sampleModel();
-    const web = ThemeGenerator.create("js-web", "esm", '"').render(model).join("\n");
+    const web = ThemeGenerator.create("js-web", "esm").render(model).join("\n");
     assert.match(web, /md: "16px",/);
     assert.match(web, /fontFamily: "\\"Plus Jakarta Sans\\""/);
     assert.match(web, /lineHeight: 1\.2/);
@@ -435,28 +532,80 @@ test("theme block: CSS after @import, CRLF kept, broken markers refused", () => 
 
 // theme file -----------------------------------------------------------------------------------
 
-test("locator: Expo app uses its own src/theme.ts, web apps get src/theme.css", async () => {
+test("locator: Expo app uses its own src/theme.ts; no theme file means no target", async () => {
     await expoApp();
     const expo = await ThemeLocator.locate(workspace.appSrcDir, { name: "Expo" });
-    assert.equal(expo.file, "src/theme.ts");
-    assert.equal(expo.format, "react-native");
-    assert.equal(expo.module, "ts");
-    assert.equal(expo.quote, "'");
-    assert.equal(expo.exists, true);
+    assert.ok(expo);
+    assert.deepEqual(
+        [expo.file, expo.format, expo.module, expo.objectName],
+        ["src/theme.ts", "react-native", "ts", "tokens"]
+    );
 
     rmSync(workspace.appSrcDir, { recursive: true, force: true });
     mkdirSync(workspace.appSrcDir, { recursive: true });
     write("package.json", JSON.stringify({ devDependencies: { "@tailwindcss/vite": "^4.1.0" } }));
-    const web = await ThemeLocator.locate(workspace.appSrcDir, { name: "React + Vite + Tailwind" });
-    assert.deepEqual([web.file, web.format, web.exists], ["src/theme.css", "tailwind", false]);
+    assert.equal(await ThemeLocator.locate(workspace.appSrcDir, { name: "React + Vite + Tailwind" }), null);
 
     write("src/index.css", "body {}\n");
     const plain = await ThemeLocator.locate(workspace.appSrcDir, { name: "React + Vite" });
-    assert.deepEqual([plain.file, plain.format], ["src/index.css", "tailwind"], "Tailwind 4 in package.json");
+    assert.deepEqual([plain?.file, plain?.format], ["src/index.css", "css"], "no Tailwind import: plain CSS");
 
     await assert.rejects(
         ThemeLocator.locate(workspace.appSrcDir, { themeFile: "../outside.css" }),
         (error: unknown) => error instanceof TokenSyncError && error.code === "unsafe-theme-path"
+    );
+});
+
+test("locator: Tailwind v4 tokens go to the stylesheet that imports Tailwind", async () => {
+    write(
+        "package.json",
+        JSON.stringify({ devDependencies: { tailwindcss: "^4.1.0", "@tailwindcss/vite": "^4.1.0" } })
+    );
+    write("src/theme.css", ":root { --x: 1px; }\n");
+    write("src/styles/app.css", '@import "tailwindcss";\n\nbody { margin: 0; }\n');
+    const target = await ThemeLocator.locate(workspace.appSrcDir, { name: "React + Vite + Tailwind" });
+    assert.deepEqual([target?.file, target?.format], ["src/styles/app.css", "tailwind"]);
+    const recorded = await ThemeLocator.locate(workspace.appSrcDir, {
+        themeFile: "src/theme.css",
+        themeFormat: "tailwind",
+    });
+    assert.equal(recorded?.format, "css", "a recorded tailwind format needs the Tailwind import");
+});
+
+test("locator: an existing `tokens` declaration gets another object name, kept later", () => {
+    assert.equal(ThemeLocator.objectName("export const tokens = { a: 1 };\n"), "designTokens");
+    assert.equal(ThemeLocator.objectName("import { tokens } from './other';\n"), "designTokens");
+    assert.equal(
+        ThemeLocator.objectName("import { foo as tokens } from './x';\nconst designTokens = 1;\n"),
+        "penpotTokens"
+    );
+    const withBlock = ThemeBlock.write(
+        "export const tokens = { a: 1 };\n",
+        ["export const designTokens = {} as const;"],
+        "line",
+        "js"
+    );
+    assert.equal(ThemeLocator.objectName(withBlock), "designTokens");
+    assert.equal(ThemeLocator.objectName("const colors = {};\n"), "tokens");
+    assert.equal(ThemeLocator.objectName("import { tokens as t } from './x';\n"), "tokens");
+});
+
+test("locator and sources: links are never followed", async () => {
+    const outside = join(home, "outside");
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(join(outside, "theme.ts"), "export const x = 1;\n");
+    write("package.json", JSON.stringify({ dependencies: { expo: "~54.0.0" } }));
+    symlinkSync(outside, join(workspace.appSrcDir, "src"), "junction");
+    assert.equal(await ThemeLocator.locate(workspace.appSrcDir, { name: "Expo" }), null);
+    await assert.rejects(
+        ThemeLocator.locate(workspace.appSrcDir, { themeFile: "src/theme.ts" }),
+        (error: unknown) => error instanceof TokenSyncError && error.code === "unsafe-theme-path"
+    );
+    symlinkSync(workspace.appSrcDir, join(outside, "loop"), "junction");
+    const files = await SourceFiles.list(workspace.appSrcDir, new Set([".ts", ".json"]));
+    assert.deepEqual(
+        files.map((f) => f.file),
+        ["package.json"]
     );
 });
 
@@ -471,13 +620,12 @@ test("sync: Expo app gets a token block in its theme, the export and stack.json 
     assert.equal(result.themeFile, "src/theme.ts");
     assert.equal(result.format, "react-native");
     assert.equal(result.tokenCount, 6);
-    assert.equal(result.themeCreated, false);
     assert.equal(result.link, null, "no Claude pass by default");
     assert.equal(claude.requests.length, 0);
 
     const theme = read("src/theme.ts");
     assert.ok(theme.includes("export const colors = {"), "the build's theme stays");
-    assert.ok(theme.includes("primary: '#6c5ce7',"));
+    assert.ok(theme.includes('primary: "#6c5ce7",'));
     assert.equal(theme.split("penforge:tokens:begin").length, 2, "one block, no second theme file");
 
     const exported = JSON.parse(readFileSync(join(workspace.designDir, "penpot-tokens.json"), "utf8"));
@@ -497,10 +645,9 @@ test("sync: Expo app gets a token block in its theme, the export and stack.json 
         git(workspace.appSrcDir, "show", "--name-only", "--format=%s", "HEAD").trim(),
         ["penforge(token-sync): update src/theme.ts from the design tokens", "", "src/theme.ts"].join("\n")
     );
-    assert.deepEqual(
-        events.filter((e) => e.kind === "progress" && e.payload.status === "done").map((e) => e.payload.step),
-        ["read-tokens", "export", "theme"]
-    );
+    const manifest = await TokenManifest.read(workspace);
+    assert.deepEqual(manifest?.sets, ["core"]);
+    assert.equal(manifest?.tokens.get("color.primary")?.key, "primary");
 });
 
 test("sync: a changed color token updates the block; a second run changes nothing", async () => {
@@ -510,10 +657,10 @@ test("sync: a changed color token updates the block; a second run changes nothin
     const commits = git(workspace.appSrcDir, "rev-list", "--count", "HEAD").trim();
 
     penpot.token("color.primary").resolvedValue = "#ff0000";
-    const changed = await sync();
+    const changed = await sync({ trigger: "watch" });
     assert.equal(changed?.outcome, "updated");
     assert.deepEqual(changed?.changes, { added: [], changed: ["color.primary"], removed: [] });
-    assert.ok(read("src/theme.ts").includes("primary: '#ff0000',"));
+    assert.ok(read("src/theme.ts").includes('primary: "#ff0000",'));
     assert.equal(Number(git(workspace.appSrcDir, "rev-list", "--count", "HEAD")), Number(commits) + 1);
 
     const same = await sync();
@@ -523,7 +670,138 @@ test("sync: a changed color token updates the block; a second run changes nothin
     assert.equal(same?.commits.design, null);
 });
 
-test("sync: the watcher skips projects without an app; no tokens and no app are reported", async () => {
+test("sync: an app built before W21 that declares `tokens` keeps compiling", async () => {
+    await expoApp(`${EXPO_THEME}\nexport const tokens = { gap: 8 } as const;\n`);
+    tokens();
+    const result = await sync();
+    assert.equal(result?.outcome, "updated");
+    const theme = read("src/theme.ts");
+    assert.match(theme, /export const designTokens = \{/);
+    assert.match(theme, /export const tokens = \{ gap: 8 \} as const;/);
+    penpot.token("color.primary").resolvedValue = "#ff0000";
+    await sync();
+    assert.match(read("src/theme.ts"), /export const designTokens = \{/, "the name stays");
+    assert.match(await TokenThemeNote.forBuild(workspace), /designTokens\.color\.primary/);
+});
+
+test("sync: a theme change that fails the type check is put back", async () => {
+    await expoApp();
+    tokens();
+    mkdirSync(join(workspace.appSrcDir, "node_modules"));
+    executor.failures = 1;
+    await assert.rejects(sync({ trigger: "watch" }));
+    assert.equal(events.find((e) => e.kind === "failed")?.payload.code, "theme-check-failed");
+    assert.equal(read("src/theme.ts"), EXPO_THEME);
+    assert.equal(await TokenManifest.read(workspace), null, "nothing recorded");
+
+    executor.failures = 1;
+    events = [];
+    const summary = await new TokenSync(context(), { preBuild: true }, { executor }).run();
+    assert.match(summary?.summary ?? "", /Token sync skipped/, "a build goes on");
+    assert.equal(read("src/theme.ts"), EXPO_THEME);
+});
+
+test("sync: before the scaffold nothing is written to the app or pinned", async () => {
+    await stackJson();
+    tokens();
+    const result = await sync({ preBuild: true });
+    assert.equal(result, undefined, "no events inside a build");
+    assert.equal(existsSync(join(workspace.appSrcDir, "src")), false);
+    assert.equal((await workspace.readJson<any>("stack.json", null)).themeFile, undefined);
+    const manual = await sync();
+    assert.equal(manual?.outcome, "no-app");
+
+    write("package.json", JSON.stringify({ dependencies: { react: "19" } }));
+    assert.equal((await sync())?.outcome, "no-theme", "an app without a theme file gets none");
+});
+
+test("sync: the app follows the chosen sets; switching themes in Penpot is not followed", async () => {
+    await expoApp();
+    tokens();
+    penpot.set("dark", false, [["color.primary", "color", "#000000"]]);
+    await sync();
+    penpot.sets[1].active = true;
+    const watched = await sync({ trigger: "watch" });
+    assert.equal(watched?.outcome, "selection-changed");
+    assert.deepEqual(watched?.followedSets, ["core"]);
+    assert.ok(read("src/theme.ts").includes('primary: "#6c5ce7",'));
+    events = [];
+    await new TokenSync(context(), { preBuild: true }, { executor }).run();
+    assert.ok(read("src/theme.ts").includes('primary: "#6c5ce7",'), "nor before a build");
+
+    const manual = await sync();
+    assert.equal(manual?.outcome, "updated");
+    assert.ok(read("src/theme.ts").includes('primary: "#000000",'));
+    assert.deepEqual((await TokenManifest.read(workspace))?.sets, ["core", "dark"]);
+});
+
+test("sync: tokens that left Penpot stay while the code uses them; names never move", async () => {
+    await expoApp();
+    tokens();
+    await sync();
+    write("src/components/Card.tsx", "import { tokens } from '../theme';\nexport const c = tokens.color.surface;\n");
+    commitAll("use surface");
+
+    penpot.remove("color.surface");
+    penpot.remove("color.primary");
+    penpot.sets[0].tokens.push({
+        name: "colors.primary",
+        type: "color",
+        value: "#123456",
+        resolvedValue: "#123456",
+        description: "",
+    });
+    const result = await sync();
+    assert.deepEqual(result?.deprecated, ["color.surface"]);
+    const theme = read("src/theme.ts");
+    assert.match(theme, /\/\/ deprecated: no longer in Penpot; kept while the code uses it\n {4}surface: "#ffffff",/);
+    assert.match(theme, /primary2: "#123456",/, "the old name is not given to another token");
+    assert.doesNotMatch(theme, /\bprimary: /);
+
+    write("src/components/Card.tsx", "export const c = 1;\n");
+    commitAll("drop surface");
+    const later = await sync();
+    assert.deepEqual(later?.deprecated, []);
+    assert.doesNotMatch(read("src/theme.ts"), /surface: "/);
+});
+
+test("sync: a block edited by hand is never overwritten without asking", async () => {
+    await expoApp();
+    tokens();
+    await sync();
+    write("src/theme.ts", read("src/theme.ts").replace("md: 16,", "md: 18,"));
+    commitAll("hand edit");
+    penpot.token("color.primary").resolvedValue = "#ff0000";
+
+    const watched = await sync({ trigger: "watch" });
+    assert.equal(watched?.outcome, "block-edited");
+    assert.match(read("src/theme.ts"), /md: 18,/);
+
+    answers = ["keep"];
+    assert.equal((await sync())?.outcome, "block-edited");
+    assert.equal(questions.length, 1);
+    assert.match(read("src/theme.ts"), /md: 18,/);
+
+    answers = ["replace"];
+    assert.equal((await sync())?.outcome, "updated");
+    assert.match(read("src/theme.ts"), /md: 16,/);
+    assert.match(read("src/theme.ts"), /primary: "#ff0000",/);
+});
+
+test("sync: a theme file with other unsaved edits is updated but not committed", async () => {
+    await expoApp();
+    tokens();
+    write("src/theme.ts", `${EXPO_THEME}export const extra = 1;\n`);
+    const head = git(workspace.appSrcDir, "rev-parse", "HEAD").trim();
+    const result = await sync();
+    assert.deepEqual(result?.uncommitted, ["src/theme.ts"]);
+    assert.equal(result?.commits.appSrc, null);
+    assert.equal(git(workspace.appSrcDir, "rev-parse", "HEAD").trim(), head);
+    assert.match(read("src/theme.ts"), /export const extra = 1;/);
+    assert.match(read("src/theme.ts"), /penforge:tokens:begin/);
+});
+
+test("sync: the watcher skips projects without an app; no tokens is reported", async () => {
     const watched = await sync({ trigger: "watch" });
     assert.equal(watched?.outcome, "no-app");
     assert.equal(penpot.calls, 0, "nothing is read from Penpot");
@@ -582,7 +860,7 @@ test("sync with link: Claude's code changes are committed and the block is put b
             join(appSrc, "src/theme.ts"),
             theme
                 .replace("accent: '#6c5ce7'", "accent: tokens.color.primary")
-                .replace("primary: '#6c5ce7',", "primary: '#000000',")
+                .replace('primary: "#6c5ce7",', 'primary: "#000000",')
         );
         writeFileSync(
             join(appSrc, "src/components/Card.tsx"),
@@ -596,8 +874,8 @@ test("sync with link: Claude's code changes are committed and the block is put b
     assert.match(claude.requests[0].prompt, /`tokens\.color\.primary` = #6c5ce7/);
     const theme = read("src/theme.ts");
     assert.ok(theme.includes("accent: tokens.color.primary"));
-    assert.ok(theme.includes("primary: '#6c5ce7',"), "the block edit was undone");
-    assert.deepEqual(executor.calls, ["npx tsc --noEmit"]);
+    assert.ok(theme.includes('primary: "#6c5ce7",'), "the block edit was undone");
+    assert.deepEqual(executor.calls, ["npx tsc --noEmit", "npx tsc --noEmit"], "after the theme and after Claude");
     assert.equal(
         git(workspace.appSrcDir, "log", "-1", "--format=%s").trim(),
         "penforge(token-sync): use the design tokens in the code"
@@ -610,15 +888,39 @@ test("sync with link: Claude's code changes are committed and the block is put b
     assert.equal(claude.requests.length, 0);
 });
 
+test("sync with link: broken markers put the theme file back before the block", async () => {
+    await expoApp();
+    tokens();
+    claude.edits.push((appSrc) => {
+        const theme = readFileSync(join(appSrc, "src/theme.ts"), "utf8");
+        writeFileSync(join(appSrc, "src/theme.ts"), theme.replace("// penforge:tokens:end", "export const oops = 1;"));
+    });
+    await sync({ link: "always" });
+    const theme = read("src/theme.ts");
+    assert.equal(theme.split("export const tokens").length, 2, "one declaration");
+    assert.doesNotMatch(theme, /oops/);
+    assert.ok(ThemeBlock.has(theme));
+});
+
 test("sync with link: a change that keeps failing the type check is undone", async () => {
     await expoApp();
     tokens();
     mkdirSync(join(workspace.appSrcDir, "node_modules"));
-    executor.failures = 2;
     claude.edits.push((appSrc) => {
         writeFileSync(join(appSrc, "src/components/Card.tsx"), "export const card = tokens.color.surface;\n");
     });
     claude.edits.push(() => {});
+    // theme check passes, then the two checks after Claude fail
+    executor.failures = 0;
+    const original = executor.execute.bind(executor);
+    let calls = 0;
+    executor.execute = async (argv, options) => {
+        calls++;
+        if (calls > 1) {
+            executor.failures = 1;
+        }
+        return original(argv, options);
+    };
     const result = await sync({ link: "always" });
     assert.equal(result?.link, "reverted");
     assert.equal(claude.requests.length, 2, "one fix turn");

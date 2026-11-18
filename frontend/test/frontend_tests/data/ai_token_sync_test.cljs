@@ -76,8 +76,51 @@
       (t/is (= "penforge.token-sync.summary.no-tokens"
                (ts/summary-text {:outcome "no-tokens"})))
       (t/is (nil? (ts/summary-text {:outcome "later"})))
+      (t/is (= "penforge.token-sync.summary.no-theme" (ts/summary-text {:outcome "no-theme"})))
+      (t/is (= "penforge.token-sync.summary.selection-changed"
+               (ts/summary-text {:outcome "selection-changed"})))
+      (t/is (= "penforge.token-sync.summary.block-edited src/theme.ts"
+               (ts/summary-text {:outcome "block-edited" :theme-file "src/theme.ts"})))
+      (t/is (= (str "penforge.token-sync.summary.unchanged 2 "
+                    "penforge.token-sync.summary.deprecated 1 "
+                    "penforge.token-sync.summary.refused 2 "
+                    "penforge.token-sync.summary.uncommitted src/theme.ts")
+               (ts/summary-text {:outcome "unchanged" :token-count 2 :deprecated ["a"]
+                                 :refused ["b" "c"] :uncommitted ["src/theme.ts"]})))
       (t/is (= "penforge.token-sync.failed.broken-block" (ts/failed-text "broken-block")))
+      (t/is (= "penforge.token-sync.failed.theme-check-failed" (ts/failed-text "theme-check-failed")))
       (t/is (nil? (ts/failed-text "other"))))))
+
+(t/deftest quiet-syncs-leave-a-notice-only-when-they-need-attention
+  (with-keys
+    (fn []
+      (let [state*  (volatile! {})
+            events  #(ts/watch-events state* %)]
+        (t/is (= [::ts/reload-preview]
+                 (mapv ptk/type (events {:type "workflow.event" :kind "result"
+                                         :payload {:outcome "updated" :theme-changed true}}))))
+        (t/is (= [] (events {:type "workflow.done" :ok true}))))
+      (let [state* (volatile! {})
+            events #(ts/watch-events state* %)]
+        (events {:type "workflow.event" :kind "result"
+                 :payload {:outcome "block-edited" :theme-file "src/theme.ts"}})
+        (let [[event] (events {:type "workflow.done" :ok true})
+              state   {:penforge {:chat {:entries []}}}
+              state'  (ptk/update event state)]
+          (t/is (= ::ts/notice (ptk/type event)))
+          (t/is (= "penforge.token-sync.summary.block-edited src/theme.ts"
+                   (get-in state' [:penforge :chat :entries 0 :message])))
+          (t/is (= :error (get-in state' [:penforge :chat :entries 0 :kind])))
+          (t/is (= state' (ptk/update event state')) "the same notice is shown once")
+          (t/is (= {} (ptk/update event {})) "no chat, no notice")))
+      (let [state* (volatile! {})
+            events #(ts/watch-events state* %)]
+        (events {:type "workflow.event" :kind "failed" :payload {:code "theme-check-failed"}})
+        (t/is (= [::ts/notice] (mapv ptk/type (events {:type "workflow.done" :ok false})))))
+      (let [state* (volatile! {})
+            events #(ts/watch-events state* %)]
+        (events {:type "workflow.event" :kind "result" :payload {:outcome "selection-changed"}})
+        (t/is (= [] (events {:type "workflow.done" :ok true})) "a theme switch stays quiet")))))
 
 ;; --- run
 

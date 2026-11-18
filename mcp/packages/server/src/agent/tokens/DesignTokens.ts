@@ -98,6 +98,13 @@ export interface DesignToken {
     set: string;
 }
 
+/** Token left out because its name or value cannot go into code safely. */
+export interface RefusedToken {
+    name: string;
+    /** `name`: a reserved name segment; `value`: a value that is not a plain value of its type */
+    reason: "name" | "value";
+}
+
 /** Tokens names added, changed or removed since the last export. */
 export interface TokenChanges {
     added: string[];
@@ -175,9 +182,24 @@ export class DesignTokens {
         public readonly tokens: DesignToken[],
         public readonly activeSets: string[],
         public readonly activeThemes: string[],
-        /** names of tokens whose value could not be resolved or read */
-        public readonly skipped: string[]
+        /** names of tokens whose value could not be resolved */
+        public readonly skipped: string[],
+        /** tokens refused because their name or value is not safe to write into code */
+        public readonly refused: RefusedToken[]
     ) {}
+
+    /** Name segments that would reach object prototypes in the export or the code. */
+    private static readonly RESERVED_SEGMENTS = new Set(["__proto__", "prototype", "constructor"]);
+
+    private static readonly TEXT_CASES = new Set(["none", "uppercase", "lowercase", "capitalize"]);
+    private static readonly TEXT_DECORATIONS = new Set([
+        "none",
+        "underline",
+        "line-through",
+        "strike-through",
+        "overline",
+    ]);
+    private static readonly MAX_NUMBER = 1_000_000;
 
     /**
      * Resolves the tokens of a snapshot: only active sets count, and a later active set wins for
@@ -188,16 +210,30 @@ export class DesignTokens {
     public static fromSnapshot(snapshot: PenpotTokenSnapshot): DesignTokens {
         const byName = new Map<string, DesignToken>();
         const skipped = new Set<string>();
+        const refused = new Map<string, RefusedToken>();
         const activeSets = snapshot.sets.filter((set) => set.active);
         for (const set of activeSets) {
             for (const token of set.tokens) {
-                const category = DesignTokens.CATEGORY[token.type];
+                if (!DesignTokens.safeName(token.name)) {
+                    refused.set(token.name, { name: token.name, reason: "name" });
+                    continue;
+                }
+                const category = Object.hasOwn(DesignTokens.CATEGORY, token.type)
+                    ? DesignTokens.CATEGORY[token.type]
+                    : undefined;
                 const value = category === undefined ? null : DesignTokens.parse(token.type, token.resolved);
+                if (value === "invalid") {
+                    byName.delete(token.name);
+                    skipped.delete(token.name);
+                    refused.set(token.name, { name: token.name, reason: "value" });
+                    continue;
+                }
                 if (category === undefined || value === null) {
                     skipped.add(token.name);
                     continue;
                 }
                 skipped.delete(token.name);
+                refused.delete(token.name);
                 byName.set(token.name, {
                     name: token.name,
                     type: token.type,
@@ -215,8 +251,24 @@ export class DesignTokens {
             tokens,
             activeSets.map((set) => set.name),
             snapshot.activeThemes,
-            [...skipped].filter((name) => !byName.has(name)).sort()
+            [...skipped].filter((name) => !byName.has(name)).sort(),
+            [...refused.values()].sort((a, b) => a.name.localeCompare(b.name))
         );
+    }
+
+    /** Tells whether a token name can become an export group path and a code name. */
+    private static safeName(name: string): boolean {
+        return (
+            name.length > 0 &&
+            name.length <= 200 &&
+            !/[\u0000-\u001f\u007f\u2028\u2029]/.test(name) &&
+            name.split(".").every((s) => DesignTokens.safeSegment(s))
+        );
+    }
+
+    /** Name segment that is neither empty, nor a prototype key, nor a DTCG `$` key. */
+    private static safeSegment(segment: string): boolean {
+        return segment.length > 0 && !segment.startsWith("$") && !DesignTokens.RESERVED_SEGMENTS.has(segment);
     }
 
     /** Tells whether the file has no usable token. */
@@ -230,7 +282,7 @@ export class DesignTokens {
      * (with references) sit in `$extensions.penpot`.
      */
     public toDtcg(): DtcgNode {
-        const root: DtcgNode = {
+        const root: DtcgNode = Object.assign(Object.create(null) as DtcgNode, {
             $description: `Design tokens of the Penpot file "${this.fileName}", resolved with its active sets.`,
             $extensions: {
                 penforge: {
@@ -239,9 +291,9 @@ export class DesignTokens {
                     activeThemes: this.activeThemes,
                 },
             },
-        };
+        });
         for (const token of this.tokens) {
-            const node: DtcgNode = {};
+            const node = Object.create(null) as DtcgNode;
             const type = DesignTokens.dtcgType(token);
             if (type !== null) {
                 node.$type = type;
@@ -284,14 +336,24 @@ export class DesignTokens {
     // parsing ---------------------------------------------------------------------------------
 
     /**
-     * Parses a resolved Plugin API value of a token type.
+     * Parses a resolved Plugin API value of a token type. Only plain values of the type pass
+     * (colours as hex, `rgb()`/`hsl()` or a colour keyword; finite numbers; enum keywords; font
+     * family names without quotes or punctuation), because the value is written into CSS and JS.
      *
-     * @returns the typed value, or null when it is missing or not usable
+     * @returns the typed value, `invalid` for a value that is not a plain value of its type, or
+     *   null when it is missing or the type is unknown
      */
-    public static parse(type: string, resolved: unknown): TokenValue | null {
+    public static parse(type: string, resolved: unknown): TokenValue | "invalid" | null {
         if (resolved === undefined || resolved === null) {
             return null;
         }
+        if (!Object.hasOwn(DesignTokens.CATEGORY, type)) {
+            return null;
+        }
+        return DesignTokens.parseValue(type, resolved) ?? "invalid";
+    }
+
+    private static parseValue(type: string, resolved: unknown): TokenValue | null {
         if (type === "color") {
             const color = DesignTokens.color(resolved);
             return color === null ? null : { kind: "color", value: color };
@@ -306,20 +368,23 @@ export class DesignTokens {
         }
         if (type === "fontFamilies") {
             const families = DesignTokens.families(resolved);
-            return families.length === 0 ? null : { kind: "fontFamily", value: families };
+            return families === null ? null : { kind: "fontFamily", value: families };
         }
         if (type === "fontWeights") {
             const weight = DesignTokens.weight(resolved);
             return weight === null ? null : { kind: "fontWeight", value: weight.value, italic: weight.italic };
         }
         if (type === "textCase" || type === "textDecoration") {
-            return typeof resolved === "string" && resolved.trim() ? { kind: "string", value: resolved.trim() } : null;
+            const value = DesignTokens.keyword(type, resolved);
+            return value === null ? null : { kind: "string", value };
         }
         if (type === "shadow") {
-            const layers = (Array.isArray(resolved) ? resolved : [resolved])
-                .map((layer) => DesignTokens.shadowLayer(layer))
-                .filter((layer): layer is ShadowLayer => layer !== null);
-            return layers.length === 0 ? null : { kind: "shadow", value: layers };
+            const layers = (Array.isArray(resolved) ? resolved : [resolved]).map((layer) =>
+                DesignTokens.shadowLayer(layer)
+            );
+            return layers.length === 0 || layers.some((layer) => layer === null)
+                ? null
+                : { kind: "shadow", value: layers as ShadowLayer[] };
         }
         if (type === "typography") {
             const typography = DesignTokens.typography(Array.isArray(resolved) ? resolved[0] : resolved);
@@ -328,28 +393,107 @@ export class DesignTokens {
         return null;
     }
 
+    /**
+     * Checks a typed value read back from a file (the theme manifest) with the same rules as
+     * {@link parse}, so a stored value never brings anything else into the code.
+     *
+     * @returns the value, or null when it is not a valid typed value
+     */
+    public static checkValue(raw: unknown): TokenValue | null {
+        if (typeof raw !== "object" || raw === null) {
+            return null;
+        }
+        const v = raw as Record<string, unknown>;
+        switch (v.kind) {
+            case "color": {
+                const color = DesignTokens.color(v.value);
+                return color === null ? null : { kind: "color", value: color };
+            }
+            case "dimension":
+            case "number": {
+                const value = typeof v.value === "number" ? DesignTokens.number(v.value) : null;
+                return value === null ? null : { kind: v.kind, value };
+            }
+            case "fontFamily": {
+                const families = Array.isArray(v.value) ? DesignTokens.families(v.value) : null;
+                return families === null ? null : { kind: "fontFamily", value: families };
+            }
+            case "fontWeight": {
+                const weight = typeof v.value === "number" ? DesignTokens.weight(v.value) : null;
+                return weight === null ? null : { kind: "fontWeight", value: weight.value, italic: v.italic === true };
+            }
+            case "string": {
+                const value =
+                    DesignTokens.keyword("textCase", v.value) ?? DesignTokens.keyword("textDecoration", v.value);
+                return value === null ? null : { kind: "string", value };
+            }
+            case "shadow": {
+                const layers = Array.isArray(v.value) ? v.value.map((layer) => DesignTokens.shadowLayer(layer)) : [];
+                return layers.length === 0 || layers.some((layer) => layer === null)
+                    ? null
+                    : { kind: "shadow", value: layers as ShadowLayer[] };
+            }
+            case "typography": {
+                const t = typeof v.value === "object" && v.value !== null ? (v.value as Record<string, unknown>) : null;
+                if (t === null) {
+                    return null;
+                }
+                const typography = DesignTokens.typography({
+                    fontFamilies: t.fontFamily,
+                    fontSizes: t.fontSize,
+                    fontWeights:
+                        t.fontWeight === undefined
+                            ? undefined
+                            : `${t.fontWeight}${t.fontStyle === "italic" ? " italic" : ""}`,
+                    lineHeight:
+                        t.lineHeight === undefined
+                            ? undefined
+                            : t.lineHeightPx === true
+                              ? `${t.lineHeight}px`
+                              : t.lineHeight,
+                    letterSpacing: t.letterSpacing,
+                    textCase: t.textCase,
+                    textDecoration: t.textDecoration,
+                });
+                return typography === null ? null : { kind: "typography", value: typography };
+            }
+            default:
+                return null;
+        }
+    }
+
+    /** Colour as hex, `rgb()`/`rgba()`/`hsl()`/`hsla()` with numbers only, or a colour keyword. */
     private static color(raw: unknown): string | null {
-        if (typeof raw !== "string" || raw.trim().length === 0) {
+        if (typeof raw !== "string") {
             return null;
         }
         const value = raw.trim();
-        return /^#[0-9a-f]{3,8}$/i.test(value) ? value.toLowerCase() : value;
-    }
-
-    private static number(raw: unknown): number | null {
-        if (typeof raw === "number") {
-            return Number.isFinite(raw) ? DesignTokens.round(raw) : null;
+        if (/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value)) {
+            return value.toLowerCase();
         }
-        if (typeof raw === "string") {
-            const match = /^\s*(-?\d+(?:\.\d+)?|-?\.\d+)\s*(px)?\s*$/i.exec(raw);
-            return match ? DesignTokens.round(Number(match[1])) : null;
+        if (/^(?:rgba?|hsla?)\(\s*[-+0-9.%\s,/]+\)$/i.test(value) || /^[a-z]{3,30}$/i.test(value)) {
+            return value.toLowerCase();
         }
         return null;
     }
 
-    private static families(raw: unknown): string[] {
+    private static number(raw: unknown): number | null {
+        let value: number | null = null;
+        if (typeof raw === "number") {
+            value = raw;
+        } else if (typeof raw === "string") {
+            const match = /^\s*(-?\d+(?:\.\d+)?|-?\.\d+)\s*(px)?\s*$/i.exec(raw);
+            value = match ? Number(match[1]) : null;
+        }
+        return value !== null && Number.isFinite(value) && Math.abs(value) <= DesignTokens.MAX_NUMBER
+            ? DesignTokens.round(value)
+            : null;
+    }
+
+    /** Font family names; null when one holds quotes, punctuation or control characters. */
+    private static families(raw: unknown): string[] | null {
         const list = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(",") : [];
-        return list
+        const families = list
             .map((family) =>
                 String(family)
                     .trim()
@@ -357,6 +501,19 @@ export class DesignTokens {
                     .trim()
             )
             .filter((family) => family.length > 0);
+        return families.length > 0 && families.every((family) => /^[\p{L}\p{N} ._-]{1,80}$/u.test(family))
+            ? families
+            : null;
+    }
+
+    /** Text case or decoration keyword. */
+    private static keyword(type: "textCase" | "textDecoration", raw: unknown): string | null {
+        if (typeof raw !== "string") {
+            return null;
+        }
+        const value = raw.trim().toLowerCase();
+        const allowed = type === "textCase" ? DesignTokens.TEXT_CASES : DesignTokens.TEXT_DECORATIONS;
+        return allowed.has(value) ? value : null;
     }
 
     private static weight(raw: unknown): { value: number; italic: boolean } | null {
@@ -403,8 +560,12 @@ export class DesignTokens {
         }
         const source = raw as Record<string, unknown>;
         const result: TypographyValue = {};
-        const families = DesignTokens.families(source.fontFamilies ?? source.fontFamily);
-        if (families.length > 0) {
+        const familySource = source.fontFamilies ?? source.fontFamily;
+        if (familySource !== undefined && familySource !== null && familySource !== "") {
+            const families = DesignTokens.families(familySource);
+            if (families === null) {
+                return null;
+            }
             result.fontFamily = families;
         }
         const size = DesignTokens.number(source.fontSizes ?? source.fontSize);
@@ -430,9 +591,16 @@ export class DesignTokens {
             result.letterSpacing = spacing;
         }
         for (const key of ["textCase", "textDecoration"] as const) {
-            const value = source[key];
-            if (typeof value === "string" && value.trim() && value.trim() !== "none") {
-                result[key] = value.trim();
+            const raw = source[key];
+            if (raw === undefined || raw === null || raw === "") {
+                continue;
+            }
+            const value = DesignTokens.keyword(key, raw);
+            if (value === null) {
+                return null;
+            }
+            if (value !== "none") {
+                result[key] = value;
             }
         }
         return Object.keys(result).length === 0 ? null : result;
@@ -537,24 +705,37 @@ export class DesignTokens {
 
     /** Puts a token at its group path; a name that is both a token and a group uses `$root`. */
     private static place(root: DtcgNode, path: string[], token: DtcgNode): void {
-        let group = root;
+        if (!path.every((segment) => DesignTokens.safeSegment(segment))) {
+            return;
+        }
+        // groups have no prototype, so no name segment can reach `Object.prototype`
+        const group = (): DtcgNode => Object.create(null) as DtcgNode;
+        const own = (node: DtcgNode, key: string) => (Object.hasOwn(node, key) ? node[key] : undefined);
+        let current = root;
         for (const segment of path.slice(0, -1)) {
-            let next = group[segment] as DtcgNode | undefined;
-            if (next === undefined || typeof next !== "object") {
-                next = {};
-                group[segment] = next;
-            } else if ("$value" in next) {
-                next = { $root: next };
-                group[segment] = next;
+            let next = own(current, segment) as DtcgNode | undefined;
+            if (next === undefined || typeof next !== "object" || next === null) {
+                next = group();
+                current[segment] = next;
+            } else if (Object.hasOwn(next, "$value")) {
+                const wrapper = group();
+                wrapper.$root = next;
+                current[segment] = wrapper;
+                next = wrapper;
             }
-            group = next;
+            current = next;
         }
         const last = path[path.length - 1];
-        const existing = group[last] as DtcgNode | undefined;
-        if (existing !== undefined && typeof existing === "object" && !("$value" in existing)) {
+        const existing = own(current, last) as DtcgNode | undefined;
+        if (
+            existing !== undefined &&
+            typeof existing === "object" &&
+            existing !== null &&
+            !Object.hasOwn(existing, "$value")
+        ) {
             existing.$root = token;
         } else {
-            group[last] = token;
+            current[last] = token;
         }
     }
 

@@ -26,18 +26,25 @@ export abstract class ThemeGenerator {
     /** comment syntax of the marker lines */
     public abstract readonly comment: CommentStyle;
 
+    /** Note above an entry kept because the code still uses a token that left Penpot. */
+    protected static readonly DEPRECATED = "deprecated: no longer in Penpot; kept while the code uses it";
+
     /**
      * Gets the generator of a format.
      *
      * @param format - the theme format
      * @param module - module syntax (JS formats only)
-     * @param quote - string quote of the file (JS formats only)
+     * @param objectName - name of the JS theme object (JS formats only)
      */
-    public static create(format: ThemeFormat, module: ModuleKind = "ts", quote: "'" | '"' = "'"): ThemeGenerator {
+    public static create(
+        format: ThemeFormat,
+        module: ModuleKind = "ts",
+        objectName: string = "tokens"
+    ): ThemeGenerator {
         switch (format) {
             case "react-native":
             case "js-web":
-                return new JsThemeGenerator(format, module, quote);
+                return new JsThemeGenerator(format, module, objectName);
             case "css":
                 return new CssThemeGenerator();
             case "tailwind":
@@ -87,25 +94,35 @@ export abstract class ThemeGenerator {
 }
 
 /**
- * JS/TS theme object `tokens` (`export const tokens = {…} as const;`), for React Native
- * (numbers, one font family name, string font weights, px line heights) or the web (CSS strings).
+ * JS/TS theme object (`export const tokens = {…} as const;`, or another name when the file
+ * already declares `tokens`), for React Native (numbers, one font family name, string font
+ * weights, px line heights) or the web (CSS strings). Every string is written with
+ * `JSON.stringify`, so no value can end the string or the object.
  */
 class JsThemeGenerator extends ThemeGenerator {
     public readonly comment: CommentStyle = "line";
 
+    private static readonly IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+
     constructor(
         private readonly format: "react-native" | "js-web",
         private readonly module: ModuleKind,
-        private readonly quote: "'" | '"'
+        private readonly objectName: string
     ) {
         super();
+        if (!JsThemeGenerator.IDENTIFIER.test(objectName)) {
+            throw new Error(`Invalid theme object name ${JSON.stringify(objectName)}`);
+        }
     }
 
     public render(model: ThemeModel): string[] {
-        const lines = [`${this.module === "cjs" ? "const" : "export const"} tokens = {`];
+        const lines = [`${this.module === "cjs" ? "const" : "export const"} ${this.objectName} = {`];
         for (const [category, entries] of model.groups) {
             lines.push(`  ${category}: {`);
             for (const entry of entries) {
+                if (entry.deprecated) {
+                    lines.push(`    // ${ThemeGenerator.DEPRECATED}`);
+                }
                 lines.push(`    ${this.key(entry.key)}: ${this.value(entry.token.value)},`);
             }
             lines.push("  },");
@@ -116,24 +133,26 @@ class JsThemeGenerator extends ThemeGenerator {
 
     public reference(entry: ThemeEntry): string {
         return JsThemeGenerator.IDENTIFIER.test(entry.key)
-            ? `tokens.${entry.category}.${entry.key}`
-            : `tokens.${entry.category}[${this.string(entry.key)}]`;
+            ? `${this.objectName}.${entry.category}.${entry.key}`
+            : `${this.objectName}.${entry.category}[${this.string(entry.key)}]`;
     }
 
     public usagePatterns(entry: ThemeEntry): RegExp[] {
+        const name = ThemeGenerator.escape(this.objectName);
         const key = ThemeGenerator.escape(entry.key);
-        return [new RegExp(`tokens\\.${entry.category}(?:\\.${key}(?![\\w$])|\\[\\s*["'\`]?${key}["'\`]?\\s*\\])`)];
+        return [
+            new RegExp(
+                `(?<![\\w$])${name}\\.${entry.category}(?:\\.${key}(?![\\w$])|\\[\\s*["'\`]?${key}["'\`]?\\s*\\])`
+            ),
+        ];
     }
-
-    private static readonly IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 
     private key(key: string): string {
         return JsThemeGenerator.IDENTIFIER.test(key) ? key : this.string(key);
     }
 
     private string(text: string): string {
-        const escaped = text.replace(/\\/g, "\\\\").replace(new RegExp(this.quote, "g"), `\\${this.quote}`);
-        return `${this.quote}${escaped}${this.quote}`;
+        return JSON.stringify(text);
     }
 
     private value(value: TokenValue): string {
@@ -224,7 +243,17 @@ class CssThemeGenerator extends ThemeGenerator {
     };
 
     public render(model: ThemeModel): string[] {
-        return [":root {", ...model.entries.flatMap((entry) => this.declarations(entry)).map((l) => `  ${l}`), "}"];
+        return [":root {", ...this.lines(model.entries), "}"];
+    }
+
+    /** Indented declarations of entries, a note above kept (deprecated) ones. */
+    protected lines(entries: ThemeEntry[]): string[] {
+        return entries
+            .flatMap((entry) => [
+                ...(entry.deprecated ? [`/* ${ThemeGenerator.DEPRECATED} */`] : []),
+                ...this.declarations(entry),
+            ])
+            .map((line) => `  ${line}`);
     }
 
     public reference(entry: ThemeEntry): string {
@@ -323,10 +352,10 @@ class TailwindThemeGenerator extends CssThemeGenerator {
         const rest = entries.filter((entry) => !TailwindThemeGenerator.THEME_CATEGORIES.has(entry.category));
         const lines: string[] = [];
         if (theme.length > 0) {
-            lines.push("@theme {", ...theme.flatMap((entry) => this.declarations(entry)).map((l) => `  ${l}`), "}");
+            lines.push("@theme {", ...this.lines(theme), "}");
         }
         if (rest.length > 0) {
-            lines.push(":root {", ...rest.flatMap((entry) => this.declarations(entry)).map((l) => `  ${l}`), "}");
+            lines.push(":root {", ...this.lines(rest), "}");
         }
         return lines;
     }
