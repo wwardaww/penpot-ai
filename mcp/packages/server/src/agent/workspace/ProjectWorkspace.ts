@@ -1,10 +1,11 @@
 import { execFile } from "child_process";
 import { randomUUID } from "crypto";
-import { mkdir, readFile, rename, writeFile } from "fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import { join } from "path";
 import { promisify } from "util";
 import type { ProjectRepo, WorkflowWorkspaceApi } from "@penpot/mcp-common";
 import { PathGuard } from "./pathGuard";
+import { renameWithRetry } from "./renameWithRetry";
 
 const execFileAsync = promisify(execFile);
 
@@ -26,6 +27,8 @@ export class ProjectWorkspace implements WorkflowWorkspaceApi {
     public readonly appSrcDir: string;
     public readonly metaDir: string;
     public readonly guard: PathGuard;
+    /** Pending atomic writes per metadata file, so writes to one file never overlap. */
+    private readonly writeQueues = new Map<string, Promise<void>>();
 
     /**
      * Creates the workspace object; call {@link ensure} before use.
@@ -102,13 +105,36 @@ export class ProjectWorkspace implements WorkflowWorkspaceApi {
         return JSON.parse(content) as T;
     }
 
+    /**
+     * Writes a metadata file atomically. Writes to the same file run one after the other (two
+     * browser tabs on one project write `project.json` at the same moment), and the final rename
+     * is retried while Windows reports the target as locked.
+     */
     public async writeJson(name: string, value: unknown): Promise<void> {
         const file = this.metaPath(name);
+        const previous = this.writeQueues.get(file) ?? Promise.resolve();
+        const next = previous.catch(() => undefined).then(() => this.writeJsonNow(file, value));
+        this.writeQueues.set(file, next);
+        const forget = () => {
+            if (this.writeQueues.get(file) === next) {
+                this.writeQueues.delete(file);
+            }
+        };
+        next.then(forget, forget);
+        return next;
+    }
+
+    private async writeJsonNow(file: string, value: unknown): Promise<void> {
         await mkdir(join(file, ".."), { recursive: true });
         // write to a sibling first, so readers never see a partial file
         const temp = `${file}.tmp-${randomUUID()}`;
         await writeFile(temp, JSON.stringify(value, null, 2) + "\n", "utf8");
-        await rename(temp, file);
+        try {
+            await renameWithRetry(temp, file);
+        } catch (error) {
+            await unlink(temp).catch(() => undefined);
+            throw error;
+        }
     }
 
     /**
