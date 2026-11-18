@@ -67,10 +67,10 @@
 
 (t/deftest empty-proposal-and-errors
   (let [empty-state (run-messages {:step :running}
-                            [{:type "workflow.event" :kind "result"
-                              :payload {:mode "proposal" :links [] :flow nil
-                                        :reason "needs-two-screens"}}
-                             {:type "workflow.done" :ok true}])
+                                  [{:type "workflow.event" :kind "result"
+                                    :payload {:mode "proposal" :links [] :flow nil
+                                              :reason "needs-two-screens"}}
+                                   {:type "workflow.done" :ok true}])
         failed (run-messages {:step :running}
                              [{:type "workflow.done" :ok false :error "busy"}])]
     (t/is (= :empty (:step empty-state)))
