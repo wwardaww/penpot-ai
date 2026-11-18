@@ -328,14 +328,20 @@
        (some (fn [[_ run]] (= :running (:status run))) (:runs chat)))))
 
 (defn waiting?
-  "True while the AI waits for the user: a permission request or a
-  question is open."
+  "True while the AI waits for the user: an unanswered question of a run
+  that is still running, or an unanswered permission request of the
+  streaming turn. Questions of runs that ended stay unanswered and do not
+  count."
   [chat]
-  (and (busy? chat)
-       (boolean
-        (some #(and (contains? #{:permission :question} (:kind %))
-                    (nil? (:answer %)))
-              (:entries chat)))))
+  (let [streaming (= :streaming (:status chat))]
+    (boolean
+     (some (fn [{:keys [kind answer run-id]}]
+             (and (nil? answer)
+                  (case kind
+                    :question (= :running (get-in chat [:runs run-id :status]))
+                    :permission streaming
+                    false)))
+           (:entries chat)))))
 
 (defn- progress-text
   [progress]

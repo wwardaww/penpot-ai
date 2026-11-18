@@ -162,7 +162,14 @@
   (t/is (str/includes? (render-status {:activity {:started-at 0 :ended-at 1 :outcome :cancelled}})
                        "penforge.chat.status.cancelled"))
   (t/is (str/includes? (render-status {:activity {:started-at 0 :ended-at 1 :outcome :interrupted}})
-                       "penforge.chat.status.interrupted")))
+                       "penforge.chat.status.interrupted"))
+  (let [markup (render-status {:runs {"run1" {:status :running :silent true}}
+                               :entries [{:kind :question :id "q1" :run-id "run1" :text "Change it there too?"
+                                          :options [{:id "apply" :label "Change it everywhere"}]}]})]
+    (t/is (str/includes? markup "penforge.chat.status.waiting")
+          "a comment fix waiting for an answer shows in the chat")
+    (t/is (not (str/includes? markup "penforge.chat.input.stop"))
+          "Stop does not reach a silent run")))
 
 ;; --- Panel
 
@@ -182,6 +189,9 @@
                                            :size 9 :path ".penforge/uploads/x-spec.pdf"}]}
                            {:kind :tool :id "t1" :tool-name "penforge_canvas_check" :status :error
                             :summary "English" :code "boards-overlap" :params {:names ["Android" "Android"]}}
+                           {:kind :tool :id "t2" :tool-name "penforge_canvas_check" :status :done
+                            :summary "English" :code "style-differs"
+                            :params {:board "Android - Ana Sayfa" :source "iPhone" :layers ["Progress Card" "Fab"]}}
                            {:kind :error :id "e1" :code "bad-request" :message "English"
                             :reason "file-size" :params {:name "big.png" :limit-mb 3.75}}]})
         markup (with-state state #(render-static (mf/element panel/chat-panel* #js {})))]
@@ -190,6 +200,8 @@
     (t/is (str/includes? markup "src=\"blob:") "image chips show an object URL")
     (t/is (str/includes? markup "penforge.chat.check.boards-overlap Android Android")
           "the canvas check is worded by the client")
+    (t/is (str/includes? markup "penforge.chat.check.style-differs Android - Ana Sayfa iPhone Progress Card, Fab")
+          "a style difference with its source is worded by the client")
     (t/is (str/includes? markup "penforge.chat.attach.error.size big.png 3.75")
           "a refused file is worded by the client")
     (t/is (str/includes? markup "DESIGN.md"))

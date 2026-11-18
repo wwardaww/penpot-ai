@@ -17,10 +17,12 @@ import {
     type CanvasThread,
     CheckpointStep,
     CommentToolFilter,
+    type FixReport,
     FixVerdict,
     type WorkflowLookup,
 } from "./fix-comment-fixer";
 import { createFixCommentWorkflow } from "./fix-comment";
+import { CommentFixCopies } from "./fix-comment-copies";
 import { CommentClassifier, createFixCommentsWorkflow, type FixCommentsResult } from "./fix-comments";
 import { WorkflowEngine } from "./WorkflowEngine";
 import { WorkflowRegistry } from "./WorkflowRegistry";
@@ -962,5 +964,328 @@ describe("registration", () => {
             assert.match(batch, /Do not call any tool/);
             assert.match(batch, /`destructive`/);
         }
+    });
+});
+
+describe("copies of a fixed layer on other screens (W25b)", () => {
+    const ORANGE = [{ gradient: { type: "linear", stops: [{ color: "#ff9a3d" }, { color: "#f26b1d" }] } }];
+    const PURPLE = [{ gradient: { type: "linear", stops: [{ color: "#7b61ff" }, { color: "#5b3fe0" }] } }];
+
+    /** Layer as the survey script reports it. */
+    function layer(nodeId: string, boardName: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
+        return {
+            nodeId,
+            name: "Progress Card",
+            type: "board",
+            hidden: false,
+            blocked: false,
+            width: 342,
+            height: 128,
+            boardId: `board-${boardName}`,
+            boardName,
+            boardIsBoard: true,
+            path: [],
+            ...extra,
+        };
+    }
+
+    interface Page {
+        fills: Record<string, unknown>;
+        survey: Record<string, unknown>;
+        applied: { nodeId: string; mutations: unknown }[][];
+    }
+
+    /** Tools of a page: the commented card ("node-N") on "iPhone", the survey answer, the fills of every layer. */
+    function screens(page: Page, threads: CanvasThread[]): Record<string, ToolHandler> {
+        return {
+            ...penpotTools(threads),
+            get_node_properties: (args) =>
+                text({ id: args.nodeId, name: "Progress Card", fills: page.fills[String(args.nodeId)] ?? PURPLE }),
+            execute_code: (args) => {
+                const code = String(args.code);
+                if (code.includes("undoBlockBegin")) {
+                    const targets = JSON.parse(/const params = (.*);/.exec(code)![1]).targets as {
+                        nodeId: string;
+                        mutations: unknown;
+                    }[];
+                    page.applied.push(targets);
+                    return text({ result: Object.fromEntries(targets.map((target) => [target.nodeId, true])) });
+                }
+                const id = JSON.parse(/const params = (.*);/.exec(code)![1]).id as string;
+                return text({ result: { ...page.survey, target: layer(id, "iPhone") } });
+            },
+        };
+    }
+
+    function page(survey: Record<string, unknown>, fills: Record<string, unknown> = {}): Page {
+        return { fills, survey: { inMain: false, component: null, candidates: [], ...survey }, applied: [] };
+    }
+
+    /** Fix turn that recolors the commented layer through update_design_node. */
+    function recolorTurn(request: WorkflowClaudeRequest): string {
+        const nodeId = `node-${/#(\d+)/.exec(request.prompt)?.[1] ?? "1"}`;
+        const input = { nodeId, mutations: { fills: ORANGE } };
+        request.onEvent?.({
+            kind: "tool",
+            toolUseId: `u-${nodeId}`,
+            toolName: "mcp__penpot__update_design_node",
+            status: "running",
+            input,
+        });
+        request.onEvent?.({
+            kind: "tool",
+            toolUseId: `u-${nodeId}`,
+            toolName: "mcp__penpot__update_design_node",
+            status: "done",
+        });
+        return verdict("fixed", "Made it orange.");
+    }
+
+    test("only strict copies are offered, named with their count and screens, and change in one undo step", async () => {
+        const state = page(
+            {
+                candidates: [
+                    layer("copy-android", "Android - Ana Sayfa", { width: 364 }),
+                    layer("other-look", "Tablet"),
+                    layer("hidden", "Android - Ana Sayfa", { hidden: true }),
+                    layer("locked", "Android - Ana Sayfa", { blocked: true }),
+                    layer("elsewhere", "Settings", { path: ["Footer"] }),
+                    layer("huge", "Desktop", { width: 1200 }),
+                    layer("text", "Desktop", { type: "text" }),
+                    layer("same-board", "iPhone", { boardId: "board-iPhone" }),
+                ],
+            },
+            { "other-look": [{ color: "#ffffff" }] }
+        );
+        const ctx = new FakeContext(screens(state, [thread(1, "make the progress card orange")]), recolorTurn, [
+            () => "apply",
+        ]);
+
+        const result = await fixComment.run(ctx, { threadId: "thread-1" });
+
+        assert.equal(ctx.questions.length, 1);
+        assert.equal(
+            ctx.questions[0].text,
+            '1 layer "Progress Card" on "Android - Ana Sayfa" still look the old way. Change them too?'
+        );
+        assert.deepEqual(state.applied, [[{ nodeId: "copy-android", mutations: { fills: ORANGE } }]]);
+        assert.deepEqual(ctx.result<FixReport>().copies, {
+            kind: "copies",
+            found: 1,
+            applied: 1,
+            boards: ["Android - Ana Sayfa"],
+            recorded: false,
+        });
+        assert.match((result as { summary: string }).summary, /Also changed on 1 other screen\.$/);
+    });
+
+    test("leaving them changes nothing else", async () => {
+        const state = page({ candidates: [layer("copy-android", "Android - Ana Sayfa")] });
+        const ctx = new FakeContext(screens(state, [thread(1, "orange")]), recolorTurn, [() => "skip"]);
+        await fixComment.run(ctx, { threadId: "thread-1" });
+        assert.deepEqual(state.applied, []);
+        assert.equal(ctx.result<FixReport>().copies?.applied, 0);
+    });
+
+    test("a layer of a main component asks nothing: its instances follow", async () => {
+        const state = page({ inMain: true, instanceBoards: ["Android - Ana Sayfa"] });
+        const ctx = new FakeContext(screens(state, [thread(1, "orange")]), recolorTurn);
+        const result = await fixComment.run(ctx, { threadId: "thread-1" });
+        assert.equal(ctx.questions.length, 0);
+        assert.equal(ctx.result<FixReport>().copies?.kind, "main");
+        assert.match(
+            (result as { summary: string }).summary,
+            /The component is also used on 1 other screen; its copies follow unless they changed this themselves\./
+        );
+
+        const alone = new FakeContext(
+            screens(page({ inMain: true, instanceBoards: [] }), [thread(1, "orange")]),
+            recolorTurn
+        );
+        const aloneResult = await fixComment.run(alone, { threadId: "thread-1" });
+        assert.equal(alone.result<FixReport>().copies, undefined, "no instances, nothing to say");
+        assert.doesNotMatch((aloneResult as { summary: string }).summary, /component/);
+    });
+
+    test("a layer of an instance offers to change the component, naming its screens", async () => {
+        const state = page({
+            component: { name: "Card", mainLayerId: "main-card", boards: ["Android - Ana Sayfa", "Tablet"] },
+        });
+        const ctx = new FakeContext(screens(state, [thread(1, "orange")]), recolorTurn, [() => "apply"]);
+        await fixComment.run(ctx, { threadId: "thread-1" });
+        assert.match(
+            ctx.questions[0].text,
+            /"Progress Card" is part of the component "Card", also used on "Android - Ana Sayfa", "Tablet"/
+        );
+        assert.deepEqual(state.applied, [[{ nodeId: "main-card", mutations: { fills: ORANGE } }]]);
+        assert.equal(ctx.result<FixReport>().copies?.kind, "component");
+    });
+
+    test("a cancelled question keeps the fix done", async () => {
+        const state = page({ candidates: [layer("copy-android", "Android - Ana Sayfa")] });
+        const ctx = new FakeContext(screens(state, [thread(1, "orange")]), recolorTurn, [
+            () => {
+                throw new Error("cancelled");
+            },
+        ]);
+        const result = await fixComment.run(ctx, { threadId: "thread-1" });
+        assert.equal(ctx.result<FixReport>().outcome, "fixed");
+        assert.equal(ctx.result<FixReport>().copies?.applied, 0);
+        assert.match((result as { summary: string }).summary, /^Fixed comment #1/);
+        assert.deepEqual(state.applied, []);
+    });
+
+    test("no question without copies or without a style change", async () => {
+        const noCopies = new FakeContext(screens(page({}), [thread(1, "orange")]), recolorTurn);
+        await fixComment.run(noCopies, { threadId: "thread-1" });
+        assert.equal(noCopies.questions.length, 0);
+
+        const textOnly = new FakeContext(
+            screens(page({ candidates: [layer("copy-android", "Android - Ana Sayfa")] }), [thread(1, "text")]),
+            (request) => {
+                const input = { nodeId: "node-1", mutations: { text: "Bugün" } };
+                request.onEvent?.({
+                    kind: "tool",
+                    toolUseId: "u1",
+                    toolName: "mcp__penpot__update_design_node",
+                    status: "running",
+                    input,
+                });
+                request.onEvent?.({
+                    kind: "tool",
+                    toolUseId: "u1",
+                    toolName: "mcp__penpot__update_design_node",
+                    status: "done",
+                });
+                return verdict("fixed", "Changed the text.");
+            }
+        );
+        await fixComment.run(textOnly, { threadId: "thread-1" });
+        assert.equal(textOnly.questions.length, 0);
+    });
+
+    test("a batch asks once at the end about the copies of every fixed comment", async () => {
+        const threads = [thread(1, "orange card"), thread(2, "orange card too")];
+        const state = page({ candidates: [layer("copy-android", "Android - Ana Sayfa")] });
+        const classification = JSON.stringify({
+            threads: threads.map((t) => ({
+                threadId: t.threadId,
+                kind: "change-request",
+                change: "properties",
+                request: "orange",
+            })),
+            conflicts: [],
+        });
+        const ctx = new FakeContext(
+            screens(state, threads),
+            (request) => (request.promptName === "fix-comments" ? classification : recolorTurn(request)),
+            [() => "apply"]
+        );
+
+        const result = (await createFixCommentsWorkflow(noCheckpoint).run(ctx, {
+            trustedThreadIds: threads.map((t) => t.threadId),
+        })) as { summary: string };
+
+        assert.equal(ctx.questions.length, 1, "one question for the whole batch, after the fixes");
+        assert.match(ctx.questions[0].text, /^Some fixed comments also concern other screens\.\n- 1 layer/);
+        assert.equal(ctx.callsOf("resolve_canvas_comment").length, 2, "both fixes were done before asking");
+        assert.equal(state.applied.length, 1, "one undo step for all copies");
+        assert.deepEqual(
+            state.applied[0],
+            [{ nodeId: "copy-android", mutations: { fills: ORANGE } }],
+            "the same change once"
+        );
+        const batch = ctx.result<FixCommentsResult>();
+        assert.equal(batch.copies?.length, 2);
+        assert.match(result.summary, /also changed on 1 other screen$/);
+    });
+
+    test("a batch leaves copies that a later fix changed, and copies two fixes want differently", async () => {
+        const threads = [thread(1, "orange iPhone card"), thread(2, "red Android card"), thread(3, "blue tablet card")];
+        const RED = [{ color: "#ff0000" }];
+        const BLUE = [{ color: "#0000ff" }];
+        const state = page({});
+        const turnFills: Record<string, unknown> = { "node-1": ORANGE, "node-2": RED, "node-3": BLUE };
+        const tools = screens(state, threads);
+        // each comment's fix offers the other cards; comment #2 recolors the Android card itself
+        tools.execute_code = (args) => {
+            const code = String(args.code);
+            if (code.includes("undoBlockBegin")) {
+                const targets = JSON.parse(/const params = (.*);/.exec(code)![1]).targets;
+                state.applied.push(targets);
+                return text({ result: Object.fromEntries(targets.map((t: { nodeId: string }) => [t.nodeId, true])) });
+            }
+            const id = JSON.parse(/const params = (.*);/.exec(code)![1]).id as string;
+            const candidates =
+                id === "node-1"
+                    ? [layer("node-2", "Android - Ana Sayfa"), layer("tablet", "Tablet")]
+                    : id === "node-3"
+                      ? [layer("tablet", "Tablet")]
+                      : [];
+            return text({ result: { inMain: false, component: null, candidates, target: layer(id, "iPhone") } });
+        };
+        const classification = JSON.stringify({
+            threads: threads.map((t) => ({
+                threadId: t.threadId,
+                kind: "change-request",
+                change: "properties",
+                request: "color",
+            })),
+            conflicts: [],
+        });
+        const ctx = new FakeContext(
+            tools,
+            (request) => {
+                if (request.promptName === "fix-comments") {
+                    return classification;
+                }
+                const nodeId = `node-${/#(\d+)/.exec(request.prompt)?.[1]}`;
+                const input = { nodeId, mutations: { fills: turnFills[nodeId] } };
+                request.onEvent?.({
+                    kind: "tool",
+                    toolUseId: nodeId,
+                    toolName: "mcp__penpot__update_design_node",
+                    status: "running",
+                    input,
+                });
+                state.fills[nodeId] = turnFills[nodeId];
+                request.onEvent?.({
+                    kind: "tool",
+                    toolUseId: nodeId,
+                    toolName: "mcp__penpot__update_design_node",
+                    status: "done",
+                });
+                return verdict("fixed", "Done.");
+            },
+            [() => "apply"]
+        );
+
+        const result = (await createFixCommentsWorkflow(noCheckpoint).run(ctx, {
+            trustedThreadIds: threads.map((t) => t.threadId),
+        })) as { summary: string };
+
+        assert.deepEqual(
+            state.applied,
+            [],
+            "the Android card keeps fix #2's red; the tablet card is wanted orange and blue"
+        );
+        const reports = ctx.result<FixCommentsResult>().copies!;
+        assert.deepEqual(
+            reports.map((r) => [r.found, r.applied, r.skipped]),
+            [
+                [2, 0, 2],
+                [1, 0, 1],
+            ]
+        );
+        assert.match(result.summary, /left 3 layers on other screens as they were, because another fix changed them/);
+    });
+
+    test("only the style keys of a mutation are carried", () => {
+        assert.deepEqual(
+            CommentFixCopies.styleChange({ nodeId: "n", mutations: { fills: ORANGE, text: "x", radius: 8 } }),
+            { nodeId: "n", style: { fills: ORANGE, radius: 8 } }
+        );
+        assert.equal(CommentFixCopies.styleChange({ nodeId: "n", mutations: { name: "x" } }), null);
+        assert.equal(CommentFixCopies.styleChange(undefined), null);
     });
 });

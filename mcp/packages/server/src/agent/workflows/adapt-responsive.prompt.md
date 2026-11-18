@@ -4,6 +4,10 @@ You get a copy of a board that was resized to a new width. Rebuild its layout so
 width: reflow, do not scale. The original board stays untouched; change only the new board and
 its children.
 
+The copy is the source board as it is right now, including changes made through comments or
+the chat since it was designed: keep its colors, texts, images and effects exactly as they are
+in the copy, never as you remember them.
+
 How to work:
 - Read the tree you were given; use `get_node_properties` for deeper levels and
   `capture_node_screenshot` to look at your result. Use `update_design_node` for simple changes

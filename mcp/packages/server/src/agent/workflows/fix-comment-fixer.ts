@@ -7,7 +7,9 @@ import type {
     WorkflowContext,
     WorkflowToolFilter,
 } from "@penpot/mcp-common";
+import type { DesignNode } from "../chat/DesignTree";
 import { PENPOT_MCP_SERVER_NAME } from "../runner/LocalCliRunner";
+import { CommentFixCopies, type CopiesReport, type CopyOffer, type StyleChange } from "./fix-comment-copies";
 
 /** Comment of a canvas thread, as returned by `list_canvas_comments`. */
 export interface CanvasComment {
@@ -45,6 +47,8 @@ export interface FixReport {
     resolved: boolean;
     /** the note was posted as a reply */
     replied: boolean;
+    /** copies of the fixed layer on other screens, when a style fix had some (W25b) */
+    copies?: CopiesReport;
 }
 
 /** What the caller already knows about the thread. */
@@ -53,6 +57,8 @@ export interface FixHint {
     request?: string;
     /** structural changes (adding, removing, reordering layers) through `execute_code` are allowed */
     allowStructural?: boolean;
+    /** keep the offer to change copies on other screens for later (a batch asks once at the end) */
+    deferCopies?: boolean;
 }
 
 /**
@@ -265,6 +271,7 @@ export class CommentFixer {
     private static readonly EXECUTE_TOOL = "execute_code";
     private static readonly PROMPT_NAME = "fix-comment";
     private static readonly MAX_PROPERTIES_CHARS = 8000;
+    private readonly deferred: CopyOffer[] = [];
 
     /**
      * @param ctx - context of the workflow run
@@ -329,7 +336,14 @@ export class CommentFixer {
         const image = target ? await this.capture(target, target !== thread.boardId) : null;
         this.checkCancelled();
 
+        // the fixed layer as it was, to recognise its copies on other screens afterwards
+        const copies = new CommentFixCopies(this.ctx);
+        const before = target ? await copies.snapshot(target).catch(() => null) : null;
+        this.checkCancelled();
+
         let changed = false;
+        const pendingStyle = new Map<string, StyleChange>();
+        const styleChanges: StyleChange[] = [];
         const attachments: Attachment[] = image ? [image] : [];
         const answer = await this.ctx.runner.run({
             prompt: CommentFixer.prompt(thread, target, properties, image !== null, hint),
@@ -337,12 +351,26 @@ export class CommentFixer {
             attachments: attachments.length > 0 ? attachments : undefined,
             toolFilter: new CommentToolFilter(hint.allowStructural === true),
             onEvent: (event: RunnerEvent) => {
+                if (event.kind !== "tool") {
+                    return;
+                }
                 if (
-                    event.kind === "tool" &&
-                    event.status === "done" &&
-                    CommentToolFilter.changesDesign(event.toolName)
+                    event.status === "running" &&
+                    CommentToolFilter.penpotTool(event.toolName) === "update_design_node"
                 ) {
-                    changed = true;
+                    const change = CommentFixCopies.styleChange(event.input);
+                    if (change) {
+                        pendingStyle.set(event.toolUseId, change);
+                    }
+                }
+                if (event.status === "done") {
+                    const change = pendingStyle.get(event.toolUseId);
+                    if (change) {
+                        styleChanges.push(change);
+                    }
+                    if (CommentToolFilter.changesDesign(event.toolName)) {
+                        changed = true;
+                    }
                 }
             },
         });
@@ -365,10 +393,58 @@ export class CommentFixer {
                 return { ...base, outcome: "unchanged", note: "", resolved: false, replied: false };
             }
             const resolved = await this.resolve(thread.threadId, verdict.note);
-            return { ...base, outcome: "fixed", note: verdict.note, resolved, replied: resolved && !!verdict.note };
+            const copiesReport = before
+                ? await this.followCopies(copies, before, styleChanges, thread.seqNumber, hint.deferCopies === true)
+                : null;
+            return {
+                ...base,
+                outcome: "fixed",
+                note: verdict.note,
+                resolved,
+                replied: resolved && !!verdict.note,
+                ...(copiesReport ? { copies: copiesReport } : {}),
+            };
         }
         const replied = verdict.note ? await this.reply(thread.threadId, verdict.note) : false;
         return { ...base, outcome: "no-change", note: verdict.note, resolved: false, replied };
+    }
+
+    /**
+     * Takes the copy offers kept by fixes with `deferCopies`.
+     */
+    public takeDeferredCopies(): CopyOffer[] {
+        return this.deferred.splice(0);
+    }
+
+    /**
+     * Finds what should follow a style fix on other screens and, unless deferred, asks about it.
+     * Never throws: the fix is done whatever happens here.
+     */
+    private async followCopies(
+        copies: CommentFixCopies,
+        before: DesignNode,
+        changes: StyleChange[],
+        seqNumber: number,
+        defer: boolean
+    ): Promise<CopiesReport | null> {
+        try {
+            const prepared = await copies.prepare(before, changes, seqNumber);
+            if (prepared?.kind === "main") {
+                return prepared.boards.length === 0
+                    ? null
+                    : { kind: "main", found: 0, applied: 0, boards: prepared.boards, recorded: false };
+            }
+            if (!prepared) {
+                return null;
+            }
+            if (defer) {
+                this.deferred.push(prepared);
+                return null;
+            }
+            return (await copies.settle([prepared]))[0] ?? null;
+        } catch {
+            return null;
+        }
     }
 
     /**

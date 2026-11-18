@@ -29,6 +29,7 @@
    [app.util.i18n :refer [tr]]
    [app.util.keyboard :as kbd]
    [app.util.shape-icon :as usi]
+   [cuerdas.core :as str]
    [okulary.core :as l]
    [promesa.core :as p]
    [rumext.v2 :as mf]))
@@ -153,6 +154,10 @@
     "boards-overlap"
     (let [[a b] (:names params)]
       (tr "penforge.chat.check.boards-overlap" a b))
+
+    "style-differs"
+    (let [{:keys [board source layers]} params]
+      (tr "penforge.chat.check.style-differs" board source (str/join ", " layers)))
 
     summary))
 
