@@ -234,6 +234,15 @@ test("requests before context.set fail with no-context", async () => {
     assert.equal(error.rid, "r1");
 });
 
+test("a request sent just before context.set waits for it instead of failing", async () => {
+    const client = await authenticated();
+    // a reconnecting tab may send its history request before its context
+    client.send({ type: "chat.history", rid: "early", conversationId: "c-early" });
+    client.send(CONTEXT);
+    const history = await client.next("chat.history", (message) => message.rid === "early");
+    assert.deepEqual(history.messages, []);
+});
+
 test("invalid messages are answered with bad-request", async () => {
     const client = await authenticated();
     client.send({ type: "chat.send", rid: "r1" });

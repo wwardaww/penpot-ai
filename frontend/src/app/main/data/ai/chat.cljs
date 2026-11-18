@@ -584,6 +584,16 @@
                    (rx/filter (ptk/type? ::client/connected))
                    (rx/map (fn [_] (request-history))))
 
+              ;; A history request that reached the daemon before this
+              ;; tab's context failed with `no-context`: ask again.
+              (->> (client/messages stream)
+                   (rx/filter #(and (= "error" (:type %))
+                                    (= "no-context" (:code %))
+                                    (some? (:rid %))))
+                   (rx/take 3)
+                   (rx/delay 1000)
+                   (rx/map (fn [_] (request-history))))
+
               (->> stream
                    (rx/filter (ptk/type? ::client/socket-closed))
                    (rx/map (fn [_] (ptk/reify ::connection-lost
