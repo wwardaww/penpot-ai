@@ -303,6 +303,7 @@ function instance-compose {
         PENFORGE_HOST_REPO="$PWD" \
         PENFORGE_CLEAN_BUILD="${PENFORGE_CLEAN_BUILD:-0}" \
         PENFORGE_STORYBOOK="${PENFORGE_STORYBOOK:-0}" \
+        PENFORGE_EXPORTER="${PENFORGE_EXPORTER:-0}" \
         DEVENV_TAG="$DEVENV_TAG" \
         "${opencode_env[@]}" \
         "${overrides[@]}" \

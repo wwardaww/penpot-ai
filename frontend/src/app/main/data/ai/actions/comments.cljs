@@ -86,9 +86,10 @@
   "Ids (strings) of the open threads of `page-id` (every page when nil)
   whose owner and participants can all edit the file. Only these reach
   Claude in a batch: comment text from viewers or guests could carry
-  instructions."
+  instructions. The Penforge bot counts as an editor: the backend lets
+  only editors post as the bot."
   [state page-id]
-  (let [editors (editor-ids state)]
+  (let [editors (conj (editor-ids state) dcm/penforge-bot-id)]
     (->> (vals (:comment-threads state))
          (filter #(or (nil? page-id) (= page-id (:page-id %))))
          (remove :is-resolved)

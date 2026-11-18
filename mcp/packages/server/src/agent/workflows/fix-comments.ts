@@ -7,6 +7,7 @@ import {
     ShippedWorkflowLookup,
     type WorkflowLookup,
 } from "./fix-comment-fixer";
+import { CommentFixCopies, type CopiesReport } from "./fix-comment-copies";
 
 /** Params of the `fix-comments` workflow. */
 export interface FixCommentsParams {
@@ -49,6 +50,8 @@ export interface FixCommentsResult {
     fixed: FixReport[];
     skipped: SkippedThread[];
     needsYou: NeedsYouThread[];
+    /** layers on other screens offered to follow the fixes, asked once at the end (W25b) */
+    copies?: CopiesReport[];
 }
 
 /** Change requests that cannot all be applied. */
@@ -288,6 +291,17 @@ class FixCommentsWording {
         if (needsYou.length > 0) {
             parts.push(`${needsYou.length} ${plural(needsYou.length)} need you (${numbers(needsYou)})`);
         }
+        const screens = new Set((result.copies ?? []).filter((c) => c.applied > 0).flatMap((c) => c.boards));
+        if (screens.size > 0) {
+            parts.push(`also changed on ${screens.size} other ${screens.size === 1 ? "screen" : "screens"}`);
+        }
+        const leftCopies = (result.copies ?? []).reduce((sum, copies) => sum + (copies.skipped ?? 0), 0);
+        if (leftCopies > 0) {
+            parts.push(
+                `left ${leftCopies} ${leftCopies === 1 ? "layer" : "layers"} on other screens as they were, ` +
+                    "because another fix changed them"
+            );
+        }
         return parts.join(", ");
     }
 }
@@ -444,6 +458,7 @@ class FixCommentsRun {
                 outcome = await this.fixOne(thread, {
                     request: kinds.get(thread.threadId)!.request,
                     allowStructural: structural.has(thread.threadId),
+                    deferCopies: true,
                 });
             } catch (error) {
                 if (ctx.signal.aborted) {
@@ -460,6 +475,12 @@ class FixCommentsRun {
                 text: `Comment #${thread.seqNumber} done (${index + 1} of ${queue.length})`,
             });
         }
+
+        // g. one question for every layer on other screens that could follow the fixes
+        const offers = fixer.takeDeferredCopies();
+        if (offers.length > 0 && !ctx.signal.aborted) {
+            result.copies = await new CommentFixCopies(ctx).settle(offers);
+        }
     }
 
     /**
@@ -467,7 +488,10 @@ class FixCommentsRun {
      *
      * @returns the outcome
      */
-    private async fixOne(thread: CanvasThread, hint: { request: string; allowStructural: boolean }): Promise<string> {
+    private async fixOne(
+        thread: CanvasThread,
+        hint: { request: string; allowStructural: boolean; deferCopies: boolean }
+    ): Promise<string> {
         const current = await this.fixer.findThread(thread.threadId, thread.pageId);
         if (!current || current.resolved) {
             this.skipped(thread, "resolved");

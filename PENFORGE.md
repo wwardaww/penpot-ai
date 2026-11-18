@@ -40,7 +40,7 @@ Windows notes:
 
 ```bash
 ./manage.sh pull-devenv          # first time only
-./manage.sh run-devenv --attach  # tmux: 0 frontend, 2 exporter, 3 backend
+./manage.sh run-devenv --attach  # tmux: 0 frontend, 3 backend (2 exporter with PENFORGE_EXPORTER=1)
 ```
 
 - Wait for `[:main] Build completed` in tmux window 0. Starts keep the
@@ -55,6 +55,11 @@ Windows notes:
   `PENFORGE_CLEAN_BUILD=1 ./manage.sh run-devenv` to wipe the caches.
 - Storybook is off by default. To run it (port 3451):
   `PENFORGE_STORYBOOK=1 ./manage.sh run-devenv`.
+- The exporter (server-side PDF/PNG export, about 2 GB of memory) is off by
+  default; with render-wasm, exports and the AI's screenshots render in the
+  browser. To run it: `PENFORGE_EXPORTER=1 ./manage.sh run-devenv`.
+- Memory: the devenv uses about 7 GB (frontend build, backend, plus the
+  exporter if on). Give WSL 10 GB or more (`memory=10GB` in `.wslconfig`).
 - Detach with `Ctrl+b d`. Do not kill the tmux session, it runs the app.
 - App: https://localhost:3449 (or http://localhost:3450).
 - The devenv backend runs with `disable-admin-console enable-ai`
