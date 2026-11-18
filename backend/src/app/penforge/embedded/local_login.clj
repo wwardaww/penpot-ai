@@ -74,21 +74,26 @@
 
 (defn get-or-create-local-profile
   "Answer the local profile, creating it with its default team on the
-  first call. Needs a cfg with an open connection (`::db/conn`)."
-  [{:keys [::db/conn] :as cfg} {:keys [fullname]}]
+  first call (with the persona the desktop wizard asked for). Needs a
+  cfg with an open connection (`::db/conn`)."
+  [{:keys [::db/conn] :as cfg} {:keys [fullname persona]}]
   (let [email (local-email)]
     (or (profile/get-profile-by-email conn email)
         (->> (auth/create-profile cfg {:email email
                                        :fullname (if (str/blank? fullname)
                                                    default-fullname
                                                    fullname)
-                                       :is-active true})
+                                       :is-active true
+                                       :props (cond-> {}
+                                                persona
+                                                (assoc :penforge-persona (keyword persona)))})
              (auth/create-profile-rels cfg)))))
 
 (def ^:private schema:penforge-local-login
   [:map {:title "penforge-local-login"}
    [:secret [:string {:max 512}]]
-   [:fullname {:optional true} [:string {:max 250}]]])
+   [:fullname {:optional true} [:string {:max 250}]]
+   [:persona {:optional true} [:enum "designer" "developer"]]])
 
 (sv/defmethod ::penforge-local-login
   "Log in the single local profile of the desktop app. Answers the

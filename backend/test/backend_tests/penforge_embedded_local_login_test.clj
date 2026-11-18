@@ -61,13 +61,14 @@
   (with-local-mode
     {:penforge-local-secret secret}
     (fn []
-      (let [first-out  (login! {:secret secret :fullname "Ada"})
+      (let [first-out  (login! {:secret secret :fullname "Ada" :persona "developer"})
             second-out (login! {:secret secret})
             profile    (:result first-out)]
         (t/is (nil? (:error first-out)))
         (t/is (nil? (:error second-out)))
         (t/is (= local-login/default-email (:email profile)))
         (t/is (= "Ada" (:fullname profile)))
+        (t/is (= :developer (get-in profile [:props :penforge-persona])))
         (t/is (true? (:is-active profile)))
         (t/is (nil? (:password profile)) "private attrs are stripped")
         (t/is (some? (:default-team-id profile)) "the default team exists")
