@@ -39,16 +39,26 @@
 (def allowed-upload-prefixes
   ;; Upload temp files are created server-side by the multipart parser
   ;; (yetti `default-temp-dir`, `/tmp/undertow/`) plus the tmp dir used
-  ;; by tests and storage tmp files (`/tmp/penpot/`). Anything else
-  ;; (e.g. `/etc/passwd` smuggled via Transit `~#path`) is rejected.
-  ["/tmp/undertow/" "/tmp/penpot/"])
+  ;; by tests and storage tmp files (`/tmp/penpot/`, or
+  ;; `PENPOT_TMP_DIRECTORY`). Anything else (e.g. `/etc/passwd` smuggled
+  ;; via Transit `~#path`) is rejected.
+  ["/tmp/undertow/" (or (cf/get :tmp-directory) "/tmp/penpot/")])
+
+(defn- under-root?
+  "True when `real` lies inside `root`, compared by path components (on
+  Windows `/tmp/undertow/` is a drive-relative path, not a string
+  prefix of the real path)."
+  [^Path real root]
+  (let [^Path root (.normalize (.toAbsolutePath ^Path (fs/path root)))
+        ^Path root (try (fs/real root) (catch Exception _ root))]
+    (.startsWith real root)))
 
 (defn check-upload-path
   [upload]
-  (let [real (try (str (fs/real (:path upload)))
+  (let [real (try (fs/real (:path upload))
                   (catch Exception _ nil))]
     (when (or (nil? real)
-              (not (some #(str/starts-with? real %) allowed-upload-prefixes)))
+              (not (some #(under-root? real %) allowed-upload-prefixes)))
       (ex/raise :type :validation
                 :code :params-validation
                 :hint "invalid upload path"))
