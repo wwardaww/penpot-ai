@@ -30,6 +30,7 @@
    [app.common.geom.matrix :as gmt]
    [app.common.math :as mth]
    [app.common.path-names :as cpn]
+   [app.common.schema :as sm]
    [app.common.types.variant :as ctv]
    [app.common.uuid :as uuid]
    [cuerdas.core :as str]))
@@ -114,7 +115,7 @@
 
 (defn- clamp01
   [v]
-  (-> (double (or v 0)) (max 0.0) (min 1.0)))
+  (-> (geom/finite v 0.0) (max 0.0) (min 1.0)))
 
 (defn color->hex
   "The penpot hex of a Figma `{r g b}` color with components in [0, 1]."
@@ -138,8 +139,8 @@
         [sx sy] (geom/apply-point inv (if (= type :radial) [0.5 0.5] [0.0 0.5]))
         [ex ey] (geom/apply-point inv [1.0 0.5])
         [wx wy] (geom/apply-point inv [0.5 1.0])
-        w    (max (double width) 1.0)
-        h    (max (double height) 1.0)
+        w    (max (geom/finite width 1.0) 1.0)
+        h    (max (geom/finite height 1.0) 1.0)
         len  (fn [ax ay bx by] (Math/hypot (* (- bx ax) w) (* (- by ay) h)))
         main (len sx sy ex ey)
         side (len sx sy wx wy)]
@@ -240,7 +241,7 @@
 
 (defn- strokes
   [ctx view]
-  (let [weight (double (or (:strokeWeight view) 1))
+  (let [weight (max 0.0 (geom/finite (:strokeWeight view) 1.0))
         align  (get stroke-alignments (:strokeAlign view) :center)
         dashed (seq (:dashPattern view))]
     (when (:borderStrokeWeightsIndependent view)
@@ -252,8 +253,8 @@
                                        :stroke-style (if dashed :dashed :solid)
                                        :stroke-alignment align
                                        :stroke-width weight)
-                          dashed (assoc :stroke-dash (double (first dashed))
-                                        :stroke-gap (double (or (second dashed) (first dashed))))))))
+                          dashed (assoc :stroke-dash (geom/finite (first dashed))
+                                        :stroke-gap (geom/finite (or (second dashed) (first dashed))))))))
               (visible-paints (:strokePaints view)))
         (rseq)
         (vec)
@@ -280,10 +281,10 @@
               (update out :shadow (fnil conj [])
                       {:id       (uuid/next)
                        :style    (if (= type :DROP_SHADOW) :drop-shadow :inner-shadow)
-                       :offset-x (double (:x offset 0))
-                       :offset-y (double (:y offset 0))
-                       :blur     (max 0.0 (double (or radius 0)))
-                       :spread   (double (or spread 0))
+                       :offset-x (geom/finite (:x offset))
+                       :offset-y (geom/finite (:y offset))
+                       :blur     (max 0.0 (geom/finite radius))
+                       :spread   (geom/finite spread)
                        :hidden   (false? visible)
                        :color    {:color   (color->hex color)
                                   :opacity (clamp01 (:a color 1))}})
@@ -291,13 +292,13 @@
               :FOREGROUND_BLUR
               (assoc out :blur {:id     (uuid/next)
                                 :type   :layer-blur
-                                :value  (max 0.0 (double (or radius 0)))
+                                :value  (max 0.0 (geom/finite radius))
                                 :hidden (false? visible)})
 
               :BACKGROUND_BLUR
               (assoc out :background-blur {:id     (uuid/next)
                                            :type   :background-blur
-                                           :value  (max 0.0 (double (or radius 0)))
+                                           :value  (max 0.0 (geom/finite radius))
                                            :hidden (false? visible)})
 
               (do
@@ -314,7 +315,7 @@
 
 (defn- radius
   [view]
-  (let [r      (fn [v] (max 0.0 (double (or v 0))))
+  (let [r      (fn [v] (max 0.0 (geom/finite v)))
         all    (r (:cornerRadius view))]
     (if (:rectangleCornerRadiiIndependent view)
       {:r1 (r (:rectangleTopLeftCornerRadius view all))
@@ -343,8 +344,8 @@
 
 (defn- size-of
   [view]
-  [(max 0.01 (double (get-in view [:size :x] 0)))
-   (max 0.01 (double (get-in view [:size :y] 0)))])
+  [(max 0.01 (geom/finite (get-in view [:size :x])))
+   (max 0.01 (geom/finite (get-in view [:size :y])))])
 
 (defn- rect-geometry
   "The penpot geometry of a rect-like node: a box of the size of the
@@ -408,12 +409,14 @@
     (report! ctx view "grid auto layout imported as fixed positions"))
   (when (flex? view)
     (let [row?     (= :HORIZONTAL (:stackMode view))
-          spacing  (max 0.0 (double (or (:stackSpacing view) 0)))
-          counter  (max 0.0 (double (or (:stackCounterSpacing view) 0)))
-          left     (double (or (:stackHorizontalPadding view) 0))
-          top      (double (or (:stackVerticalPadding view) 0))
-          right    (double (or (:stackPaddingRight view) left))
-          bottom   (double (or (:stackPaddingBottom view) top))
+          spacing  (max 0.0 (geom/finite (:stackSpacing view)))
+          ;; a counter gap that is not set (NaN in the file) follows the
+          ;; main gap, as it does in Figma
+          counter  (max 0.0 (geom/finite (:stackCounterSpacing view) spacing))
+          left     (geom/finite (:stackHorizontalPadding view))
+          top      (geom/finite (:stackVerticalPadding view))
+          right    (geom/finite (:stackPaddingRight view) left)
+          bottom   (geom/finite (:stackPaddingBottom view) top)
           own      (own-sizing view)]
       (when (= :BASELINE (:stackCounterAlignItems view))
         (report! ctx view "baseline alignment imported as start"))
@@ -429,7 +432,10 @@
                                  :p3 (max 0.0 bottom) :p4 (max 0.0 left)}
         :layout-justify-content (get justify (:stackPrimaryAlignItems view) :start)
         :layout-align-items     (get align (:stackCounterAlignItems view) :start)
-        :layout-align-content   :start
+        ;; "auto" counter spacing of a wrapping layout spreads the lines
+        :layout-align-content   (if (= :SPACE_BETWEEN (:stackCounterAlignContent view))
+                                  :space-between
+                                  :start)
         :layout-wrap-type       (if (= :WRAP (:stackWrap view)) :wrap :nowrap)
         :layout-item-h-sizing   (:h own)
         :layout-item-v-sizing   (:v own)}))))
@@ -439,7 +445,7 @@
   [parent view]
   (when (flex? parent)
     (let [row?    (= :HORIZONTAL (:stackMode parent))
-          grow    (pos? (double (or (:stackChildPrimaryGrow view) 0)))
+          grow    (pos? (geom/finite (:stackChildPrimaryGrow view)))
           stretch (= :STRETCH (:stackChildAlignSelf view))
           main    (if grow :fill :fix)
           cross   (if stretch :fill :fix)
@@ -490,7 +496,7 @@
 
 (defn- number-units
   [{:keys [value units]}]
-  [(double (or value 0)) units])
+  [(geom/finite value) units])
 
 (defn- format-number
   [v]
@@ -503,7 +509,7 @@
   [ctx view style]
   (let [style     (merge view style)
         family    (get-in style [:fontName :family] "Inter")
-        font-size (max 1.0 (double (or (:fontSize style) 12)))
+        font-size (max 1.0 (geom/finite (:fontSize style) 12.0))
         [lh lhu]  (number-units (:lineHeight style))
         [ls lsu]  (number-units (:letterSpacing style))
         fills     (let [paints (visible-paints (:fillPaints style))]
@@ -976,9 +982,16 @@
         (keep-name! ctx id (:name view))
         (count! ctx :texts)))))
 
-(defn- map-view!
-  "Map one view and its subtree under the current parent of the builder.
-  `abs` is the absolute transform of the parent and `parent` its view."
+(defn- failure-reason
+  "A short reason for a node penpot rejected: the hint of the error and,
+  for a schema check, the first attribute that failed."
+  [cause]
+  (let [data (ex-data cause)
+        in   (some-> data ::sm/explain :errors first :in)]
+    (str "skipped, penpot rejected it: " (or (:hint data) (ex-message cause) (class cause))
+         (when (seq in) (str " at " (str/join " " (map #(if (keyword? %) (name %) (str %)) in)))))))
+
+(defn- map-view*
   [ctx parent-abs parent view]
   (let [abs (geom/multiply parent-abs (geom/from-fig (:transform view)))]
     (case (kind view)
@@ -988,6 +1001,24 @@
       :skip        (count! ctx :skipped)
       :unsupported (placeholder! ctx abs parent view (str "node type " (type-name view) " not supported"))
       (map-shape! ctx abs parent view))))
+
+(defn- map-view!
+  "Map one view and its subtree under the current parent of the builder.
+  `abs` is the absolute transform of the parent and `parent` its view.
+
+  A node the builder rejects does not fail the file: the builder state
+  goes back to what it was before the node, so the node and its subtree
+  are left out, and the report says why."
+  [ctx parent-abs parent view]
+  (let [state  @(:state ctx)
+        report @(:report ctx)]
+    (try
+      (map-view* ctx parent-abs parent view)
+      (catch Exception cause
+        (vreset! (:state ctx) state)
+        (vreset! (:report ctx) report)
+        (report! ctx view (failure-reason cause))
+        (count! ctx :failed)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; STYLES

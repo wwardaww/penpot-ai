@@ -120,6 +120,8 @@
    (enum "StackJustify" "MIN" "CENTER" "MAX" "SPACE_EVENLY" "SPACE_BETWEEN")
    (enum "StackSize" "FIXED" "RESIZE_TO_FIT" "RESIZE_TO_FIT_WITH_IMPLICIT_SIZE")
    (enum "StackCounterAlign" "MIN" "CENTER" "MAX" "STRETCH" "AUTO" "BASELINE")
+   (enum "StackWrap" "NO_WRAP" "WRAP")
+   (enum "StackCounterAlignContent" "AUTO" "SPACE_BETWEEN")
    (enum "ConstraintType" "MIN" "CENTER" "MAX" "STRETCH" "SCALE")
    (enum "BlendMode" "PASS_THROUGH" "NORMAL" "DARKEN" "MULTIPLY")
    (enum "BooleanOperation" "UNION" "INTERSECT" "SUBTRACT" "XOR")
@@ -168,6 +170,8 @@
             ["stackPrimaryAlignItems" "StackJustify"] ["stackCounterAlignItems" "StackAlign"]
             ["stackPrimarySizing" "StackSize"] ["stackCounterSizing" "StackSize"]
             ["stackChildPrimaryGrow" :float] ["stackChildAlignSelf" "StackCounterAlign"]
+            ["stackWrap" "StackWrap"] ["stackCounterSpacing" :float]
+            ["stackCounterAlignContent" "StackCounterAlignContent"]
             ["horizontalConstraint" "ConstraintType"] ["verticalConstraint" "ConstraintType"]
             ["fillGeometry" "Path" true] ["strokeGeometry" "Path" true]
             ["vectorData" "VectorData"] ["booleanOperation" "BooleanOperation"]
@@ -525,3 +529,28 @@
   (let [{:keys [message image]} (medium-document)]
     (write-zip! (temp-file ".fig") (canvas message)
                 :images {(:hash image) (:bytes image)})))
+
+(defn wrap-document
+  "Two wrapping auto layout rows as Figma saves them: one whose counter
+  gap is not set, which the file stores as NaN, and one whose counter gap
+  is \"auto\"."
+  []
+  {:type :NODE_CHANGES
+   :sessionID 0
+   :nodeChanges
+   [(node {:id [0 0] :type :DOCUMENT :name "Document"})
+    (node {:id [0 1] :parent [0 0] :pos "a" :type :CANVAS :name "Page 1"})
+    (node {:id [1 1] :parent [0 1] :pos "a" :type :FRAME :name "Tags"
+           :size (size 200 100) :transform (at 0 0)
+           :stackMode :HORIZONTAL :stackWrap :WRAP
+           :stackSpacing 8.0 :stackCounterSpacing Double/NaN})
+    (node {:id [1 2] :parent [1 1] :pos "a" :type :RECTANGLE :name "Tag A"
+           :size (size 80 20) :transform (at 0 0)})
+    (node {:id [1 3] :parent [1 1] :pos "b" :type :RECTANGLE :name "Tag B"
+           :size (size 80 20) :transform (at 88 0)})
+    (node {:id [2 1] :parent [0 1] :pos "b" :type :FRAME :name "Chips"
+           :size (size 200 100) :transform (at 0 200)
+           :stackMode :HORIZONTAL :stackWrap :WRAP :stackSpacing 4.0
+           :stackCounterSpacing 12.0 :stackCounterAlignContent :SPACE_BETWEEN})
+    (node {:id [2 2] :parent [2 1] :pos "a" :type :ELLIPSE :name "Chip"
+           :size (size 20 20) :transform (at 0 0)})]})
