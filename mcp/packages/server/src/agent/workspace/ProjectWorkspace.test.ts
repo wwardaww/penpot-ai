@@ -95,3 +95,33 @@ test("the manager records the context in project.json", async () => {
     assert.equal(info?.projectName, "Shop");
     assert.deepEqual(info?.fileIds, ["file-1"]);
 });
+
+test("parallel writes of one metadata file never fail and keep the last value", async () => {
+    const workspace = new ProjectWorkspace(projectsDir, PROJECT_ID);
+    await workspace.ensure();
+
+    await Promise.all(Array.from({ length: 25 }, (_, i) => workspace.writeJson("project.json", { n: i })));
+
+    assert.deepEqual(await workspace.readJson("project.json", null), { n: 24 });
+});
+
+test("two tabs opening one project at once both get recorded", async () => {
+    const manager = new WorkspaceManager(projectsDir);
+    const context = {
+        fileName: "Landing",
+        projectId: PROJECT_ID,
+        projectName: "Shop",
+        teamId: "team-1",
+        pageId: "page-1",
+        persona: "designer" as const,
+        platform: "mobile" as const,
+    };
+
+    const [workspace] = await Promise.all([
+        manager.open({ ...context, fileId: "file-1" }),
+        manager.open({ ...context, fileId: "file-2" }),
+    ]);
+
+    const info = await workspace.readJson<{ fileIds: string[] } | null>("project.json", null);
+    assert.deepEqual([...(info?.fileIds ?? [])].sort(), ["file-1", "file-2"]);
+});

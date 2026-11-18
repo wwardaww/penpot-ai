@@ -24,6 +24,8 @@ export interface ProjectInfo {
 export class WorkspaceManager {
     private readonly logger = createLogger("WorkspaceManager");
     private readonly workspaces = new Map<string, Promise<ProjectWorkspace>>();
+    /** Pending `project.json` updates per project, so updates from two tabs never overlap. */
+    private readonly records = new Map<string, Promise<void>>();
 
     /**
      * @param projectsDir - folder holding the project folders
@@ -38,7 +40,7 @@ export class WorkspaceManager {
      */
     public async open(context: AgentContext): Promise<ProjectWorkspace> {
         const workspace = await this.get(context.projectId);
-        await this.recordContext(workspace, context);
+        await this.record(workspace, context);
         return workspace;
     }
 
@@ -63,6 +65,27 @@ export class WorkspaceManager {
         await workspace.ensure();
         this.logger.info("Project workspace ready: %s", workspace.root);
         return workspace;
+    }
+
+    /**
+     * Records the context in `project.json`, one update at a time per project. The file is
+     * metadata only: a failed write is logged and never fails the client's session.
+     */
+    private record(workspace: ProjectWorkspace, context: AgentContext): Promise<void> {
+        const key = workspace.projectId;
+        const previous = this.records.get(key) ?? Promise.resolve();
+        const next = previous
+            .then(() => this.recordContext(workspace, context))
+            .catch((error: unknown) => {
+                this.logger.warn("Could not update project.json of %s: %s", key, String(error));
+            });
+        this.records.set(key, next);
+        void next.then(() => {
+            if (this.records.get(key) === next) {
+                this.records.delete(key);
+            }
+        });
+        return next;
     }
 
     private async recordContext(workspace: ProjectWorkspace, context: AgentContext): Promise<void> {
