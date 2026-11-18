@@ -84,6 +84,11 @@ export interface RunnerOptions {
     permissions: ToolPermissionHandler;
     /** aborts the turn */
     signal?: AbortSignal;
+    /**
+     * Tools to approve up front for runners without a permission channel (`local-cli-spawn`),
+     * replacing their default list; runners that ask `permissions` for every use ignore it.
+     */
+    allowedTools?: readonly string[];
 }
 
 /**

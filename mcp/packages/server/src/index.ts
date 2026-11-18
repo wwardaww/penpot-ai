@@ -51,7 +51,14 @@ async function main(): Promise<void> {
         let daemon: PenforgeDaemon | undefined;
         if (penforge) {
             const { AgentConfig, PenforgeDaemon } = await import("./agent/PenforgeDaemon");
-            daemon = new PenforgeDaemon(AgentConfig.load(process.env, `http://${server.host}:${server.port}/mcp`));
+            const { BridgeSessionDirectory } = await import("./agent/tools/PluginSessions");
+            // one stray promise of a daemon service must never take the whole daemon down
+            process.on("unhandledRejection", (reason) => {
+                logger.error(reason instanceof Error ? reason : new Error(String(reason)), "Unhandled rejection");
+            });
+            daemon = new PenforgeDaemon(AgentConfig.load(process.env, `http://${server.host}:${server.port}/mcp`), {
+                pluginSessions: new BridgeSessionDirectory(server.pluginBridge),
+            });
             await daemon.start();
         }
 

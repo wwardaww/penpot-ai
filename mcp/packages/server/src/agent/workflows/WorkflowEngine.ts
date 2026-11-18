@@ -167,6 +167,7 @@ export class WorkflowEngine {
                 attachments: request.attachments,
                 workflow: request.promptName ?? workflowName,
                 systemPromptAppend: request.systemPromptAppend,
+                allowedTools: filter?.allowedTools,
             }
         );
         for await (const event of events) {

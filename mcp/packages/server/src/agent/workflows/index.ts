@@ -23,3 +23,4 @@ export { workflow as designMdExport } from "./design-md-export";
 export { workflow as buildPlan } from "./build-plan";
 export { workflow as buildRun } from "./build-run";
 export { workflow as publish } from "./publish";
+export { workflow as visualQa } from "./visual-qa";

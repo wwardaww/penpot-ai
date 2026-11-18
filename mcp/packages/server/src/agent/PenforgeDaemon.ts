@@ -9,10 +9,14 @@ import { PreviewService } from "./process/PreviewService";
 import { DownloadRegistry } from "./publish/DownloadRegistry";
 import { PublishServices } from "./publish/PublishServices";
 import { SecretStore } from "./publish/SecretStore";
+import { ChromeScreenshotterFactory } from "./qa/ChromeScreenshotter";
+import { DevServerPreviewAccess } from "./qa/PreviewAccess";
+import { VisualQaHost, type VisualQaServices } from "./qa/QaRun";
 import { PromptRegistry } from "./prompts/promptRegistry";
 import type { ClaudeRunner } from "./runner/ClaudeRunner";
 import { createRunner } from "./runner/createRunner";
 import { McpToolsClient } from "./tools/McpToolsClient";
+import type { PluginSessionDirectory } from "./tools/PluginSessions";
 import { WorkflowEngine } from "./workflows/WorkflowEngine";
 import { WorkflowRegistry } from "./workflows/WorkflowRegistry";
 import { WorkspaceManager } from "./workspace/WorkspaceManager";
@@ -28,6 +32,8 @@ export interface PenforgeDaemonParts {
     devServers?: DevServerManager;
     /** services of the `publish` workflow (W20); built from the config when unset */
     publish?: (downloads: DownloadRegistry, downloadUrl: (id: string) => string) => PublishServices;
+    /** MCP plugin sessions of this process, to route tabs that did not send their session */
+    pluginSessions?: PluginSessionDirectory;
     authTimeoutMs?: number;
 }
 
@@ -46,6 +52,7 @@ export class PenforgeDaemon {
     private readonly workflows: WorkflowEngine;
     private readonly tools: McpToolsClient | null;
     private readonly previews: PreviewService;
+    private readonly visualQa: VisualQaServices;
     private readonly server: AgentServer;
     private readonly publish: PublishServices;
 
@@ -65,8 +72,18 @@ export class PenforgeDaemon {
         this.chat = new ChatService(turns);
         this.workflows = new WorkflowEngine(this.registry, turns);
         const devServers = parts.devServers ?? new DevServerManager();
+        const workspaces = new WorkspaceManager(config.projectsDir);
         this.previews = new PreviewService(devServers);
         const downloads = new DownloadRegistry();
+        // W18: the visual QA (workflow and chat tool) uses the same dev servers as the preview
+        this.visualQa = {
+            previews: new DevServerPreviewAccess(devServers, workspaces),
+            browsers: new ChromeScreenshotterFactory(),
+            clientForMcpSession: async (mcpSessionId) => {
+                const client = this.server.clientForMcpSession(mcpSessionId);
+                return client ? client.setup() : null;
+            },
+        };
         this.server = new AgentServer(
             config,
             this.token,
@@ -75,8 +92,9 @@ export class PenforgeDaemon {
                 chat: this.chat,
                 workflows: this.workflows,
                 previews: this.previews,
-                workspaces: new WorkspaceManager(config.projectsDir),
+                workspaces,
                 tools: this.tools,
+                pluginSessions: parts.pluginSessions,
                 authTimeoutMs: parts.authTimeoutMs ?? 10_000,
             },
             () => ({
@@ -109,6 +127,7 @@ export class PenforgeDaemon {
      */
     public async start(): Promise<void> {
         await this.server.start();
+        VisualQaHost.install(this.visualQa);
         this.logger.info("Penforge home: %s; runner: %s", this.config.home, this.runner.kind);
         if (this.config.requirePairing) {
             this.logger.info("Pair Penforge with your browser: %s", this.pairUrl);
@@ -124,6 +143,8 @@ export class PenforgeDaemon {
         this.workflows.cancelAll();
         this.chat.cancelAll();
         this.runner.cancel();
+        // closes the QA browsers and releases their dev servers before those stop
+        await VisualQaHost.shutdown(this.visualQa);
         await this.previews.stopAll();
         await this.server.stop();
         PublishServices.uninstall(this.publish);

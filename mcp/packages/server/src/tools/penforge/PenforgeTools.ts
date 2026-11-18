@@ -10,6 +10,7 @@ import { ListCanvasCommentsTool } from "./ListCanvasCommentsTool";
 import { PenforgeOverviewTool } from "./PenforgeOverviewTool";
 import { ResolveCanvasCommentTool } from "./ResolveCanvasCommentTool";
 import { UpdateDesignNodeTool } from "./UpdateDesignNodeTool";
+import { VisualQaTool } from "../../agent/qa/VisualQaTool";
 
 /**
  * Factory of the Penforge typed MCP tools (architecture §6).
@@ -47,6 +48,8 @@ export class PenforgeTools {
             new GenerateCodeHintsTool(mcpServer),
             // W20: lets the AI chat open the Share panel
             new OpenPublishTool(mcpServer),
+            // W18: visual QA for the AI chat; answers only while the Penforge daemon runs
+            new VisualQaTool(mcpServer),
         ];
     }
 }

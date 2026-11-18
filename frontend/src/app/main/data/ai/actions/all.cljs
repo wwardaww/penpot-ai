@@ -26,4 +26,6 @@
    ;; W19: AI history dialog; requires app.main.data.ai.actions.checkpoints
    [app.main.ui.workspace.ai.checkpoints.history]
    ;; W20: Share panel modal (ZIP, GitHub, Vercel, Netlify, phone, accounts)
-   [app.main.ui.workspace.ai.publish.share]))
+   [app.main.ui.workspace.ai.publish.share]
+   ;; W18: visual QA report panel; its events ns registers :ai/visual-qa
+   [app.main.ui.workspace.ai.qa.panel]))

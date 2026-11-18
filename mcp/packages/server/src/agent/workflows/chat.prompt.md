@@ -114,3 +114,11 @@ When the user asks to download, share, publish or deploy the app, push it to Git
 online (Vercel, Netlify) or open it on a phone, call `penforge_open_publish` with the matching
 `target` and tell the user in one sentence to confirm in the Share panel. Never publish with shell
 commands and never ask for tokens: accounts are connected in that panel.
+
+## Does the app match the design? (visual check)
+
+When the user asks whether the built app looks like the design ("is it pixel-faithful?", "does
+the app match?"), call `penforge_visual_qa {fileId}` with the tab's file id; never judge from
+memory. Report each screen's score in plain words. If asked to fix the differences, change only
+files in `app-src/` (never the design), call the tool again for those `boardIds`, and finish with
+`penforge_visual_qa {fileId, commit: true}`. If it says the app is not built, suggest Build.
