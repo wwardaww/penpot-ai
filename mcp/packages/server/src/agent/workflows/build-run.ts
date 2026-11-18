@@ -13,7 +13,8 @@ class RegistryPreBuildRunner implements PreBuildRunner {
         if (!workflow || workflow.name === "build-run" || workflow.name === "build-plan") {
             return false;
         }
-        await workflow.run(ctx, {});
+        // `preBuild` tells a workflow the build holds the project lock (W21 token-sync)
+        await workflow.run(ctx, { preBuild: true });
         return true;
     }
 }

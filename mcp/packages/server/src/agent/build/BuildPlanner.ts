@@ -178,7 +178,15 @@ export class BuildPlanner {
         const stack = StackSchema.parse({
             ...reply.stack,
             platform: this.ctx.context.platform,
-            preBuild: previous?.preBuild ?? reply.stack.preBuild?.filter((id) => /^[a-z0-9][a-z0-9-]*$/.test(id)) ?? [],
+            // a first plan syncs the design tokens into the theme before building (W21)
+            preBuild: previous?.preBuild ?? [
+                ...new Set([
+                    ...(reply.stack.preBuild?.filter((id) => /^[a-z0-9][a-z0-9-]*$/.test(id)) ?? []),
+                    "token-sync",
+                ]),
+            ],
+            themeFile: previous?.themeFile,
+            themeFormat: previous?.themeFormat,
         });
         const screens = this.planScreens(design, reply.screens);
         return {

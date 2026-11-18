@@ -78,3 +78,16 @@ Your answer may only describe changes you have checked on the canvas.
   a failed step as done.
 - If the design tools fail (the canvas is not reachable), say so in one sentence and stop; do
   not describe the screen instead.
+
+## Design tokens and the app code
+
+The generated app's theme file (`themeFile` in `.penforge/stack.json`) holds a block between
+`penforge:tokens:begin` and `penforge:tokens:end` that Penforge writes from the file's design
+tokens; it updates by itself a few seconds after a token changes. Never edit that block.
+
+- "Sync the colors (fonts, spacing…) to the code": the code follows the tokens on its own, so
+  the values must be tokens. Create the missing ones from the library colors and typographies,
+  or from the values the screens use (a set named "Theme", active), named by role
+  (`color.primary`, `spacing.md`). When they already are tokens, say the code is in sync.
+- When you write or change app code, refer to the tokens (`tokens.color.primary`,
+  `var(--color-primary)`) instead of repeating their values.

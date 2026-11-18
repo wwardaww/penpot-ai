@@ -10,6 +10,7 @@ import { type BuildStep, BuildText } from "./BuildText";
 import { type CommandExecutor, type CommandOutcome, ProcessCommandExecutor } from "./CommandExecutor";
 import { JsonReply } from "./JsonReply";
 import { Routes } from "./Routes";
+import { TokenThemeNote } from "../tokens/TokenThemeNote";
 
 /** Developer edits of a plan, sent with `build-run`. */
 export const BuildOverridesSchema = z.object({
@@ -92,6 +93,8 @@ export class AppBuilder {
     private readonly maxFixAttempts: number;
     /** Claude session shared by the turns of one build */
     private session: string | undefined;
+    /** note on the generated design token theme, added to the build prompts (W21) */
+    private themeNote = "";
 
     constructor(
         private readonly ctx: WorkflowContext,
@@ -144,6 +147,7 @@ export class AppBuilder {
 
         let stack = plan.stack;
         await this.runPreBuild(stack);
+        this.themeNote = await TokenThemeNote.forBuild(this.ctx.workspace);
         const start = await this.git.snapshot();
         if (full) {
             stack = await this.scaffold(plan, screens, overrides.data);
@@ -207,9 +211,12 @@ export class AppBuilder {
         this.step("scaffold", "running", stackName);
         const result = await this.turn(this.scaffoldPrompt(plan, screens, overrides));
         const reply = JsonReply.parse(result.text, AppBuilder.ScaffoldReplySchema);
+        // the theme file recorded by the pre-build token sync (W21) stays recorded
+        const current = await this.files.readStack();
+        const theme = { themeFile: current?.themeFile, themeFormat: current?.themeFormat };
         const stack = reply
-            ? StackSchema.parse({ ...reply.stack, platform: plan.platform, preBuild: plan.stack.preBuild })
-            : plan.stack;
+            ? StackSchema.parse({ ...reply.stack, platform: plan.platform, preBuild: plan.stack.preBuild, ...theme })
+            : { ...plan.stack, ...theme };
         if (!reply) {
             this.log("The scaffold reply had no valid stack block; keeping the planned stack.");
         }
@@ -456,6 +463,9 @@ export class AppBuilder {
     }
 
     private addNotes(lines: string[], planNotes: string, developerNotes: string | undefined): void {
+        if (this.themeNote) {
+            lines.push("", this.themeNote);
+        }
         if (planNotes.trim()) {
             lines.push("", "Plan notes:", planNotes.trim());
         }
