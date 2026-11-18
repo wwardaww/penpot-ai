@@ -130,7 +130,8 @@ export class PenforgeDaemon {
         VisualQaHost.install(this.visualQa);
         this.logger.info("Penforge home: %s; runner: %s", this.config.home, this.runner.kind);
         if (this.config.requirePairing) {
-            this.logger.info("Pair Penforge with your browser: %s", this.pairUrl);
+            this.token.announce(this.config.publicUri);
+            this.logger.info("Pairing URL printed on the console: %s", this.token.maskedPairUrl(this.config.publicUri));
         } else {
             this.logger.info("Ready: open %s, the AI tab connects by itself", this.config.publicUri);
         }

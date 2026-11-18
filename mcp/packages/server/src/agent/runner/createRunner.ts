@@ -2,7 +2,7 @@ import type { AgentConfig } from "../AgentConfig";
 import { ApiKeyRunner } from "./ApiKeyRunner";
 import type { ClaudeRunner } from "./ClaudeRunner";
 import { CliProcessRunner } from "./CliProcessRunner";
-import { FakeRunner } from "./FakeRunner";
+import { FakeRunner, ReplayScript } from "./FakeRunner";
 import { LocalCliRunner } from "./LocalCliRunner";
 
 /**
@@ -20,6 +20,6 @@ export function createRunner(config: AgentConfig): ClaudeRunner {
         case "api-key":
             return new ApiKeyRunner();
         case "fake":
-            return new FakeRunner();
+            return new FakeRunner(config.fakeRecording ? ReplayScript.fromFile(config.fakeRecording) : undefined);
     }
 }

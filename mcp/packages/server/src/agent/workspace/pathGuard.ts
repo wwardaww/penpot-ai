@@ -19,7 +19,9 @@ export class PathOutsideRootError extends Error {
  *
  * A path is accepted only if, after resolving it against the root, following symbolic links and
  * junctions of its existing part, it lies inside the root. On Windows, the comparison ignores case,
- * and UNC, device and drive-relative paths are rejected outright.
+ * and UNC, device and drive-relative paths are rejected outright, as are reserved device names
+ * (`NUL`, `CON`, `COM1.txt`, …), which open a device instead of a file in any folder, and
+ * alternate data streams (`file.txt:stream`).
  */
 export class PathGuard {
     private readonly root: string;
@@ -83,10 +85,28 @@ export class PathGuard {
 
     /**
      * Checks for UNC (`\\server\share`, `//server/share`), device (`\\?\`, `\\.\`) and drive-relative
-     * (`C:foo`) paths.
+     * (`C:foo`) paths, alternate data streams (`file.txt:stream`) and reserved device names.
      */
     private static isSpecialWindowsPath(candidate: string): boolean {
-        return /^[\\/]{2}/.test(candidate) || /^[a-zA-Z]:(?![\\/])/.test(candidate);
+        if (/^[\\/]{2}/.test(candidate) || /^[a-zA-Z]:(?![\\/])/.test(candidate)) {
+            return true;
+        }
+        if (candidate.replace(/^[a-zA-Z]:/, "").includes(":")) {
+            return true;
+        }
+        return candidate.split(/[\\/]/).some((segment) => PathGuard.isReservedWindowsName(segment));
+    }
+
+    /**
+     * Checks for a device name (`NUL`, `con.txt`, `COM1 .log`); Windows opens the device whatever
+     * the folder, extension or trailing dots and spaces.
+     */
+    private static isReservedWindowsName(segment: string): boolean {
+        const stem = segment
+            .split(".")[0]
+            .replace(/[ .]+$/, "")
+            .toLowerCase();
+        return /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³]|conin\$|conout\$)$/.test(stem);
     }
 
     private isInside(root: string, target: string): boolean {

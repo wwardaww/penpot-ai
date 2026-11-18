@@ -26,6 +26,7 @@ interface ConfigFile {
     claudePath?: string;
     model?: string;
     requirePairing?: boolean;
+    fakeRecording?: string;
 }
 
 /**
@@ -63,8 +64,15 @@ export class AgentConfig {
      * cannot forge, so a page of the Penforge frontend connects without a manual pairing step.
      * Penpot plugins share that origin but get no WebSocket in their sandbox, and the token is
      * never handed to a page. Turn it on when the daemon is reachable by other people (hosting).
+     * It is forced on when {@link host} is not a loopback address: programs on the network can
+     * send any `Origin` header, so the Origin check alone protects only against web pages.
      */
     public readonly requirePairing: boolean;
+    /**
+     * Recording the `fake` runner replays (`PENFORGE_FAKE_RECORDING`, a JSON file of recorded
+     * turns, see `ReplayScript`); the fake runner echoes when unset.
+     */
+    public readonly fakeRecording?: string;
 
     constructor(values: {
         home: string;
@@ -78,6 +86,7 @@ export class AgentConfig {
         fixedToken?: string;
         mcpUrl: string;
         requirePairing?: boolean;
+        fakeRecording?: string;
     }) {
         this.home = values.home;
         this.host = values.host;
@@ -89,7 +98,8 @@ export class AgentConfig {
         this.model = values.model;
         this.fixedToken = values.fixedToken;
         this.mcpUrl = values.mcpUrl;
-        this.requirePairing = values.requirePairing ?? false;
+        this.requirePairing = (values.requirePairing ?? false) || !AgentConfig.isLoopbackHost(values.host);
+        this.fakeRecording = values.fakeRecording;
     }
 
     /**
@@ -122,6 +132,7 @@ export class AgentConfig {
             fixedToken: AgentConfig.nonBlank(env.PENFORGE_TOKEN),
             mcpUrl,
             requirePairing: AgentConfig.flag(env.PENFORGE_REQUIRE_PAIRING) ?? file.requirePairing ?? false,
+            fakeRecording: AgentConfig.nonBlank(env.PENFORGE_FAKE_RECORDING) ?? file.fakeRecording,
         });
     }
 
@@ -132,6 +143,19 @@ export class AgentConfig {
      */
     public static normalizeOrigin(origin: string): string {
         return origin.trim().replace(/\/+$/, "").toLowerCase();
+    }
+
+    /**
+     * Checks whether a bind address only accepts connections from this machine.
+     *
+     * @param host - a host name or IP address
+     */
+    public static isLoopbackHost(host: string): boolean {
+        const value = host
+            .trim()
+            .toLowerCase()
+            .replace(/^\[(.*)\]$/, "$1");
+        return value === "localhost" || value === "::1" || /^127(\.\d{1,3}){3}$/.test(value);
     }
 
     /** Folder holding the per-project folders. */
