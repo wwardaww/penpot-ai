@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { Tool } from "../../Tool";
-import type { ToolResponse } from "../../ToolResponse";
+import { TextResponse, type ToolResponse } from "../../ToolResponse";
 import type { PenpotMcpServer } from "../../PenpotMcpServer";
 import { PenforgePluginTool } from "./PenforgePluginTool";
+import { NodePropertiesPage } from "./NodePropertiesPage";
 import { PenforgeSchemas } from "./PenforgeSchemas";
 
 /**
@@ -21,12 +22,29 @@ export class GetNodePropertiesArgs {
                 "Tree levels returned in full, starting with the node itself. 1 (default) = the node plus a " +
                     "summary (id, name, type, visible) of its children; 2 = the node and its children in full."
             ),
+        childOffset: z
+            .number()
+            .int()
+            .min(0)
+            .default(0)
+            .describe("Index of the first child to return; use childrenPage.nextOffset of the previous answer."),
+        childLimit: z
+            .number()
+            .int()
+            .min(1)
+            .max(NodePropertiesPage.MAX_LIMIT)
+            .default(NodePropertiesPage.DEFAULT_LIMIT)
+            .describe("Largest number of children to return in one answer."),
         sessionId: Tool.SESSION_ID_SCHEMA,
     };
 
     nodeId!: string;
 
     depth: number = 1;
+
+    childOffset: number = 0;
+
+    childLimit: number = NodePropertiesPage.DEFAULT_LIMIT;
 
     sessionId?: string;
 }
@@ -49,7 +67,10 @@ export class GetNodePropertiesTool extends PenforgePluginTool<GetNodePropertiesA
             "width, height, rotation), constraints, layout (flex/grid of boards, layoutChild sizing and " +
             "margins), fills, strokes, shadows, blur, radius, text content with typography and styled " +
             "spans, applied tokens, component/variant info, prototype interactions and children. " +
-            "Numbers are rounded to 2 decimals. Prefer this over execute_code for reading a node."
+            "Numbers are rounded to 2 decimals. Prefer this over execute_code for reading a node. " +
+            "Large nodes come in pages of children: when the answer has childrenPage.nextOffset, call " +
+            "again with childOffset set to it; childrenPage.summarized means the children were cut to " +
+            "summaries to fit, so read the ones you need on their own."
         );
     }
 
@@ -59,6 +80,6 @@ export class GetNodePropertiesTool extends PenforgePluginTool<GetNodePropertiesA
             { nodeId: args.nodeId, depth: args.depth ?? 1 },
             args.sessionId
         );
-        return PenforgePluginTool.json(data);
+        return new TextResponse(NodePropertiesPage.render(data, args.childOffset ?? 0, args.childLimit));
     }
 }
