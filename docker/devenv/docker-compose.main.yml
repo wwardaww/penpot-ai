@@ -19,10 +19,17 @@ services:
     volumes:
       - "user_data:/home/penpot/"
       - "${PENPOT_SOURCE_PATH}:/home/penpot/penpot:z"
+      # Penforge: on Windows PENPOT_SOURCE_PATH is a Linux-side mirror of
+      # the checkout (scripts/penforge-devenv-mirror). The checkout itself,
+      # with the agents' .claude/worktrees, stays reachable here.
+      - "${PENFORGE_HOST_REPO:-${PENPOT_SOURCE_PATH}}:/home/penpot/host-repo"
       # Penforge: per-machine TLS cert for https://localhost:3449 signed by a
       # localhost-only local CA (see wiki runbook). Generated, never committed.
       - "./files/local-tls/localhost-fullchain.crt:/home/selfsigned.crt:ro"
       - "./files/local-tls/localhost.key:/home/selfsigned.key:ro"
+      # Penforge: use the repo's start script (warm start, optional
+      # Storybook) without rebuilding the devenv image.
+      - "./files/start-tmux.sh:/home/start-tmux.sh:ro"
       # Penforge: heavy build folders live on the Linux side (WSL ext4 on
       # Windows) instead of the slow host file-sharing bridge. Created by
       # scripts/penforge-devenv-cache, which manage.sh run-devenv calls.
@@ -80,6 +87,11 @@ services:
       # fails with nitrate-unavailable); enable the Penforge AI features.
       # enable-mcp stays off: the MCP server runs on the host daemon.
       - PENPOT_FLAGS=disable-admin-console enable-ai
+
+      # Penforge: devenv start keeps build caches and skips Storybook.
+      # Set to 1 on the host before `./manage.sh run-devenv` to change it.
+      - PENFORGE_CLEAN_BUILD=${PENFORGE_CLEAN_BUILD:-0}
+      - PENFORGE_STORYBOOK=${PENFORGE_STORYBOOK:-0}
 
       # SMTP setup (shared infra service; identical across instances)
       - PENPOT_SMTP_ENABLED=true

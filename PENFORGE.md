@@ -43,8 +43,18 @@ Windows notes:
 ./manage.sh run-devenv --attach  # tmux: 0 frontend, 2 exporter, 3 backend
 ```
 
-- Wait for `[:main] Build completed` in tmux window 0. The first build is slow;
-  later starts are faster.
+- Wait for `[:main] Build completed` in tmux window 0. Starts keep the
+  shadow-cljs and wasm caches and only rebuild what changed (about a minute).
+- On Windows the repository sits on an NTFS drive, which the container can
+  only read through a slow bridge. `run-devenv` therefore copies the working
+  tree to `~/.penforge-devenv/ws0/source` in WSL and starts a hidden Windows
+  watcher (`scripts/penforge-mirror.mjs`) that copies every edit there within
+  a second. Keep editing the Windows checkout; never edit `~/penpot` inside
+  the container. Needs Node.js on Windows. `PENFORGE_MIRROR=0` turns it off.
+- If the build looks stale or broken, start once with
+  `PENFORGE_CLEAN_BUILD=1 ./manage.sh run-devenv` to wipe the caches.
+- Storybook is off by default. To run it (port 3451):
+  `PENFORGE_STORYBOOK=1 ./manage.sh run-devenv`.
 - Detach with `Ctrl+b d`. Do not kill the tmux session, it runs the app.
 - App: https://localhost:3449 (or http://localhost:3450).
 - The devenv backend runs with `disable-admin-console enable-ai`
@@ -92,5 +102,6 @@ devenv container's own MCP server is published on 14401 so it does not clash.
 - **Unstyled app / `ui.css` 404**: fixed in the ui package build; on old
   checkouts copy `frontend/packages/ui/dist/ui.css` to
   `frontend/resources/public/css/ui.css`.
-- **Storybook errors in tmux window 0** (`Failed to resolve import ... target/storybook`):
-  harmless until the storybook build finishes; the app does not need storybook.
+- **Storybook errors** (`Failed to resolve import ... target/storybook`, only with
+  `PENFORGE_STORYBOOK=1`): harmless until the storybook build finishes; the app
+  does not need Storybook.

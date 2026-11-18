@@ -270,6 +270,11 @@ function instance-compose {
     local source_path
     if [[ "$instance" == "ws0" ]]; then
         source_path="$PWD"
+        # Penforge: on a Windows drive, mount the Linux-side mirror kept by
+        # scripts/penforge-devenv-mirror instead of the slow 9p bridge.
+        if ./scripts/penforge-devenv-mirror --check; then
+            source_path="${HOME}/.penforge-devenv/ws0/source"
+        fi
     else
         source_path="$(workspace-path "$instance")"
     fi
@@ -295,6 +300,9 @@ function instance-compose {
     env -i HOME="$HOME" PATH="$PATH" PWD="$PWD" \
         CURRENT_USER_ID="${CURRENT_USER_ID:-$(id -u)}" \
         PENPOT_SOURCE_PATH="$source_path" \
+        PENFORGE_HOST_REPO="$PWD" \
+        PENFORGE_CLEAN_BUILD="${PENFORGE_CLEAN_BUILD:-0}" \
+        PENFORGE_STORYBOOK="${PENFORGE_STORYBOOK:-0}" \
         DEVENV_TAG="$DEVENV_TAG" \
         "${opencode_env[@]}" \
         "${overrides[@]}" \
@@ -1009,6 +1017,10 @@ function run-devenv {
     ./scripts/penforge-devenv-tls
     # Penforge: Linux-side folders for heavy build output (see the script).
     ./scripts/penforge-devenv-cache
+    # Penforge: fast Linux-side copy of the source on Windows drives.
+    if [[ "$target" == "ws0" ]]; then
+        ./scripts/penforge-devenv-mirror
+    fi
     ensure-devenv-network
     ensure-infra-up
 

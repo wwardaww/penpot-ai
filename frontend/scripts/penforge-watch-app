@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+
+# Penforge: warm-start variant of `pnpm run watch:app` for the devenv.
+#
+# Upstream `watch:app` wipes the shadow-cljs cache and runs `cargo clean`
+# on every start, and also compiles the :storybook build. With the caches
+# kept on the WSL disk that turns a ~1 min restart into ~10 min. This
+# keeps the caches and only builds what the app needs.
+#
+#   PENFORGE_CLEAN_BUILD=1  wipe the shadow-cljs and wasm caches first
+#                           (use it if the build looks stale or broken)
+#   PENFORGE_STORYBOOK=1    also watch the :storybook build
+
+set -ex
+
+pnpm install
+
+# The libs bundle needs the built ui and plugins-runtime packages. pnpm only
+# builds them (postinstall) when it installs something, so build them here
+# when their output is missing or older than their sources.
+stale() { # <dist-file> <src-dir>
+    [ ! -f "$1" ] || [ -n "$(find "$2" -newer "$1" -type f -print -quit)" ]
+}
+if stale ../plugins/libs/plugins-runtime/dist/index.js ../plugins/libs/plugins-runtime/src; then
+    (cd ../plugins/libs/plugins-runtime && pnpm install && pnpm run build)
+fi
+if stale packages/ui/dist/menu.js packages/ui/src; then
+    (cd packages/ui && pnpm run build)
+fi
+
+if [ "${PENFORGE_CLEAN_BUILD:-0}" = "1" ]; then
+    pnpm run clear:shadow-cache
+    pnpm run clear:wasm
+fi
+
+pnpm run build:wasm
+
+builds="main worker"
+if [ "${PENFORGE_STORYBOOK:-0}" = "1" ]; then
+    builds="$builds storybook"
+fi
+
+exec pnpm exec concurrently --kill-others-on-fail \
+     "pnpm run watch:app:assets" \
+     "clojure -M:dev:shadow-cljs watch $builds" \
+     "pnpm run watch:app:libs"

@@ -15,15 +15,20 @@
 
 set -euo pipefail
 
+# The checkout (with .claude/worktrees) is mounted at ~/host-repo; on
+# Windows ~/penpot is a Linux-side mirror without the worktrees.
+WORKTREES="/home/penpot/host-repo/.claude/worktrees"
+[[ -d "$WORKTREES" ]] || WORKTREES="/home/penpot/penpot/.claude/worktrees"
+
 if [[ $# -ne 1 ]]; then
     echo "usage: penforge-worktree-sync <worktree-name>" >&2
     echo "available:" >&2
-    ls -1 /home/penpot/penpot/.claude/worktrees/ >&2 || true
+    ls -1 "$WORKTREES" >&2 || true
     exit 2
 fi
 
 NAME="$1"
-SRC="/home/penpot/penpot/.claude/worktrees/$NAME"
+SRC="$WORKTREES/$NAME"
 DST="/home/penpot/worktrees/$NAME"
 
 if [[ ! -d "$SRC" ]]; then

@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# Penforge: give the devenv container a fast, Linux-side copy of the source.
+#
+# When the repository sits on a Windows drive (/mnt/<drive>/... in WSL), the
+# container reads it through the slow WSL 9p bridge (measured: reading the
+# frontend + common sources takes ~23 s there against ~0.05 s on ext4, and
+# the shadow-cljs watcher keeps re-reading it). This script:
+#
+#   1. copies the working tree to ~/.penforge-devenv/ws0/source (WSL ext4)
+#      with scripts/penforge-mirror.mjs, run by Windows' node.exe;
+#   2. restores executable bits from the git index;
+#   3. starts the same script in --watch mode on Windows, so every edit in
+#      the Windows checkout reaches the mirror within a second.
+#
+# manage.sh run-devenv calls it before starting the container and then
+# mounts the mirror instead of the repository (see instance-compose).
+#
+# Usage: scripts/penforge-devenv-mirror [--check|--stop]
+#   --check  exit 0 when the mirror is in use for this checkout, 1 otherwise
+#   --stop   stop the background watcher
+#
+# Disable with PENFORGE_MIRROR=0 (the container then mounts the repository
+# directly, as upstream does).
+
+set -euo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BASE="${HOME}/.penforge-devenv/ws0"
+MIRROR="${BASE}/source"
+LOG="${BASE}/mirror.log"
+
+mirror_wanted() {
+    [[ "${PENFORGE_MIRROR:-1}" != "0" ]] || return 1
+    [[ "$REPO" == /mnt/[a-z]/* ]] || return 1
+    command -v node.exe >/dev/null 2>&1 || return 1
+    command -v wslpath >/dev/null 2>&1 || return 1
+}
+
+case "${1:-}" in
+    --check)
+        mirror_wanted && [[ -f "$MIRROR/.penforge-mirror-id" ]]
+        exit $?
+        ;;
+    --stop)
+        if mirror_wanted; then
+            node.exe "$(wslpath -w "$REPO/scripts/penforge-mirror.mjs")" \
+                --dst "$(wslpath -w "$MIRROR")" --stop
+        fi
+        exit 0
+        ;;
+    "") ;;
+    *)
+        echo "usage: penforge-devenv-mirror [--check|--stop]" >&2
+        exit 2
+        ;;
+esac
+
+if ! mirror_wanted; then
+    if [[ "$REPO" == /mnt/[a-z]/* && "${PENFORGE_MIRROR:-1}" != "0" ]]; then
+        echo "penforge-devenv-mirror: node.exe not found from WSL; the devenv reads" >&2
+        echo "  the Windows drive directly (slow). Install Node.js on Windows." >&2
+    fi
+    exit 0
+fi
+
+mkdir -p "$MIRROR"
+
+win_script="$(wslpath -w "$REPO/scripts/penforge-mirror.mjs")"
+win_src="$(wslpath -w "$REPO")"
+win_dst="$(wslpath -w "$MIRROR")"
+
+echo "penforge-devenv-mirror: syncing source to $MIRROR"
+node.exe "$win_script" --src "$win_src" --dst "$win_dst" --once
+
+# Files written from Windows over \\wsl.localhost get default modes; put the
+# executable bit back for scripts git marks as 100755.
+git -c safe.directory='*' -C "$REPO" ls-files -s -z | while IFS= read -r -d '' entry; do
+    if [[ "$entry" == 100755* ]]; then
+        f="${entry#*$'\t'}"
+        [[ -f "$MIRROR/$f" && ! -x "$MIRROR/$f" ]] && chmod +x "$MIRROR/$f"
+    fi
+done
+for f in frontend/scripts/penforge-watch-app exporter/scripts/penforge-watch; do
+    [[ -f "$MIRROR/$f" ]] && chmod +x "$MIRROR/$f"
+done
+
+# Create the mount points of the heavy build folders ourselves. Otherwise
+# Docker creates the missing ones (and their parents, e.g.
+# frontend/resources/public/js/worker) as root on ext4, and the build can
+# no longer write next to them.
+grep -oE ':/home/penpot/penpot/[^":]+' "$REPO/docker/devenv/docker-compose.main.yml" \
+    | sed 's#^:/home/penpot/penpot/##' \
+    | while IFS= read -r p; do mkdir -p "$MIRROR/$p"; done
+
+# Background watcher on the Windows side (a new one replaces the old one).
+# Started through PowerShell so it is a plain Windows process: a process
+# launched through WSL interop dies when this WSL session ends.
+win_log="$(wslpath -w "$LOG")"
+powershell.exe -NoProfile -NonInteractive -Command \
+    "Start-Process -WindowStyle Hidden -FilePath node.exe -ArgumentList @('\"$win_script\"','--src','\"$win_src\"','--dst','\"$win_dst\"','--log','\"$win_log\"','--watch')" \
+    >/dev/null
+sleep 2
+if grep -q "watching" "$LOG" 2>/dev/null; then
+    echo "penforge-devenv-mirror: watching for changes (log: $LOG)"
+else
+    echo "penforge-devenv-mirror: WARNING: the watcher did not report in; see $LOG" >&2
+fi

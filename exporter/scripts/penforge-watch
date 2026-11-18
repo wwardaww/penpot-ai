@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+# Penforge: warm-start variant of `pnpm run watch:app` for the exporter.
+# Upstream wipes the shadow-cljs cache on every start; keep it unless
+# PENFORGE_CLEAN_BUILD=1.
+
+set -ex
+
+pnpm run build:wasm
+
+if [ "${PENFORGE_CLEAN_BUILD:-0}" = "1" ]; then
+    pnpm run clear:shadow-cache
+fi
+
+exec clojure -M:dev:shadow-cljs watch main

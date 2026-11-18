@@ -38,18 +38,22 @@ popd
 tmux rename-window -t "$PENPOT_TMUX_SESSION:0" 'frontend watch'
 tmux select-window -t "$PENPOT_TMUX_SESSION:0"
 tmux send-keys -t "$PENPOT_TMUX_SESSION" 'cd penpot/frontend' enter C-l
-tmux send-keys -t "$PENPOT_TMUX_SESSION" './scripts/watch app' enter
+# Penforge: keep the shadow-cljs and wasm caches between starts and skip
+# Storybook unless asked for (see frontend/scripts/penforge-watch-app).
+tmux send-keys -t "$PENPOT_TMUX_SESSION" './scripts/penforge-watch-app' enter
 
-tmux new-window -t "$PENPOT_TMUX_SESSION:1" -n 'frontend storybook'
-tmux select-window -t "$PENPOT_TMUX_SESSION:1"
-tmux send-keys -t "$PENPOT_TMUX_SESSION" 'cd penpot/frontend' enter C-l
-tmux send-keys -t "$PENPOT_TMUX_SESSION" './scripts/watch storybook' enter
+if [ "${PENFORGE_STORYBOOK:-0}" = "1" ]; then
+    tmux new-window -t "$PENPOT_TMUX_SESSION:1" -n 'frontend storybook'
+    tmux select-window -t "$PENPOT_TMUX_SESSION:1"
+    tmux send-keys -t "$PENPOT_TMUX_SESSION" 'cd penpot/frontend' enter C-l
+    tmux send-keys -t "$PENPOT_TMUX_SESSION" './scripts/watch storybook' enter
+fi
 
 tmux new-window -t "$PENPOT_TMUX_SESSION:2" -n 'exporter'
 tmux select-window -t "$PENPOT_TMUX_SESSION:2"
 tmux send-keys -t "$PENPOT_TMUX_SESSION" 'cd penpot/exporter' enter C-l
 tmux send-keys -t "$PENPOT_TMUX_SESSION" 'rm -f target/app.js*' enter C-l
-tmux send-keys -t "$PENPOT_TMUX_SESSION" './scripts/watch' enter
+tmux send-keys -t "$PENPOT_TMUX_SESSION" './scripts/penforge-watch' enter
 
 tmux split-window -v -t "$PENPOT_TMUX_SESSION"
 tmux send-keys -t "$PENPOT_TMUX_SESSION" 'cd penpot/exporter' enter C-l
