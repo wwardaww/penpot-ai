@@ -37,11 +37,14 @@ class FixCommentWording {
      */
     public static summary(report: FixReport): string {
         const note = report.note ? `: ${report.note}` : "";
+        const copies = report.copies?.applied
+            ? ` Also changed on ${report.copies.applied} other ${report.copies.applied === 1 ? "screen" : "screens"}.`
+            : "";
         switch (report.outcome) {
             case "fixed":
                 return report.resolved
-                    ? `Fixed comment #${report.seqNumber}${note}`
-                    : `Fixed comment #${report.seqNumber}, but could not mark it as resolved${note}`;
+                    ? `Fixed comment #${report.seqNumber}${note}${copies}`
+                    : `Fixed comment #${report.seqNumber}, but could not mark it as resolved${note}${copies}`;
             case "no-change":
                 return `Comment #${report.seqNumber} asks for no change${note}`;
             case "unchanged":

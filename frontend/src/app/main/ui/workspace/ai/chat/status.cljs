@@ -63,8 +63,9 @@
 (mf/defc work-status*
   "Status line above the composer. Props: `chat` (the chat state)."
   [{:keys [chat]}]
-  (let [working  (chat/working? chat)
-        waiting  (and working (chat/waiting? chat))
+  (let [;; a question of a silent run (a dialog's or a comment fix's) shows too
+        waiting  (chat/waiting? chat)
+        working  (or (chat/working? chat) waiting)
         activity (:activity chat)
         now      (use-now working)
         chat-ref (mf/use-ref chat)
@@ -94,11 +95,12 @@
          [:span {:class (stl/css :status-time)
                  :aria-label (tr "penforge.chat.status.elapsed")}
           (format-elapsed (- now started-at))])
-       [:> button* {:variant "secondary"
-                    :type "button"
-                    :class (stl/css :status-stop)
-                    :on-click on-stop}
-        (tr "penforge.chat.input.stop")]]
+       (when (chat/working? chat)
+         [:> button* {:variant "secondary"
+                      :type "button"
+                      :class (stl/css :status-stop)
+                      :on-click on-stop}
+          (tr "penforge.chat.input.stop")])]
 
       (some? (:outcome activity))
       (let [{:keys [outcome started-at ended-at]} activity

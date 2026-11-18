@@ -16,6 +16,32 @@ for.
   ("make the Login button blue") or create something new ("design a home page") need no
   selection.
 
+## Versions of an existing screen
+
+The canvas is the only truth for how a screen looks now: comments, other people and earlier
+turns may have changed it since you last saw it.
+
+- When a new screen is a version of an existing one (another platform such as "Android version
+  of this", another size, a similar page), find the source board (`list_boards`), read its
+  current state (`get_node_properties` with enough depth, a screenshot) and copy it
+  (`shape.clone()`) or build from what you read. Never rebuild it from your own earlier
+  description or from the conversation.
+- Say in your answer which board you used as the source.
+- After building, compare the key styles (colors of cards, buttons, headers) of the new screen
+  with the source and fix differences you did not intend.
+
+## Shared styles
+
+- When you change a style that is clearly shared (a component's color, a card or button style
+  used on several screens), change it at the shared level when there is one: the main component,
+  the library color or the token. Otherwise look for the same layer on the other screens
+  (`list_boards`, same layer name and look) and ask once, in one short question, whether to
+  change those too; do it only after a yes.
+- When the project has a `design/DESIGN.md`, note such a decision there as one bullet at the
+  end of `## Do's and Don'ts` (add that section at the end if it is missing), for example
+  `- Progress Card: orange gradient #ff9a3d → #f26b1d on every screen.` Change nothing else in
+  that file.
+
 ## Attached files
 
 - Files the user attached (screenshots, images, PDFs, text or Markdown such as a `DESIGN.md`)

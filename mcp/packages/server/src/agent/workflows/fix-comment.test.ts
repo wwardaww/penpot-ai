@@ -17,10 +17,12 @@ import {
     type CanvasThread,
     CheckpointStep,
     CommentToolFilter,
+    type FixReport,
     FixVerdict,
     type WorkflowLookup,
 } from "./fix-comment-fixer";
 import { createFixCommentWorkflow } from "./fix-comment";
+import { CommentFixCopies } from "./fix-comment-copies";
 import { CommentClassifier, createFixCommentsWorkflow, type FixCommentsResult } from "./fix-comments";
 import { WorkflowEngine } from "./WorkflowEngine";
 import { WorkflowRegistry } from "./WorkflowRegistry";
@@ -962,5 +964,115 @@ describe("registration", () => {
             assert.match(batch, /Do not call any tool/);
             assert.match(batch, /`destructive`/);
         }
+    });
+});
+
+describe("copies of a fixed layer on other screens (W25b)", () => {
+    const ORANGE = [{ gradient: { type: "linear", stops: [{ color: "#ff9a3d" }, { color: "#f26b1d" }] } }];
+    const PURPLE = [{ gradient: { type: "linear", stops: [{ color: "#7b61ff" }, { color: "#5b3fe0" }] } }];
+
+    /** Tools of a page with the commented card on "iPhone" and copies on other boards. */
+    function screens(copyFills: Record<string, unknown>): Record<string, ToolHandler> {
+        const fills: Record<string, unknown> = { "node-1": PURPLE, ...copyFills };
+        return {
+            ...penpotTools([thread(1, "make the progress card orange")]),
+            get_node_properties: (args) =>
+                text({ id: args.nodeId, name: "Progress Card", fills: fills[String(args.nodeId)] ?? [] }),
+            execute_code: () =>
+                text({
+                    result: Object.keys(copyFills).map((nodeId) => ({
+                        nodeId,
+                        boardId: `board-${nodeId}`,
+                        boardName: nodeId === "copy-android" ? "Android - Ana Sayfa" : "Tablet",
+                    })),
+                }),
+            update_design_node: (args) => {
+                fills[String(args.nodeId)] = (args.mutations as { fills: unknown }).fills;
+                return text({ applied: ["fills"] });
+            },
+        };
+    }
+
+    /** Fix turn that recolors the commented card through update_design_node. */
+    function recolorTurn(request: WorkflowClaudeRequest): string {
+        const input = { nodeId: "node-1", mutations: { fills: ORANGE } };
+        request.onEvent?.({
+            kind: "tool",
+            toolUseId: "u1",
+            toolName: "mcp__penpot__update_design_node",
+            status: "running",
+            input,
+        });
+        request.onEvent?.({
+            kind: "tool",
+            toolUseId: "u1",
+            toolName: "mcp__penpot__update_design_node",
+            status: "done",
+        });
+        return verdict("fixed", "Made it orange.");
+    }
+
+    test("asks once and applies the same change to copies that still look the old way", async () => {
+        const ctx = new FakeContext(
+            screens({ "copy-android": PURPLE, "copy-tablet": [{ color: "#ffffff" }] }),
+            recolorTurn,
+            [(question) => question.options.find((option) => option.id === "apply")!.id]
+        );
+        const result = await fixComment.run(ctx, { threadId: "thread-1" });
+
+        assert.equal(ctx.questions.length, 1);
+        assert.match(ctx.questions[0].text, /"Progress Card" is also on "Android - Ana Sayfa"/);
+        assert.doesNotMatch(ctx.questions[0].text, /Tablet/, "a layer with another look is no copy");
+        const changes = ctx.callsOf("update_design_node");
+        assert.deepEqual(changes, [{ nodeId: "copy-android", mutations: { fills: ORANGE } }]);
+        assert.deepEqual(ctx.result<FixReport>().copies, {
+            found: 1,
+            applied: 1,
+            boards: ["Android - Ana Sayfa"],
+            recorded: false,
+        });
+        assert.match((result as { summary: string }).summary, /Also changed on 1 other screen\./);
+    });
+
+    test("only this screen leaves the copies alone", async () => {
+        const ctx = new FakeContext(screens({ "copy-android": PURPLE }), recolorTurn, [() => "skip"]);
+        await fixComment.run(ctx, { threadId: "thread-1" });
+        assert.deepEqual(ctx.callsOf("update_design_node"), []);
+        assert.equal(ctx.result<FixReport>().copies?.applied, 0);
+    });
+
+    test("no question without copies or without a style change", async () => {
+        const noCopies = new FakeContext(screens({}), recolorTurn);
+        await fixComment.run(noCopies, { threadId: "thread-1" });
+        assert.equal(noCopies.questions.length, 0);
+
+        const textOnly = new FakeContext(screens({ "copy-android": PURPLE }), (request) => {
+            const input = { nodeId: "node-1", mutations: { text: "Bugün" } };
+            request.onEvent?.({
+                kind: "tool",
+                toolUseId: "u1",
+                toolName: "mcp__penpot__update_design_node",
+                status: "running",
+                input,
+            });
+            request.onEvent?.({
+                kind: "tool",
+                toolUseId: "u1",
+                toolName: "mcp__penpot__update_design_node",
+                status: "done",
+            });
+            return verdict("fixed", "Changed the text.");
+        });
+        await fixComment.run(textOnly, { threadId: "thread-1" });
+        assert.equal(textOnly.questions.length, 0);
+    });
+
+    test("only the style keys of a mutation are carried", () => {
+        assert.deepEqual(
+            CommentFixCopies.styleChange({ nodeId: "n", mutations: { fills: ORANGE, text: "x", radius: 8 } }),
+            { nodeId: "n", style: { fills: ORANGE, radius: 8 } }
+        );
+        assert.equal(CommentFixCopies.styleChange({ nodeId: "n", mutations: { name: "x" } }), null);
+        assert.equal(CommentFixCopies.styleChange(undefined), null);
     });
 });
