@@ -229,6 +229,7 @@ test("puts a rollback warning first in a failed tool response too", async (t) =>
     assert.match(notice.text, /CHANGES WERE ROLLED BACK/);
     assert.equal(failure.type, "text");
     assert.match(failure.text, /Tool execution failed: .*Shape not found/);
+    assert.equal(result.isError, true, "a failed execution is flagged as an error");
 });
 
 /**

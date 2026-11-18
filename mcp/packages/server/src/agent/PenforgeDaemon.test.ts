@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -175,7 +175,12 @@ async function withoutPairing<T>(body: (url: string) => Promise<T>): Promise<T> 
         runner: "fake",
         mcpUrl: "http://127.0.0.1:1/mcp",
     });
-    const open = new PenforgeDaemon(config, { runner, registry: WorkflowRegistry.withShippedWorkflows(), tools: null, authTimeoutMs: 500 });
+    const open = new PenforgeDaemon(config, {
+        runner,
+        registry: WorkflowRegistry.withShippedWorkflows(),
+        tools: null,
+        authTimeoutMs: 500,
+    });
     await open.start();
     try {
         return await body(`ws://127.0.0.1:${open.port}/agent`);
@@ -321,6 +326,83 @@ test("permission requests round-trip to the browser", async () => {
         .map((delta) => (delta as { text: string }).text)
         .join("");
     assert.equal(text, "Permission granted");
+});
+
+test("attached files are saved in the project and reach Claude", async () => {
+    const client = await withContext();
+    const markdown = Buffer.from("# DESIGN\nPrimary #3366FF", "utf8");
+    client.send({
+        type: "chat.send",
+        rid: "r1",
+        conversationId: "c1",
+        text: "use this",
+        attachments: [
+            {
+                kind: "file",
+                name: "DESIGN.md",
+                mime: "text/markdown",
+                size: markdown.length,
+                base64: markdown.toString("base64"),
+            },
+        ],
+    });
+    await client.next("chat.done");
+
+    const { input } = runner.received[0];
+    assert.match(input.text, /<attached-file name="DESIGN.md">\n# DESIGN\nPrimary #3366FF\n<\/attached-file>/);
+    assert.match(runner.received[0].opts.systemPromptAppend, /No layer is selected on the canvas/);
+
+    client.send({ type: "chat.history", rid: "h1", conversationId: "c1" });
+    const history = await client.next("chat.history", (message) => message.rid === "h1");
+    const [stored] = history.messages[0].attachments ?? [];
+    assert.equal(stored.kind, "file");
+    assert.equal("base64" in stored, false);
+    const path = (stored as { path: string }).path;
+    assert.match(path, /^\.penforge\/uploads\/.*-DESIGN\.md$/);
+    assert.deepEqual(readFileSync(join(home, "projects", PROJECT_ID, path)), markdown);
+});
+
+test("messages with attached layers get no missing-selection note", async () => {
+    const client = await withContext();
+    client.send({
+        type: "chat.send",
+        rid: "r1",
+        conversationId: "c1",
+        text: "make it blue",
+        attachments: [{ kind: "node", fileId: "file-1", pageId: "page-1", nodeId: "n1", name: "Button", type: "rect" }],
+    });
+    await client.next("chat.done");
+    assert.doesNotMatch(runner.received[0].opts.systemPromptAppend, /No layer is selected/);
+    assert.match(runner.received[0].input.text, /Layer "Button"/);
+});
+
+test("a refused file ends the turn with an error and stores nothing", async () => {
+    const client = await withContext();
+    client.send({
+        type: "chat.send",
+        rid: "r1",
+        conversationId: "c1",
+        text: "look",
+        attachments: [
+            {
+                kind: "file",
+                name: "evil.png",
+                mime: "image/png",
+                size: 5,
+                base64: Buffer.from("hello").toString("base64"),
+            },
+        ],
+    });
+    const error = await client.next("error");
+    assert.equal(error.rid, "r1");
+    assert.equal(error.code, "bad-request");
+    assert.match(error.message, /evil\.png/);
+    await client.next("chat.done");
+    assert.equal(runner.received.length, 0);
+
+    client.send({ type: "chat.history", rid: "h1", conversationId: "c1" });
+    const history = await client.next("chat.history", (message) => message.rid === "h1");
+    assert.deepEqual(history.messages, []);
 });
 
 // --- workflows

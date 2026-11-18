@@ -16,7 +16,7 @@ export interface FakeRunnerScript {
 /**
  * Default script: echoes the input in two chunks.
  *
- * A text starting with `/tool` reports a Penpot tool call; `/permission` first asks for permission
+ * A text starting with `/tool` reports a Penpot tool call (`/fail-tool` a failed one); `/permission` first asks for permission
  * to run a shell command and reports the decision. Useful to develop the frontend without Claude.
  */
 export class EchoScript implements FakeRunnerScript {
@@ -30,6 +30,16 @@ export class EchoScript implements FakeRunnerScript {
         if (input.text.startsWith("/tool")) {
             yield { kind: "tool", toolUseId: "t1", toolName: "mcp__penpot__execute_code", status: "running" };
             yield { kind: "tool", toolUseId: "t1", toolName: "mcp__penpot__execute_code", status: "done" };
+        }
+        if (input.text.startsWith("/fail-tool")) {
+            yield { kind: "tool", toolUseId: "t1", toolName: "mcp__penpot__execute_code", status: "running" };
+            yield {
+                kind: "tool",
+                toolUseId: "t1",
+                toolName: "mcp__penpot__execute_code",
+                status: "error",
+                detail: "Tool execution failed: Error: boom",
+            };
         }
         let reply = `You said: ${input.text}`;
         if (input.text.startsWith("/permission")) {

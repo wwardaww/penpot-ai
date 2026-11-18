@@ -52,7 +52,59 @@ export interface ImageAttachment {
     base64: string;
 }
 
-export type Attachment = NodeAttachment | CommentAttachment | ImageAttachment;
+/**
+ * File the user attached to a chat message (screenshot, image, PDF, text or Markdown file).
+ *
+ * The client sends the bytes in `base64`; the daemon checks type and size, stores the file in the
+ * project folder (`.penforge/uploads/`) and passes it to Claude (images and PDFs as content
+ * blocks, text inline). Stored history entries carry `path` instead of the bytes.
+ */
+export interface FileAttachment {
+    kind: "file";
+    /** original file name, as shown to the user */
+    name: string;
+    /** media type; one of {@link FILE_ATTACHMENT_LIMITS} `types` */
+    mime: string;
+    /** size of the file in bytes */
+    size: number;
+    /** file bytes, base64 encoded (no data URL prefix); client to daemon only */
+    base64?: string;
+    /** where the daemon stored the file, relative to the project folder; set by the daemon */
+    path?: string;
+}
+
+/** Group of accepted attachment files with its own size limit. */
+export type FileAttachmentGroup = "image" | "pdf" | "text";
+
+/**
+ * Limits of file attachments, shared by the daemon (which enforces them) and the client (which
+ * checks them first to give a quick answer). Sizes are in bytes, before base64 encoding.
+ */
+export const FILE_ATTACHMENT_LIMITS = {
+    /** accepted media types and their group */
+    types: {
+        "image/png": "image",
+        "image/jpeg": "image",
+        "image/gif": "image",
+        "image/webp": "image",
+        "application/pdf": "pdf",
+        "text/plain": "text",
+        "text/markdown": "text",
+        "text/csv": "text",
+        "application/json": "text",
+    } as Record<string, FileAttachmentGroup>,
+    /** largest file per group; Claude takes images up to 5 MB of base64, about 3.75 MB raw */
+    maxBytes: { image: 3.75 * 1024 * 1024, pdf: 10 * 1024 * 1024, text: 1024 * 1024 } as Record<
+        FileAttachmentGroup,
+        number
+    >,
+    /** most files per message */
+    maxFiles: 10,
+    /** largest total size of the files of one message */
+    maxTotalBytes: 20 * 1024 * 1024,
+} as const;
+
+export type Attachment = NodeAttachment | CommentAttachment | ImageAttachment | FileAttachment;
 
 // ---------------------------------------------------------------------------------------------
 // client -> daemon
@@ -84,6 +136,8 @@ export interface ChatSendMessage {
     conversationId: string;
     text: string;
     attachments?: Attachment[];
+    /** true when layers are selected but the user removed them from this message's context */
+    selectionDismissed?: boolean;
 }
 
 export interface ChatCancelMessage {
@@ -179,6 +233,10 @@ export interface ChatToolMessage {
     status: ToolCallStatus;
     /** technical detail (input, error text); only shown to the developer persona */
     detail?: string;
+    /** stable code of a daemon check (e.g. `boards-overlap`), for clients that word it themselves */
+    code?: string;
+    /** parameters of `code` */
+    params?: Record<string, unknown>;
 }
 
 /** Token usage of one assistant turn. */
@@ -307,7 +365,13 @@ export interface ErrorMessage {
     type: "error";
     rid?: string;
     code: AgentErrorCode | (string & {});
+    /** English text; clients prefer translating `reason` when they know it */
     message: string;
+    /** finer reason of a `bad-request`, e.g. a refused file: `file-type`, `file-size`, `file-count`,
+     * `files-total`, `file-read`, `file-incomplete` */
+    reason?: string;
+    /** parameters of `reason` (e.g. `{name, limitMb}`) */
+    params?: Record<string, unknown>;
 }
 
 export type DaemonMessage =

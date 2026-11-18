@@ -11,6 +11,7 @@
    [app.common.uuid :as uuid]
    [app.main.data.ai.chat :as chat]
    [app.main.data.ai.client :as client]
+   [app.main.data.helpers :as dsh]
    [app.main.refs :as refs]
    [app.main.render :as render]
    [app.main.store :as st]
@@ -20,13 +21,16 @@
    [app.main.ui.ds.foundations.typography :as t]
    [app.main.ui.ds.foundations.typography.text :refer [text*]]
    [app.main.ui.workspace.ai.chat.banner :refer [connection-banner*]]
+   [app.main.ui.workspace.ai.chat.files :as files]
    [app.main.ui.workspace.ai.chat.markdown :refer [markdown*]]
+   [app.main.ui.workspace.ai.chat.status :refer [work-status*]]
    [app.main.ui.workspace.ai.detached.placeholder :refer [ref:detached? detach-button* detached-placeholder*]]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
    [app.util.keyboard :as kbd]
    [app.util.shape-icon :as usi]
    [okulary.core :as l]
+   [promesa.core :as p]
    [rumext.v2 :as mf]))
 
 (def ^:private ref:chat
@@ -57,18 +61,48 @@
                                i/board)
                   :size "s"}]])))
 
+(mf/defc file-thumbnail*
+  {::mf/private true
+   ::mf/memo true}
+  [{:keys [mime base64]}]
+  (let [group (files/group mime)
+        ;; one object URL per file, not a data URL rebuilt on every render
+        url   (mf/with-memo [mime base64]
+                (when (and (= :image group) (some? base64))
+                  (files/object-url mime base64)))]
+
+    (mf/with-effect [url]
+      (when url
+        #(js/URL.revokeObjectURL url)))
+
+    (if (some? url)
+      [:span {:class (stl/css :thumbnail)}
+       [:img {:class (stl/css :thumbnail-img)
+              :src url
+              :alt ""}]]
+      [:span {:class (stl/css :thumbnail)}
+       [:> icon* {:icon-id (cond
+                             (= :image group) i/img
+                             (= :pdf group) i/document
+                             :else i/text-paragraph)
+                  :size "s"}]])))
+
 (mf/defc attachment-chip*
-  {::mf/private true}
+  {::mf/private true
+   ::mf/memo true}
   [{:keys [attachment on-remove]}]
-  (let [{:keys [node-id name type]} attachment
+  (let [{:keys [kind node-id name type mime base64]} attachment
+        key (chat/attachment-key attachment)
 
         on-click
         (mf/use-fn
-         (mf/deps node-id on-remove)
-         #(on-remove node-id))]
+         (mf/deps key on-remove)
+         #(on-remove key))]
 
     [:li {:class (stl/css :chip)}
-     [:> node-thumbnail* {:node-id node-id :type type}]
+     (if (= "file" kind)
+       [:> file-thumbnail* {:mime mime :base64 base64}]
+       [:> node-thumbnail* {:node-id node-id :type type}])
      [:span {:class (stl/css :chip-name) :title name} name]
      (when on-remove
        [:> icon-button* {:variant "ghost"
@@ -87,8 +121,8 @@
     [:li {:class (stl/css :entry :entry-user)}
      (when (seq attachments)
        [:ul {:class (stl/css :chips)}
-        (for [attachment attachments]
-          [:> attachment-chip* {:key (:node-id attachment)
+        (for [[index attachment] (map-indexed vector attachments)]
+          [:> attachment-chip* {:key (str index "-" (chat/attachment-key attachment))
                                 :attachment attachment}])])
      [:> text* {:as "p"
                 :typography t/body-medium
@@ -111,10 +145,22 @@
     :error [:> icon* {:icon-id i/status-wrong :size "s" :class (stl/css :tool-error)}]
     [:span {:class (stl/css :spinner) :aria-hidden true}]))
 
+(defn- tool-summary
+  "Text of a step line: the daemon's summary, or the translation of its
+  check code (W25)."
+  [{:keys [code params summary]}]
+  (case code
+    "boards-overlap"
+    (let [[a b] (:names params)]
+      (tr "penforge.chat.check.boards-overlap" a b))
+
+    summary))
+
 (mf/defc tool-entry*
   {::mf/private true}
   [{:keys [entry persona]}]
-  (let [{:keys [status summary tool-name detail]} entry
+  (let [{:keys [status tool-name detail]} entry
+        summary     (tool-summary entry)
         status-icon (mf/html [:> status-icon* {:status status}])]
     [:li {:class (stl/css :entry :entry-tool)}
      (if (and (= persona :developer) (or detail tool-name))
@@ -129,14 +175,21 @@
         [:span {:class (stl/css :tool-summary)} summary]])]))
 
 (defn- get-error-text
-  [{:keys [code message]}]
-  (case code
-    "not-connected" (tr "penforge.chat.error.not-connected")
-    "busy" (tr "penforge.chat.error.busy")
-    "no-context" (tr "penforge.chat.error.no-context")
-    "not-configured" (tr "penforge.chat.error.not-configured")
-    "not-implemented" (tr "penforge.chat.error.not-implemented")
-    (or message (tr "penforge.chat.error.generic"))))
+  [{:keys [code message reason params]}]
+  (let [{:keys [name limit limit-mb]} params]
+    (case reason
+      "file-type" (tr "penforge.chat.attach.error.type" name)
+      "file-size" (tr "penforge.chat.attach.error.size" name limit-mb)
+      "file-count" (tr "penforge.chat.attach.error.count" limit)
+      "files-total" (tr "penforge.chat.attach.error.total" limit-mb)
+      ("file-read" "file-incomplete") (tr "penforge.chat.attach.error.read" name)
+      (case code
+        "not-connected" (tr "penforge.chat.error.not-connected")
+        "busy" (tr "penforge.chat.error.busy")
+        "no-context" (tr "penforge.chat.error.no-context")
+        "not-configured" (tr "penforge.chat.error.not-configured")
+        "not-implemented" (tr "penforge.chat.error.not-implemented")
+        (or message (tr "penforge.chat.error.generic"))))))
 
 (mf/defc error-entry*
   {::mf/private true}
@@ -279,13 +332,69 @@
 
 ;; --- Composer
 
+(def ^:private ref:selected
+  (l/derived #(dsh/get-selected-ids %) st/state =))
+
+(mf/defc selection-chip*
+  "The canvas selection the next message takes as context (W25); the
+  user can leave it out."
+  {::mf/private true}
+  [{:keys [chat]}]
+  (let [selected (mf/deref ref:selected)
+        objects  (mf/deref refs/workspace-page-objects)
+        context  (chat/selection-context chat selected objects nil nil)
+        names    (mapv :name context)
+        label    (if (= 1 (count names))
+                   (first names)
+                   (tr "penforge.chat.selection.many" (count names)))
+
+        on-remove
+        (mf/use-fn
+         (mf/deps selected)
+         #(st/emit! (chat/dismiss-selection selected)))
+
+        dismissed (:dismissed-selection chat)]
+
+    ;; a removed selection is forgotten once the selection changes
+    (mf/with-effect [selected dismissed]
+      (when (and (some? dismissed) (not= (set selected) dismissed))
+        (st/emit! (chat/dismiss-selection nil))))
+
+    (when (seq context)
+      [:li {:class (stl/css :chip :chip-selection)
+            :title (tr "penforge.chat.selection.title")
+            :data-testid "ai-chat-selection"}
+       (if (= 1 (count context))
+         [:> node-thumbnail* {:node-id (:node-id (first context))
+                              :type (:type (first context))}]
+         [:span {:class (stl/css :thumbnail)}
+          [:> icon* {:icon-id i/layers :size "s"}]])
+       [:span {:class (stl/css :chip-name)} label]
+       [:> icon-button* {:variant "ghost"
+                         :icon i/close-small
+                         :icon-size "s"
+                         :class (stl/css :chip-remove)
+                         :aria-label (tr "penforge.chat.selection.remove")
+                         :on-click on-remove}]])))
+
 (mf/defc composer*
   {::mf/private true}
-  [{:keys [attachments status connected]}]
-  (let [text*     (mf/use-state "")
-        text      (deref text*)
-        selected  (mf/deref refs/selected-shapes)
-        streaming (= status :streaming)
+  [{:keys [chat status connected]}]
+  (let [text*        (mf/use-state "")
+        text         (deref text*)
+        problems*    (mf/use-state nil)
+        problems     (deref problems*)
+        dragging*    (mf/use-state false)
+        dragging     (deref dragging*)
+        input-ref    (mf/use-ref nil)
+        reserved-ref (mf/use-ref [])
+        attachments  (:attachments chat)
+        ;; one turn at a time; workflow runs do not block the chat
+        busy         (= status :streaming)
+
+        ;; read by callbacks; a closure would see the attachments of the
+        ;; render that made it
+        pending-ref (mf/use-ref attachments)
 
         on-change
         (mf/use-fn #(reset! text* (dom/get-target-val %)))
@@ -296,69 +405,152 @@
          (fn []
            (when (seq (.trim text))
              (st/emit! (chat/send-message text))
+             (reset! problems* nil)
              (reset! text* ""))))
 
         on-submit
         (mf/use-fn
-         (mf/deps on-send streaming)
+         (mf/deps on-send busy)
          (fn [event]
            (dom/prevent-default event)
-           (when-not streaming
+           (when-not busy
              (on-send))))
 
         on-key-down
         (mf/use-fn
-         (mf/deps on-send streaming)
+         (mf/deps on-send busy)
          (fn [event]
            (when (and (kbd/enter? event)
                       (not (kbd/shift? event))
                       (not (.-isComposing ^js (.-nativeEvent event))))
              (dom/prevent-default event)
-             (when-not streaming
+             (when-not busy
                (on-send)))))
 
-        on-cancel
-        (mf/use-fn #(st/emit! (chat/cancel)))
-
-        on-attach
+        add-files
         (mf/use-fn
-         (mf/deps selected)
-         #(st/emit! (chat/attach-node selected)))
+         (fn [js-files]
+           (when (pos? (.-length js-files))
+             ;; files still being read hold their room, so two quick drops
+             ;; cannot both pass the limits
+             (let [reserved (mf/ref-val reserved-ref)
+                   {:keys [accepted problems]}
+                   (files/check-browser-files (into (vec (mf/ref-val pending-ref)) reserved) js-files)
+                   slots    (mapv (fn [{:keys [size]}]
+                                    {:kind "file" :size size :slot (str (uuid/next))})
+                                  accepted)]
+               (mf/set-ref-val! reserved-ref (into reserved slots))
+               (reset! problems* (not-empty problems))
+               (->> (files/read-files accepted)
+                    (p/fmap (fn [{added :attachments refused :problems}]
+                              (mf/set-ref-val! reserved-ref
+                                               (into [] (remove (set slots)) (mf/ref-val reserved-ref)))
+                              (when (seq added)
+                                (st/emit! (chat/add-files added)))
+                              (when (seq refused)
+                                (swap! problems* #(into (vec %) refused))))))))))
+
+        on-pick
+        (mf/use-fn #(some-> (mf/ref-val input-ref) dom/click))
+
+        on-input-change
+        (mf/use-fn
+         (mf/deps add-files)
+         (fn [event]
+           (let [target (dom/get-target event)
+                 picked (js/Array.from (.-files ^js target))]
+             (set! (.-value ^js target) "")
+             (add-files picked))))
+
+        on-paste
+        (mf/use-fn
+         (mf/deps add-files)
+         (fn [event]
+           (let [clipboard (.-clipboardData ^js event)
+                 pasted    (files/files-of clipboard)
+                 ;; Office apps put a picture of copied text on the
+                 ;; clipboard too: text wins
+                 text      (some-> clipboard (.getData "text/plain"))]
+             (when (and (pos? (.-length pasted)) (empty? text))
+               (dom/prevent-default event)
+               (dom/stop-propagation event)
+               (add-files pasted)))))
+
+        on-drag-over
+        (mf/use-fn
+         (fn [event]
+           (let [types (some-> ^js event .-dataTransfer .-types)]
+             (when (and types (.includes (js/Array.from types) "Files"))
+               (dom/prevent-default event)
+               (dom/stop-propagation event)
+               (reset! dragging* true)))))
+
+        on-drag-leave
+        (mf/use-fn #(reset! dragging* false))
+
+        on-drop
+        (mf/use-fn
+         (mf/deps add-files)
+         (fn [event]
+           (let [dropped (files/files-of (.-dataTransfer ^js event))]
+             (reset! dragging* false)
+             (when (pos? (.-length dropped))
+               (dom/prevent-default event)
+               (dom/stop-propagation event)
+               (add-files dropped)))))
 
         on-remove
         (mf/use-fn #(st/emit! (chat/remove-attachment %)))]
 
-    [:form {:class (stl/css :composer)
-            :on-submit on-submit}
-     (when (seq attachments)
-       [:ul {:class (stl/css :chips)}
-        (for [attachment attachments]
-          [:> attachment-chip* {:key (:node-id attachment)
-                                :attachment attachment
-                                :on-remove on-remove}])])
+    (mf/set-ref-val! pending-ref attachments)
+
+    [:form {:class (stl/css-case :composer true
+                                 :composer-dragging dragging)
+            :on-submit on-submit
+            :on-drag-over on-drag-over
+            :on-drag-leave on-drag-leave
+            :on-drop on-drop}
+     [:ul {:class (stl/css :chips)}
+      [:> selection-chip* {:chat chat}]
+      (for [[index attachment] (map-indexed vector attachments)]
+        [:> attachment-chip* {:key (str index "-" (chat/attachment-key attachment))
+                              :attachment attachment
+                              :on-remove on-remove}])]
+     (when (seq problems)
+       [:div {:class (stl/css :problems) :role "alert"}
+        (for [[index problem] (map-indexed vector problems)]
+          [:p {:key index :class (stl/css :problem)}
+           (files/problem-text problem)])])
      [:textarea {:class (stl/css :input)
                  :value text
                  :rows 3
                  :disabled (not connected)
                  :aria-label (tr "penforge.chat.input.label")
-                 :placeholder (tr "penforge.chat.input.placeholder")
+                 :placeholder (if dragging
+                                (tr "penforge.chat.attach.drop")
+                                (tr "penforge.chat.input.placeholder"))
                  :on-change on-change
-                 :on-key-down on-key-down}]
+                 :on-key-down on-key-down
+                 :on-paste on-paste}]
+     [:input {:type "file"
+              :ref input-ref
+              :multiple true
+              :accept files/accept
+              :class (stl/css :file-input)
+              :tab-index -1
+              :aria-hidden true
+              :on-change on-input-change}]
      [:div {:class (stl/css :composer-actions)}
       [:> icon-button* {:variant "ghost"
+                        :type "button"
                         :icon i/add
-                        :disabled (or (not connected) (empty? selected))
-                        :aria-label (tr "penforge.chat.input.attach-selection")
-                        :on-click on-attach}]
-      (if streaming
-        [:> button* {:variant "secondary"
-                     :type "button"
-                     :on-click on-cancel}
-         (tr "penforge.chat.input.stop")]
-        [:> button* {:variant "primary"
-                     :type "submit"
-                     :disabled (or (not connected) (empty? (.trim text)))}
-         (tr "penforge.chat.input.send")])]]))
+                        :disabled (not connected)
+                        :aria-label (tr "penforge.chat.attach.files")
+                        :on-click on-pick}]
+      [:> button* {:variant "primary"
+                   :type "submit"
+                   :disabled (or (not connected) busy (empty? (.trim text)))}
+       (tr "penforge.chat.input.send")]]]))
 
 ;; --- Panel
 
@@ -369,7 +561,7 @@
         connection (mf/deref ref:connection)
         persona    (mf/deref ref:persona)
 
-        {:keys [entries status attachments]} chat
+        {:keys [entries status]} chat
         connected  (= :connected (:status connection))
 
         on-new-conversation
@@ -399,7 +591,9 @@
                       :status status
                       :persona persona}])
 
-     [:> composer* {:attachments attachments
+     [:> work-status* {:chat chat}]
+
+     [:> composer* {:chat chat
                     :status status
                     :connected connected}]]))
 

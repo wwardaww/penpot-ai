@@ -49,11 +49,42 @@
    [:mime :string]
    [:base64 :string]])
 
+(def schema:file-attachment
+  "A file attached by the user (W25). `:base64` goes to the daemon;
+  stored history entries carry the `:path` the daemon saved it at."
+  [:map {:title "FileAttachment"}
+   [:kind [:= "file"]]
+   [:name :string]
+   [:mime :string]
+   [:size :int]
+   [:base64 {:optional true} :string]
+   [:path {:optional true} :string]])
+
 (def schema:attachment
   [:multi {:dispatch :kind :title "Attachment"}
    ["node" schema:node-attachment]
    ["comment" schema:comment-attachment]
-   ["image" schema:image-attachment]])
+   ["image" schema:image-attachment]
+   ["file" schema:file-attachment]])
+
+(def file-limits
+  "Limits of file attachments; mirror of `FILE_ATTACHMENT_LIMITS` in
+  `agent-protocol.ts` (the daemon enforces them, the client checks
+  first). Sizes in bytes, before base64 encoding."
+  {:types {"image/png" :image
+           "image/jpeg" :image
+           "image/gif" :image
+           "image/webp" :image
+           "application/pdf" :pdf
+           "text/plain" :text
+           "text/markdown" :text
+           "text/csv" :text
+           "application/json" :text}
+   :max-bytes {:image (* 3.75 1024 1024)
+               :pdf (* 10 1024 1024)
+               :text (* 1024 1024)}
+   :max-files 10
+   :max-total-bytes (* 20 1024 1024)})
 
 ;; --- Client -> daemon
 
@@ -81,7 +112,8 @@
      [:rid :string]
      [:conversation-id :string]
      [:text :string]
-     [:attachments {:optional true} [:vector schema:attachment]]]]
+     [:attachments {:optional true} [:vector schema:attachment]]
+     [:selection-dismissed {:optional true} :boolean]]]
 
    ["chat.cancel"
     [:map [:type :string] [:conversation-id :string]]]
@@ -136,7 +168,10 @@
      [:tool-name :string]
      [:summary :string]
      [:status [:enum "running" "done" "error"]]
-     [:detail {:optional true} :string]]]
+     [:detail {:optional true} :string]
+     ;; daemon checks (W25): stable code + params the client words itself
+     [:code {:optional true} :string]
+     [:params {:optional true} [:map-of :keyword :any]]]]
 
    ["chat.done"
     [:map
@@ -210,7 +245,10 @@
      [:type :string]
      [:rid {:optional true} :string]
      [:code :string]
-     [:message :string]]]])
+     [:message :string]
+     ;; finer reason of a refused request (W25 file refusals) and its params
+     [:reason {:optional true} :string]
+     [:params {:optional true} [:map-of :keyword :any]]]]])
 
 (def valid-client-message?
   (sm/lazy-validator schema:client-message))
@@ -274,13 +312,16 @@
     (assoc :project-name project-name)))
 
 (defn chat-send
-  [{:keys [rid conversation-id text attachments]}]
+  [{:keys [rid conversation-id text attachments selection-dismissed]}]
   (cond-> {:type "chat.send"
            :rid (or rid (next-rid))
            :conversation-id conversation-id
            :text text}
     (seq attachments)
-    (assoc :attachments (vec attachments))))
+    (assoc :attachments (vec attachments))
+
+    selection-dismissed
+    (assoc :selection-dismissed true)))
 
 (defn chat-cancel
   [conversation-id]
@@ -331,6 +372,15 @@
   ([project-id rid]
    (cond-> {:type "preview.stop" :project-id (str project-id)}
      (some? rid) (assoc :rid rid))))
+
+(defn file-attachment
+  "Build a file attachment."
+  [{:keys [name mime size base64]}]
+  {:kind "file"
+   :name name
+   :mime mime
+   :size size
+   :base64 base64})
 
 (defn node-attachment
   "Build a node attachment from a shape."

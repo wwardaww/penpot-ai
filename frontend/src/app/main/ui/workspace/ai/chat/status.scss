@@ -1,0 +1,116 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/typography.scss" as t;
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+@use "ds/_utils.scss" as *;
+@use "ds/mixins.scss" as *;
+
+.status {
+  @include t.use-typography("body-small");
+
+  display: flex;
+  align-items: center;
+  gap: var(--sp-s);
+  min-block-size: $sz-32;
+  padding: var(--sp-xs) var(--sp-s);
+  border: $b-1 solid var(--color-background-quaternary);
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+  color: var(--color-foreground-primary);
+}
+
+.status-working {
+  border-color: var(--color-accent-primary);
+}
+
+.status-waiting {
+  border-color: var(--color-accent-warning);
+
+  .status-icon {
+    color: var(--color-accent-warning);
+  }
+}
+
+.status-ended {
+  color: var(--color-foreground-secondary);
+
+  .status-icon {
+    color: var(--color-accent-success);
+  }
+}
+
+.status-partly .status-icon {
+  color: var(--color-accent-warning);
+}
+
+.status-failed .status-icon {
+  color: var(--color-accent-error);
+}
+
+.status-icon {
+  flex-shrink: 0;
+}
+
+.status-text {
+  @include text-ellipsis;
+
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.status-time {
+  flex-shrink: 0;
+  color: var(--color-foreground-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.status-stop {
+  flex-shrink: 0;
+}
+
+.dots {
+  display: flex;
+  flex-shrink: 0;
+  gap: px2rem(3);
+}
+
+.dot {
+  inline-size: px2rem(6);
+  block-size: px2rem(6);
+  border-radius: $br-circle;
+  background-color: var(--color-accent-primary);
+  animation: status-bounce 1.2s ease-in-out infinite;
+
+  &:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+
+  &:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+}
+
+@keyframes status-bounce {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot {
+    animation: none;
+  }
+}

@@ -22,7 +22,7 @@ export class ConversationStore {
      * Appends a message.
      *
      * @param conversationId - the conversation
-     * @param entry - the message; image bytes of attachments are not stored
+     * @param entry - the message; image and file bytes of attachments are not stored
      */
     public async appendMessage(conversationId: string, entry: ChatHistoryEntry): Promise<void> {
         const stored: ChatHistoryEntry = {
@@ -98,6 +98,10 @@ export class ConversationStore {
         }
         if (attachment.kind === "image") {
             return { ...attachment, base64: "" };
+        }
+        if (attachment.kind === "file") {
+            const { base64: _bytes, ...rest } = attachment;
+            return rest;
         }
         return attachment;
     }

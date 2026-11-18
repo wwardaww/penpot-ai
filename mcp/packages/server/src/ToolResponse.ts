@@ -101,6 +101,18 @@ export class TextResponse extends ToolResponse {
     }
 }
 
+/**
+ * Text response of a failed tool execution, flagged with `isError` so that MCP clients (and the
+ * Claude runner reporting tool calls) see the failure as one.
+ */
+export class ErrorResponse extends TextResponse {
+    readonly isError = true;
+
+    constructor(text: string) {
+        super(text);
+    }
+}
+
 export class PNGResponse extends ToolResponse {
     /**
      * @param data - PNG image data as Uint8Array or as object (from JSON conversion of Uint8Array)

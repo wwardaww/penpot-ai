@@ -11,10 +11,12 @@
    [app.main.data.ai.chat :as chat]
    [app.main.data.ai.client :as client]
    [app.main.store :as st]
+   [app.main.ui.workspace.ai.chat.tab-indicator :refer [tab-indicator*]]
    [rumext.v2 :as mf]))
 
 (mf/defc ai-session*
-  "Starts the daemon client and the chat of the file; renders nothing."
+  "Starts the daemon client and the chat of the file. Renders only the
+  AI tab's working indicator, which draws nothing itself."
   [{:keys [file-id]}]
   (mf/with-effect [file-id]
     (st/emit! (client/initialize)
@@ -22,4 +24,4 @@
     (fn []
       (st/emit! (chat/finalize)
                 (client/finalize))))
-  nil)
+  [:> tab-indicator* {}])

@@ -16,6 +16,13 @@ const attachment = z.discriminatedUnion("kind", [
     }),
     z.looseObject({ kind: z.literal("comment"), threadId: id }),
     z.object({ kind: z.literal("image"), mime: z.string().max(64), base64 }),
+    z.object({
+        kind: z.literal("file"),
+        name: z.string().min(1).max(255),
+        mime: z.string().max(128),
+        size: z.number().int().nonnegative(),
+        base64: base64.optional(),
+    }),
 ]);
 
 /**
@@ -44,6 +51,7 @@ export class ClientMessageSchema {
             conversationId: id,
             text: z.string().max(200_000),
             attachments: z.array(attachment).max(50).optional(),
+            selectionDismissed: z.boolean().optional(),
         }),
         z.object({ type: z.literal("chat.cancel"), conversationId: id }),
         z.object({ type: z.literal("chat.history"), rid: id, conversationId: id }),

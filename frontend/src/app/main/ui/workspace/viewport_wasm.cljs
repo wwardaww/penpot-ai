@@ -16,6 +16,7 @@
    [app.common.types.component :as ctk]
    [app.common.types.shape :as cts]
    [app.common.types.shape.layout :as ctl]
+   [app.config :as cf]
    [app.main.data.event :as ev]
    [app.main.data.modal :as modal]
    [app.main.data.workspace :as dw]
@@ -28,6 +29,7 @@
    [app.main.ui.flex-controls :as mfc]
    [app.main.ui.hooks :as ui-hooks]
    [app.main.ui.measurements :as msr]
+   [app.main.ui.workspace.ai.activity.overlay :refer [ai-activity*]]
    [app.main.ui.workspace.shapes.path.editor :refer [path-editor*]]
    [app.main.ui.workspace.shapes.text.editor :as editor-v1]
    [app.main.ui.workspace.shapes.text.text-edition-outline :refer [text-edition-outline*]]
@@ -957,6 +959,8 @@
        (when show-presence?
          [:& presence/active-cursors
           {:page-id page-id}])
+
+       (when (contains? cf/flags :ai) [:> ai-activity* {:zoom zoom :page-id page-id}])
 
        ;; NOTE: ruler guides are being migrated to the WASM render engine.
        ;; The SVG-overlay rendering is temporarily disabled while we implement

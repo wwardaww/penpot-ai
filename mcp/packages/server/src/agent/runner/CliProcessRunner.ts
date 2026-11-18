@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { createInterface } from "readline";
 import { createLogger } from "../../logger";
 import type { ClaudeRunner, RunnerConversation, RunnerEvent, RunnerInput, RunnerOptions } from "./ClaudeRunner";
+import { RunnerInputContent } from "./ClaudeRunner";
 import { type LocalRunnerSettings, PENPOT_MCP_SERVER_NAME } from "./LocalCliRunner";
 import { ClaudeEnvironment } from "./ClaudeEnvironment";
 import { SdkMessageMapper } from "./SdkMessageMapper";
@@ -131,10 +132,7 @@ export class CliProcessRunner implements ClaudeRunner {
     }
 
     private static userMessage(input: RunnerInput): unknown {
-        const content: unknown[] = [{ type: "text", text: input.text }];
-        for (const image of input.images ?? []) {
-            content.push({ type: "image", source: { type: "base64", media_type: image.mime, data: image.base64 } });
-        }
+        const content = RunnerInputContent.blocks(input);
         return { type: "user", message: { role: "user", content }, parent_tool_use_id: null };
     }
 

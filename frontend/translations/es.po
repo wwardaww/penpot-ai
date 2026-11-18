@@ -10172,10 +10172,6 @@ msgstr "Abre el enlace de emparejamiento que muestra el agente o pégalo aquí:"
 msgid "penforge.chat.help.start"
 msgstr "Abre una terminal en la carpeta de Penforge y ejecuta:"
 
-#: src/app/main/ui/workspace/ai/chat/panel.cljs:348
-msgid "penforge.chat.input.attach-selection"
-msgstr "Añadir las capas seleccionadas"
-
 #: src/app/main/ui/workspace/ai/chat/panel.cljs:340
 msgid "penforge.chat.input.label"
 msgstr "Mensaje para la IA"
