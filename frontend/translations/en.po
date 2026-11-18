@@ -12125,10 +12125,6 @@ msgid "penforge.publish.github.update"
 msgstr "Send the latest version"
 
 #: src/app/main/ui/workspace/ai/publish/share.cljs
-msgid "penforge.publish.github.confirm"
-msgstr "Send the app to GitHub (%s)?"
-
-#: src/app/main/ui/workspace/ai/publish/share.cljs
 msgid "penforge.publish.github.confirm-public"
 msgstr "The repository %s will be public: anyone can see the app's code. Create it?"
 
@@ -12159,10 +12155,6 @@ msgstr "Put online"
 #: src/app/main/ui/workspace/ai/publish/share.cljs
 msgid "penforge.publish.site.update"
 msgstr "Update the site"
-
-#: src/app/main/ui/workspace/ai/publish/share.cljs
-msgid "penforge.publish.site.confirm"
-msgstr "Put the app online with %s? Anyone with the address can open it."
 
 #: src/app/main/ui/workspace/ai/publish/share.cljs
 msgid "penforge.publish.site.live"
@@ -12359,3 +12351,43 @@ msgstr "Something went wrong."
 #: src/app/main/data/ai/actions/publish.cljs
 msgid "penforge.publish.error.other"
 msgstr "Something went wrong: %s"
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.actions.phone-live"
+msgstr "App open on your network: stop"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.step.check"
+msgstr "Checking where it goes…"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.confirm.new-private"
+msgstr "Create the private repository %s on GitHub and send the app there?"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.confirm.new-public"
+msgstr "Create the public repository %s on GitHub and send the app there?"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.confirm.existing-private"
+msgstr "Send the app to your existing private repository %s?"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.confirm.existing-public"
+msgstr "Send the app to your existing public repository %s?"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.confirm-public-existing"
+msgstr "The repository %s is public: anyone can see the app's code. Send it there?"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.send-public"
+msgstr "Send to the public repository"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.site.confirm-new"
+msgstr "Put the app online with %s as the new site “%s”? Anyone with its address can open it."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.site.confirm-existing"
+msgstr "Update your %s site “%s” with this version? Anyone with its address can open it."

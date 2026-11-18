@@ -161,3 +161,34 @@
       (finally
         (reset! st/state previous)
         (.close window)))))
+
+(t/deftest plans-name-the-target-before-confirming
+  (let [github (reduce-run dap/empty-state (dap/plan-action :github)
+                           [{:type "workflow.started" :run-id "g1"}
+                            {:type "workflow.event" :run-id "g1" :kind "result"
+                             :payload {:action "plan" :target "github" :owner "octo" :repo "open"
+                                       :full-name "octo/open" :exists true :private false}}
+                            {:type "workflow.done" :run-id "g1" :ok true}])
+        site   (reduce-run github (dap/plan-action :vercel)
+                           [{:type "workflow.event" :run-id "v1" :kind "result"
+                             :payload {:action "plan" :target "vercel" :site-name "my-shop-1a2b3c"
+                                       :existing false}}])]
+    (t/is (= "octo/open" (get-in github [:plans :github :full-name])))
+    (t/is (not (dap/busy? github)))
+    (t/is (= "penforge.publish.github.confirm.existing-public"
+             (share/github-confirm-text (get-in github [:plans :github]))))
+    (t/is (= "penforge.publish.github.confirm.new-private"
+             (share/github-confirm-text {:full-name "octo/x" :exists false :private true})))
+    (t/is (= "penforge.publish.site.confirm-new"
+             (share/site-confirm-text :vercel (get-in site [:plans :vercel]))))
+    (t/is (= "penforge.publish.site.confirm-existing"
+             (share/site-confirm-text :netlify {:site-name "s" :existing true})))))
+
+(t/deftest the-header-shows-a-live-phone-session
+  (let [registry @actions/registry
+        idle     {:penforge {:connection {:status :connected}}}
+        live     (assoc-in idle [:penforge :publish :busy :phone] "run-1")]
+    (t/is (not (dap/phone-live? idle)))
+    (t/is (dap/phone-live? live))
+    (t/is (not (some #(= :ai/phone-live (:id %)) (actions/get-actions registry :header idle))))
+    (t/is (some #(= :ai/phone-live (:id %)) (actions/get-actions registry :header live)))))

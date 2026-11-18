@@ -24,6 +24,9 @@
   - `:progress` action -> last progress payload
   - `:results` action -> last result payload
   - `:errors` action -> `{:code :params :message :detail}`
+  - `:plans` target -> where a push or deployment would go (daemon
+    `plan` result: repository name and visibility, site name, new or
+    existing), shown in the confirmation
   - `:phone` `{:state :url :qr :expires-at}` of the running phone
     preview"
   (:require
@@ -60,6 +63,7 @@
    :progress {}
    :results {}
    :errors {}
+   :plans {}
    :phone nil})
 
 ;; --- Pure helpers
@@ -114,6 +118,9 @@
       "result"   (cond-> (assoc-in state [:results action] payload)
                    (= action :status)
                    (apply-status payload)
+
+                   (= "plan" (:action payload))
+                   (assoc-in [:plans (keyword (:target payload))] payload)
 
                    (and (= action :connect) (:account payload))
                    (assoc-in [:accounts (keyword (get-in payload [:account :provider]))]
@@ -248,7 +255,7 @@
       (if (connected? state)
         (let [rid (proto/next-rid)]
           (rx/merge
-           (rx/of (chat/run-workflow "publish" (assoc params :action (name action))
+           (rx/of (chat/run-workflow "publish" (update params :action #(or % (name action)))
                                      {:rid rid :silent true}))
            (follow-run stream action rid)))
         (rx/empty)))))
@@ -297,27 +304,55 @@
   []
   (run-publish :zip {}))
 
+(defn plan-action
+  "State key of the plan request of `target`."
+  [target]
+  (keyword (str "plan-" (name target))))
+
+(defn plan-target
+  "Ask the daemon where a push (`:github`, with `:name` and `:private?`)
+  or a deployment (`:vercel`, `:netlify`) would go, so the confirmation
+  can name the repository or site and its visibility."
+  ([target] (plan-target target nil))
+  ([target {:keys [name private?]}]
+   (let [action (plan-action target)]
+     (ptk/reify ::plan-target
+       ptk/UpdateEvent
+       (update [_ state]
+         (update-publish state update :plans dissoc target))
+
+       ptk/WatchEvent
+       (watch [_ _ _]
+         (rx/of (run-publish action
+                             (cond-> {:action "plan" :target (clojure.core/name target)}
+                               (not (str/blank? name)) (assoc :name (str/trim name))
+                               (some? private?)        (assoc :private (boolean private?))))))))))
+
 (defn publish-github
-  "Push the app to GitHub; the user confirmed in the panel (and agreed
-  to a public repository when `private?` is false)."
-  [{:keys [name private?]}]
-  (run-publish :github (cond-> {:confirmed true
-                                :private (boolean private?)
-                                :confirmed-public (not private?)}
-                         (not (str/blank? name))
-                         (assoc :name (str/trim name)))))
+  "Push the app to the repository of the confirmed plan; `public-ok?`
+  when the user also agreed that the repository is public."
+  [{:keys [repo private public-ok?]}]
+  (run-publish :github {:confirmed true
+                        :name repo
+                        :private (boolean private)
+                        :confirmed-public (boolean public-ok?)}))
 
 (defn deploy
-  "Put the app online with `provider` (`:vercel` or `:netlify`); the
-  user confirmed in the panel."
-  [provider]
-  (run-publish provider {:confirmed true}))
+  "Put the app online with `provider` (`:vercel` or `:netlify`) on the
+  site the user confirmed (`site-name` from the plan)."
+  [provider site-name]
+  (run-publish provider {:confirmed true :site-name site-name}))
 
 (defn start-phone
   "Open the app on a phone (LAN access until stopped); the user agreed
   in the panel."
   []
   (run-publish :phone {:confirmed true}))
+
+(defn phone-live?
+  "Whether a phone preview runs (the app is open to the local network)."
+  [state]
+  (contains? (get-in state (conj state-path :busy)) :phone))
 
 (defn stop-phone
   []
@@ -357,7 +392,7 @@
      ptk/WatchEvent
      (watch [_ state _]
        (rx/concat
-        (if (= modal-type (get-in state [:modal :type]))
+        (if (= modal-type (get-in state [::modal/modal :type]))
           (rx/empty)
           (rx/of (modal/show modal-type {})))
         (rx/of (fetch-status)))))))
@@ -398,6 +433,16 @@
   :scopes #{:header :main-menu :command-palette}
   :enabled? connected?
   :run (fn [_] (st/emit! (open-share)))})
+
+(actions/register-action!
+ {:id :ai/phone-live
+  :label #(tr "penforge.actions.phone-live")
+  :icon i/status-alert
+  :order 1
+  :primary true
+  :scopes #{:header}
+  :visible? phone-live?
+  :run (fn [_] (st/emit! (stop-phone)))})
 
 (actions/register-action!
  {:id :ai/accounts

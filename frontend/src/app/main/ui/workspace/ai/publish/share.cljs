@@ -63,6 +63,7 @@
     "upload"  (tr "penforge.publish.step.upload")
     "deploy"  (tr "penforge.publish.step.deploy")
     "phone"   (tr "penforge.publish.step.phone")
+    "check"   (tr "penforge.publish.step.check")
     (or text (tr "penforge.publish.working"))))
 
 (defn qr-path
@@ -169,12 +170,40 @@
      (when error
        [:> problem* {:error error :developer developer :action :zip}])]))
 
+(defn- section-error
+  "First failure of `action` or of its plan request, with the action key
+  that clears it."
+  [publish action]
+  (let [plan-action (dap/plan-action action)]
+    (cond
+      (get-in publish [:errors action])      [action (get-in publish [:errors action])]
+      (get-in publish [:errors plan-action]) [plan-action (get-in publish [:errors plan-action])]
+      :else                                  nil)))
+
+(defn github-confirm-text
+  "Confirmation of a push, naming the repository and its visibility."
+  [{:keys [full-name exists private]}]
+  (cond
+    (and exists private)       (tr "penforge.publish.github.confirm.existing-private" full-name)
+    exists                     (tr "penforge.publish.github.confirm.existing-public" full-name)
+    private                    (tr "penforge.publish.github.confirm.new-private" full-name)
+    :else                      (tr "penforge.publish.github.confirm.new-public" full-name)))
+
+(defn site-confirm-text
+  "Confirmation of a deployment, naming the provider and the site."
+  [provider {:keys [site-name existing]}]
+  (if existing
+    (tr "penforge.publish.site.confirm-existing" (provider-name provider) site-name)
+    (tr "penforge.publish.site.confirm-new" (provider-name provider) site-name)))
+
 (mf/defc github-section*
   [{:keys [publish developer connected]}]
   (let [account   (dap/connected-account publish :github)
         published (get-in publish [:published :github])
         busy      (dap/busy? publish :github)
-        error     (get-in publish [:errors :github])
+        planning  (dap/busy? publish (dap/plan-action :github))
+        plan      (get-in publish [:plans :github])
+        [error-action error] (section-error publish :github)
         result    (get-in publish [:results :github])
         step*     (mf/use-state nil)
         step      (deref step*)
@@ -182,20 +211,21 @@
         private*  (mf/use-state true)
         repo-name (or (deref name*) (:repo published) "")
         private?  (if published (:private published) (deref private*))
-        public?   (not private?)
-        target    (if (str/blank? repo-name)
-                    (:login account)
-                    (str (:login account) "/" repo-name))
+        public?   (false? (:private plan))
 
-        on-name   (fn [event] (reset! name* (dom/get-target-val event)))
+        on-name    (fn [event] (reset! name* (dom/get-target-val event)))
         on-private (fn [_] (swap! private* not))
-        on-start  (fn [] (reset! step* :confirm))
-        on-cancel (fn [] (reset! step* nil))
-        on-accept (fn []
-                    (if (and public? (nil? published) (not= step :confirm-public))
-                      (reset! step* :confirm-public)
-                      (do (reset! step* nil)
-                          (st/emit! (dap/publish-github {:name repo-name :private? private?})))))]
+        on-start   (fn []
+                     (reset! step* :confirm)
+                     (st/emit! (dap/plan-target :github {:name repo-name :private? private?})))
+        on-cancel  (fn [] (reset! step* nil))
+        on-accept  (fn []
+                     (if (and public? (= step :confirm))
+                       (reset! step* :confirm-public)
+                       (do (reset! step* nil)
+                           (st/emit! (dap/publish-github {:repo (:repo plan)
+                                                          :private (:private plan)
+                                                          :public-ok? public?})))))]
     [:> section* {:title (if developer
                            (tr "penforge.publish.github.title.developer")
                            (tr "penforge.publish.github.title"))
@@ -210,15 +240,22 @@
        busy
        [:> running* {:progress (get-in publish [:progress :github])}]
 
-       (= step :confirm)
-       [:> confirm* {:message (tr "penforge.publish.github.confirm" target)
+       (and step planning)
+       [:> running* {:progress {:step "check"}}]
+
+       (and (= step :confirm) plan)
+       [:> confirm* {:message (github-confirm-text plan)
                      :accept-label (tr "penforge.publish.github.action")
                      :on-accept on-accept
                      :on-cancel on-cancel}]
 
-       (= step :confirm-public)
-       [:> confirm* {:message (tr "penforge.publish.github.confirm-public" target)
-                     :accept-label (tr "penforge.publish.github.make-public")
+       (and (= step :confirm-public) plan)
+       [:> confirm* {:message (if (:exists plan)
+                                (tr "penforge.publish.github.confirm-public-existing" (:full-name plan))
+                                (tr "penforge.publish.github.confirm-public" (:full-name plan)))
+                     :accept-label (if (:exists plan)
+                                     (tr "penforge.publish.github.send-public")
+                                     (tr "penforge.publish.github.make-public"))
                      :on-accept on-accept
                      :on-cancel on-cancel}]
 
@@ -251,23 +288,28 @@
        [:> text* {:as "p" :typography t/body-small :class (stl/css :muted)}
         [:> link* {:href (:url published)}]])
      (when error
-       [:> problem* {:error error :developer developer :action :github}])]))
+       [:> problem* {:error error :developer developer :action error-action}])]))
 
 (mf/defc site-section*
   [{:keys [publish developer connected provider]}]
   (let [account   (dap/connected-account publish provider)
         published (get-in publish [:published provider])
         busy      (dap/busy? publish provider)
-        error     (get-in publish [:errors provider])
+        planning  (dap/busy? publish (dap/plan-action provider))
+        plan      (get-in publish [:plans provider])
+        [error-action error] (section-error publish provider)
         result    (get-in publish [:results provider])
         url       (or (:url result) (:url published))
         asking*   (mf/use-state false)
+        asking    (deref asking*)
         label     (provider-name provider)
-        on-start  (fn [] (reset! asking* true))
+        on-start  (fn []
+                    (reset! asking* true)
+                    (st/emit! (dap/plan-target provider)))
         on-cancel (fn [] (reset! asking* false))
         on-accept (fn []
                     (reset! asking* false)
-                    (st/emit! (dap/deploy provider)))]
+                    (st/emit! (dap/deploy provider (:site-name plan))))]
     [:> section* {:title (tr "penforge.publish.site.title" label)
                   :description (if developer
                                  (tr "penforge.publish.site.description.developer" label)
@@ -280,8 +322,11 @@
        busy
        [:> running* {:progress (get-in publish [:progress provider])}]
 
-       (deref asking*)
-       [:> confirm* {:message (tr "penforge.publish.site.confirm" label)
+       (and asking planning)
+       [:> running* {:progress {:step "check"}}]
+
+       (and asking plan)
+       [:> confirm* {:message (site-confirm-text provider plan)
                      :accept-label (tr "penforge.publish.site.action")
                      :on-accept on-accept
                      :on-cancel on-cancel}]
@@ -299,7 +344,7 @@
        [:> text* {:as "p" :typography t/body-small}
         (tr "penforge.publish.site.live") " " [:> link* {:href url}]])
      (when error
-       [:> problem* {:error error :developer developer :action provider}])]))
+       [:> problem* {:error error :developer developer :action error-action}])]))
 
 (mf/defc phone-section*
   [{:keys [publish developer connected]}]
@@ -392,7 +437,7 @@
                      :type "password"
                      :aria-label (tr "penforge.publish.accounts.token-label" label)
                      :placeholder (tr "penforge.publish.accounts.token-placeholder")
-                     :auto-complete "off"
+                     :auto-complete "new-password"
                      :spell-check false
                      :disabled (or busy (not connected))
                      :on-key-down on-key-down}]
@@ -438,6 +483,11 @@
         on-share    (mf/use-fn #(st/emit! (dap/select-tab :share)))
         on-accounts (mf/use-fn #(st/emit! (dap/select-tab :accounts)))
         props       {:publish publish :developer developer :connected connected}]
+
+    ;; Esc, a click outside or another modal close the panel without
+    ;; `close-share`: the phone session ends with the panel anyway.
+    (mf/with-effect []
+      (fn [] (st/emit! (dap/stop-phone))))
 
     [:div {:class (stl/css :modal-overlay)}
      [:div {:class (stl/css :modal-dialog)
