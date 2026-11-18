@@ -1,8 +1,7 @@
-import { randomBytes } from "crypto";
 import { ProviderApi } from "./ProviderApi";
 import { PublishError } from "./PublishError";
 import type { ProviderId } from "./SecretStore";
-import { type DeployStep, type PreviousSite, type SiteDeployment, SiteDeployer } from "./SiteDeployer";
+import { type DeployStep, type PreviousSite, type SiteDeployment, SiteDeployer, type SitePlan } from "./SiteDeployer";
 import type { SiteFile, StaticSite } from "./StaticSite";
 
 /** Site fields of the Netlify API used here. */
@@ -57,16 +56,34 @@ export class NetlifyDeployer extends SiteDeployer {
         return login;
     }
 
+    public async plan(token: string, name: string, previous: PreviousSite | null, seed: string): Promise<SitePlan> {
+        const api = this.api(token);
+        if (previous) {
+            const found = await this.findSite(api, previous.siteId);
+            if (found) {
+                return {
+                    siteName: found.name ?? previous.siteName,
+                    siteId: found.id,
+                    existing: true,
+                    url: found.ssl_url ?? found.url,
+                };
+            }
+        }
+        const siteName = await this.freeName(SiteDeployer.siteName(name), seed, async (candidate) => {
+            return (await this.findSite(api, `${candidate}.netlify.app`)) !== null;
+        });
+        return { siteName, existing: false };
+    }
+
     public async deploy(
         token: string,
         site: StaticSite,
-        name: string,
-        previous: PreviousSite | null,
+        plan: SitePlan,
         onStep: (step: DeployStep) => void,
         signal?: AbortSignal
     ): Promise<SiteDeployment> {
         const api = this.api(token);
-        const target = await this.site(api, name, previous);
+        const target = await this.site(api, plan);
         const files = site.withFile("_redirects", NetlifyDeployer.SPA_REDIRECTS);
         onStep("upload");
         const digests = Object.fromEntries(files.map((file) => [`/${file.path}`, file.sha1]));
@@ -106,7 +123,7 @@ export class NetlifyDeployer extends SiteDeployer {
             url: target.ssl_url ?? done.ssl_url ?? target.url ?? done.url ?? "",
             deploymentId: deployId,
             siteId: target.id,
-            siteName: target.name ?? name,
+            siteName: target.name ?? plan.siteName,
         };
     }
 
@@ -114,36 +131,30 @@ export class NetlifyDeployer extends SiteDeployer {
         return new ProviderApi(this.providerName, NetlifyDeployer.BASE, token, this.transport, this.mask);
     }
 
-    /** Finds the project's earlier site or creates a new one. */
-    private async site(
-        api: ProviderApi,
-        name: string,
-        previous: PreviousSite | null
-    ): Promise<NetlifySite & { id: string }> {
-        if (previous) {
-            const found = await api.call<NetlifySite>(
-                "GET",
-                `/sites/${encodeURIComponent(previous.siteId)}`,
-                undefined,
-                {
-                    accept: [404],
-                }
-            );
-            if (found.status !== 404 && typeof found.data?.id === "string") {
-                return { ...found.data, id: found.data.id };
+    /** Reads a site by id or `<name>.netlify.app`; null when the user has none such. */
+    private async findSite(api: ProviderApi, idOrDomain: string): Promise<(NetlifySite & { id: string }) | null> {
+        const found = await api.call<NetlifySite>("GET", `/sites/${encodeURIComponent(idOrDomain)}`, undefined, {
+            accept: [404],
+        });
+        return found.status !== 404 && typeof found.data?.id === "string" ? { ...found.data, id: found.data.id } : null;
+    }
+
+    /** Gets the confirmed site: the existing one, or a new one with the confirmed name. */
+    private async site(api: ProviderApi, plan: SitePlan): Promise<NetlifySite & { id: string }> {
+        if (plan.existing && plan.siteId) {
+            const found = await this.findSite(api, plan.siteId);
+            if (found) {
+                return found;
             }
-        }
-        const base = SiteDeployer.siteName(name);
-        for (let attempt = 0; attempt < 4; attempt++) {
-            const candidate = attempt === 0 ? base : `${base}-${randomBytes(3).toString("hex")}`;
-            const created = await api.call<NetlifySite>("POST", "/sites", { name: candidate }, { accept: [422] });
+        } else {
+            const created = await api.call<NetlifySite>("POST", "/sites", { name: plan.siteName }, { accept: [422] });
             if (created.status !== 422 && typeof created.data?.id === "string") {
                 return { ...created.data, id: created.data.id };
             }
         }
-        throw new PublishError("name-taken", `Netlify has no free site name like ${base}`, {
+        throw new PublishError("name-taken", `The Netlify site ${plan.siteName} changed since you confirmed`, {
             provider: this.providerName,
-            name: base,
+            name: plan.siteName,
         });
     }
 }

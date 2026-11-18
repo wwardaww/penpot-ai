@@ -129,38 +129,41 @@ export class GitHubPublisher {
     }
 
     /**
-     * Finds the user's repository or creates it.
+     * Finds one of the user's repositories, with its visibility.
      *
      * @param token - the token
      * @param login - the account login
      * @param name - repository name (see {@link repoName})
-     * @param isPrivate - visibility of a new repository
-     * @param beforeCreate - called before a new repository is created (may throw to stop)
+     * @returns the repository (`created: false`), or null when it does not exist
+     * @throws PublishError `token-scope` when the token may not push to it
      */
-    public async ensureRepo(
-        token: string,
-        login: string,
-        name: string,
-        isPrivate: boolean,
-        beforeCreate: () => Promise<void> = async () => {}
-    ): Promise<GitHubRepo> {
-        if (!GitHubPublisher.NAME.test(name) || name === "." || name === "..") {
-            throw new PublishError("provider", `Invalid repository name ${JSON.stringify(name)}`, {
+    public async findRepo(token: string, login: string, name: string): Promise<GitHubRepo | null> {
+        GitHubPublisher.checkName(name);
+        const path = `/repos/${encodeURIComponent(login)}/${encodeURIComponent(name)}`;
+        const existing = await this.api(token).call<RepoAnswer>("GET", path, undefined, { accept: [404] });
+        if (existing.status === 404) {
+            return null;
+        }
+        if (existing.data?.permissions && existing.data.permissions.push === false) {
+            throw new PublishError("token-scope", `The token may not push to ${login}/${name}`, {
                 provider: GitHubPublisher.PROVIDER,
             });
         }
+        return this.repo(existing.data, login, name, false);
+    }
+
+    /**
+     * Creates a repository in the user's account.
+     *
+     * @param token - the token
+     * @param login - the account login
+     * @param name - repository name (see {@link repoName})
+     * @param isPrivate - visibility
+     * @throws PublishError `name-taken` when GitHub refuses the name
+     */
+    public async createRepo(token: string, login: string, name: string, isPrivate: boolean): Promise<GitHubRepo> {
+        GitHubPublisher.checkName(name);
         const api = this.api(token);
-        const path = `/repos/${encodeURIComponent(login)}/${encodeURIComponent(name)}`;
-        const existing = await api.call<RepoAnswer>("GET", path, undefined, { accept: [404] });
-        if (existing.status !== 404) {
-            if (existing.data?.permissions && existing.data.permissions.push === false) {
-                throw new PublishError("token-scope", `The token may not push to ${login}/${name}`, {
-                    provider: GitHubPublisher.PROVIDER,
-                });
-            }
-            return this.repo(existing.data, login, name, false);
-        }
-        await beforeCreate();
         const created = await api.call<RepoAnswer>(
             "POST",
             "/user/repos",
@@ -293,6 +296,14 @@ export class GitHubPublisher {
             child.once("error", reject);
             child.once("close", (code) => resolve({ code, stdout }));
         });
+    }
+
+    private static checkName(name: string): void {
+        if (!GitHubPublisher.NAME.test(name) || name === "." || name === "..") {
+            throw new PublishError("provider", `Invalid repository name ${JSON.stringify(name)}`, {
+                provider: GitHubPublisher.PROVIDER,
+            });
+        }
     }
 
     private async expect(args: string[], cwd: string, env: Record<string, string>, step: string): Promise<void> {

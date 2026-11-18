@@ -93,6 +93,7 @@ export class DevServerManager {
             healthyMs: options.healthyMs ?? DevServerManager.DEFAULTS.healthyMs,
             baseEnv: options.baseEnv ?? process.env,
             exposureCheck: options.exposureCheck,
+            exposureRecheckMs: options.exposureRecheckMs,
         };
         this.policy = options.commandPolicy ?? new CommandPolicy();
     }

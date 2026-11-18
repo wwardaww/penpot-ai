@@ -1,7 +1,7 @@
 import { ProviderApi } from "./ProviderApi";
 import { PublishError } from "./PublishError";
 import type { ProviderId } from "./SecretStore";
-import { type DeployStep, type PreviousSite, type SiteDeployment, SiteDeployer } from "./SiteDeployer";
+import { type DeployStep, type PreviousSite, type SiteDeployment, SiteDeployer, type SitePlan } from "./SiteDeployer";
 import type { StaticSite } from "./StaticSite";
 
 /** Deployment fields of the Vercel API used here. */
@@ -54,15 +54,41 @@ export class VercelDeployer extends SiteDeployer {
         return login;
     }
 
+    public async plan(token: string, name: string, previous: PreviousSite | null, seed: string): Promise<SitePlan> {
+        const api = this.api(token);
+        if (previous) {
+            const found = await this.project(api, previous.siteId);
+            if (found?.id === previous.siteId && typeof found.name === "string") {
+                return {
+                    siteName: found.name,
+                    siteId: found.id,
+                    existing: true,
+                    url: `https://${found.name}.vercel.app`,
+                };
+            }
+        }
+        const siteName = await this.freeName(SiteDeployer.siteName(name), seed, async (candidate) => {
+            return (await this.project(api, candidate)) !== null;
+        });
+        return { siteName, existing: false };
+    }
+
     public async deploy(
         token: string,
         site: StaticSite,
-        name: string,
-        previous: PreviousSite | null,
+        plan: SitePlan,
         onStep: (step: DeployStep) => void,
         signal?: AbortSignal
     ): Promise<SiteDeployment> {
         const api = this.api(token);
+        const current = await this.project(api, plan.siteId ?? plan.siteName);
+        if (plan.existing ? current?.id !== plan.siteId : current !== null) {
+            // never deploy onto a project the user did not confirm
+            throw new PublishError("name-taken", `The Vercel project ${plan.siteName} changed since you confirmed`, {
+                provider: this.providerName,
+                name: plan.siteName,
+            });
+        }
         const files = site.withFile("vercel.json", VercelDeployer.SPA_CONFIG);
         onStep("upload");
         await SiteDeployer.uploadAll(files, async (file) => {
@@ -72,9 +98,10 @@ export class VercelDeployer extends SiteDeployer {
             });
         });
         onStep("deploy");
-        const projectName = previous?.siteName ?? SiteDeployer.siteName(name);
+        const projectName = plan.siteName;
         const created = await api.call<VercelDeployment>("POST", "/v13/deployments?skipAutoDetectionConfirmation=1", {
             name: projectName,
+            ...(plan.existing && plan.siteId ? { project: plan.siteId } : {}),
             target: "production",
             files: files.map((file) => ({ file: file.path, sha: file.sha1, size: file.size })),
             projectSettings: { framework: null },
@@ -101,9 +128,20 @@ export class VercelDeployer extends SiteDeployer {
         return {
             url: `https://${host}`,
             deploymentId: id,
-            siteId: done.projectId ?? previous?.siteId ?? projectName,
+            siteId: done.projectId ?? plan.siteId ?? projectName,
             siteName: done.name ?? projectName,
         };
+    }
+
+    /** Reads a project by id or name; null when the user has none such. */
+    private async project(api: ProviderApi, idOrName: string): Promise<{ id?: string; name?: string } | null> {
+        const answer = await api.call<{ id?: string; name?: string }>(
+            "GET",
+            `/v9/projects/${encodeURIComponent(idOrName)}`,
+            undefined,
+            { accept: [404] }
+        );
+        return answer.status === 404 ? null : (answer.data ?? {});
     }
 
     protected api(token: string): ProviderApi {

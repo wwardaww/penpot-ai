@@ -4,7 +4,8 @@ import { z } from "zod";
 import type { WorkflowContext } from "@penpot/mcp-common";
 import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import { AppArchive } from "./AppArchive";
-import { GitHubPublisher } from "./GitHubPublisher";
+import { type GitHubRepo, GitHubPublisher } from "./GitHubPublisher";
+import type { SitePlan } from "./SiteDeployer";
 import { PhonePreview } from "./PhonePreview";
 import { PublishError } from "./PublishError";
 import { PublishRequests, PublishServices } from "./PublishServices";
@@ -27,8 +28,22 @@ export const PublishParamsSchema = z.discriminatedUnion("action", [
         confirmed: z.boolean().optional(),
         confirmedPublic: z.boolean().optional(),
     }),
-    z.object({ action: z.literal("vercel"), confirmed: z.boolean().optional() }),
-    z.object({ action: z.literal("netlify"), confirmed: z.boolean().optional() }),
+    z.object({
+        action: z.literal("plan"),
+        target: z.enum(["github", "vercel", "netlify"]),
+        name: z.string().min(1).max(100).optional(),
+        private: z.boolean().optional(),
+    }),
+    z.object({
+        action: z.literal("vercel"),
+        siteName: z.string().min(1).max(100).optional(),
+        confirmed: z.boolean().optional(),
+    }),
+    z.object({
+        action: z.literal("netlify"),
+        siteName: z.string().min(1).max(100).optional(),
+        confirmed: z.boolean().optional(),
+    }),
     z.object({ action: z.literal("phone"), confirmed: z.boolean().optional() }),
 ]);
 
@@ -103,9 +118,11 @@ export class PublishRun {
                 return this.zip();
             case "github":
                 return this.github(params);
+            case "plan":
+                return this.plan(params);
             case "vercel":
             case "netlify":
-                return this.deploy(params.action, params.confirmed === true);
+                return this.deploy(params.action, params.siteName, params.confirmed === true);
             case "phone":
                 return this.phonePreview(params.confirmed === true);
         }
@@ -144,30 +161,86 @@ export class PublishRun {
 
     private async zip(): Promise<{ summary: string }> {
         const name = GitHubPublisher.repoName(this.projectName());
-        const content = await AppArchive.zip(this.ctx.workspace.appSrcDir, name);
+        const archive = await AppArchive.ofHead(this.ctx.workspace.appSrcDir, name);
         const filename = `${name}.zip`;
-        const id = this.services.downloads.add({ filename, contentType: "application/zip", content });
+        const id = this.services.downloads.add({
+            filename,
+            contentType: "application/zip",
+            content: () => archive.open(),
+        });
         this.ctx.emit("result", {
             action: "zip",
             url: this.services.downloadUrl(id),
             filename,
-            size: content.length,
+            commit: archive.commit,
             expiresInS: this.services.downloads.ttlSeconds,
         });
         return { summary: `${filename} is ready` };
     }
 
+    /**
+     * Tells the client where a push or deployment would go, so its confirmation can name it.
+     */
+    private async plan(params: Extract<PublishParams, { action: "plan" }>): Promise<{ summary: string }> {
+        if (params.target === "github") {
+            const target = await this.githubTarget(params.name, params.private);
+            this.ctx.emit("result", {
+                action: "plan",
+                target: "github",
+                owner: target.login,
+                repo: target.name,
+                fullName: `${target.login}/${target.name}`,
+                exists: target.existing !== null,
+                private: target.isPrivate,
+                url: target.existing?.url,
+            });
+            return { summary: `GitHub repository ${target.login}/${target.name}` };
+        }
+        const site = await this.sitePlan(params.target);
+        this.ctx.emit("result", { action: "plan", target: params.target, provider: params.target, ...site });
+        return { summary: `${params.target} site ${site.siteName}` };
+    }
+
+    /** Resolves the GitHub repository a push goes to, and its real visibility. */
+    private async githubTarget(
+        wantedName: string | undefined,
+        wantedPrivate: boolean | undefined
+    ): Promise<{ token: string; login: string; name: string; existing: GitHubRepo | null; isPrivate: boolean }> {
+        const token = await this.token("github");
+        const login = (await this.services.secrets.account("github"))!.login;
+        this.requireApp();
+        const record = await PublishServices.record(this.ctx.workspace);
+        const name = wantedName ?? record.github?.repo ?? GitHubPublisher.repoName(this.projectName());
+        const existing = await this.services.github.findRepo(token, login, name);
+        const isPrivate = existing ? existing.private : (wantedPrivate ?? record.github?.private ?? true);
+        return { token, login, name, existing, isPrivate };
+    }
+
     private async github(params: Extract<PublishParams, { action: "github" }>): Promise<{ summary: string }> {
         const workspace = this.ctx.workspace;
-        const token = await this.token("github");
-        const account = (await this.services.secrets.account("github"))!;
-        this.requireApp();
-        const record = await PublishServices.record(workspace);
-        const name = params.name ?? record.github?.repo ?? GitHubPublisher.repoName(this.projectName());
-        const isPrivate = params.private ?? record.github?.private ?? true;
+        const target = await this.githubTarget(params.name, params.private);
+        const { token, login, name, isPrivate } = target;
+        const fullName = `${login}/${name}`;
+        const visibility = isPrivate ? "private" : "public";
+        const state = target.existing ? "existing" : "new";
         if (
             !params.confirmed &&
-            !(await this.confirm(`Send the app to GitHub (${account.login}/${name})?`, "github"))
+            !(await this.confirm(
+                `Send the app to the ${visibility} GitHub repository ${fullName} (${state})?`,
+                "github"
+            ))
+        ) {
+            return this.cancelled("github");
+        }
+        if (
+            !isPrivate &&
+            !params.confirmedPublic &&
+            !(await this.confirm(
+                target.existing
+                    ? `The repository ${fullName} is public: anyone can see the app's code. Send it there?`
+                    : `Create the public repository ${fullName}? Anyone can see the app's code.`,
+                "github-public"
+            ))
         ) {
             return this.cancelled("github");
         }
@@ -179,18 +252,7 @@ export class PublishRun {
                 throw new PublishError("no-app", "The app has no saved version yet");
             }
             this.progress("repo");
-            const repo = await this.services.github.ensureRepo(token, account.login, name, isPrivate, async () => {
-                if (
-                    !isPrivate &&
-                    !params.confirmedPublic &&
-                    !(await this.confirm(
-                        `Create the public repository ${account.login}/${name}? Anyone can see its code.`,
-                        "github-public"
-                    ))
-                ) {
-                    throw new PublishError("cancelled", "Cancelled");
-                }
-            });
+            const repo = target.existing ?? (await this.services.github.createRepo(token, login, name, isPrivate));
             this.progress("push");
             await this.services.github.push(token, workspace.appSrcDir, repo);
             const linked = await this.services.github.linkRemote(workspace.appSrcDir, repo).catch(() => false);
@@ -209,23 +271,48 @@ export class PublishRun {
         });
     }
 
-    private async deploy(provider: "vercel" | "netlify", confirmed: boolean): Promise<{ summary: string }> {
+    /** Resolves the site a deployment goes to (the project's own one, or a new free name). */
+    private async sitePlan(provider: "vercel" | "netlify"): Promise<SitePlan> {
+        const token = await this.token(provider);
+        this.requireApp();
+        const record = await PublishServices.record(this.ctx.workspace);
+        return this.services.deployers[provider].plan(
+            token,
+            this.projectName(),
+            record[provider] ?? null,
+            this.ctx.workspace.projectId
+        );
+    }
+
+    private async deploy(
+        provider: "vercel" | "netlify",
+        confirmedName: string | undefined,
+        confirmed: boolean
+    ): Promise<{ summary: string }> {
         const workspace = this.ctx.workspace;
         const deployer = this.services.deployers[provider];
         const token = await this.token(provider);
-        this.requireApp();
-        if (!confirmed && !(await this.confirm(`Put the app online with ${deployer.providerName}?`, provider))) {
+        const plan = await this.sitePlan(provider);
+        if (confirmedName !== undefined && confirmedName !== plan.siteName) {
+            throw new PublishError("name-taken", `The ${deployer.providerName} site changed since you confirmed`, {
+                provider: deployer.providerName,
+                name: confirmedName,
+            });
+        }
+        const question = plan.existing
+            ? `Update the ${deployer.providerName} site ${plan.siteName}? Anyone with its address can open the app.`
+            : `Put the app online with ${deployer.providerName} as the new site ${plan.siteName}? ` +
+              "Anyone with its address can open the app.";
+        // a confirmation from the client counts only when it named the site
+        if (!(confirmed && confirmedName !== undefined) && !(await this.confirm(question, provider))) {
             return this.cancelled(provider);
         }
         return this.services.exclusive(workspace.projectId, async () => {
             const site = await this.services.sites.build(workspace, this.ctx.signal, (step) => this.progress(step));
-            const record = await PublishServices.record(workspace);
-            const previous = record[provider] ?? null;
             const deployment = await deployer.deploy(
                 token,
                 site,
-                this.projectName(),
-                previous,
+                plan,
                 (step) => this.progress(step),
                 this.abortSignal()
             );

@@ -1,3 +1,5 @@
+import { homedir } from "os";
+import { isAbsolute, relative, resolve } from "path";
 import { PENPOT_MCP_SERVER_NAME } from "../runner/LocalCliRunner";
 import type { ToolPermissionHandler, ToolUseDecision, ToolUseRequest } from "../runner/ClaudeRunner";
 import type { PathGuard } from "../workspace/pathGuard";
@@ -9,8 +11,11 @@ import type { PermissionAsker, PermissionPrompt } from "./PermissionBroker";
  * - Penpot MCP tools are always allowed; the tab's MCP session id is added when missing.
  * - File tools are allowed inside the project folder; outside it the user is asked.
  * - Shell commands, web access and unknown tools need the user's permission. A permission the user
- *   asked to remember holds for the same tool and target (command name, host, path) for the
- *   lifetime of the policy.
+ *   asked to remember holds for the same tool and target (command name, host) for the lifetime of
+ *   the policy; never for a path outside the project, nor for a command that names one.
+ * - The Penforge home outside the project (other projects, `config.json`, the token store
+ *   `secrets.json` and its temporary files) is refused without asking, to file tools and to
+ *   commands that name it or a secrets file.
  */
 export class ToolPermissionPolicy implements ToolPermissionHandler {
     private static readonly PENPOT_TOOL_PREFIX = `mcp__${PENPOT_MCP_SERVER_NAME}__`;
@@ -20,9 +25,15 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
     private static readonly SHELL_TOOLS = new Set(["Bash", "PowerShell"]);
     private static readonly PATH_FIELDS = ["file_path", "path", "notebook_path"];
 
-    /** the daemon's token store (W20), never readable by Claude, not even with permission */
-    private static readonly SECRETS_FILE = /(?:^|\/|\\)secrets\.json$/i;
-    private static readonly SECRETS_DENIED = "Penforge's account tokens are not available to Claude.";
+    /** the daemon's token store (W20) and its temporary files */
+    private static readonly SECRETS_FILE = /(?:^|\/|\\)secrets\.json(?:\.[0-9a-f]+\.tmp)?$/i;
+    /** commands that name a secrets file or the Penforge home through a variable or `~` */
+    private static readonly PROTECTED_COMMAND =
+        /secret|(?:~|\$HOME|\$\{HOME\}|%USERPROFILE%|%HOMEPATH%|\$env:USERPROFILE|\$env:HOME)[\\/]+["']?Penforge/i;
+    /** command words that may point outside the project: absolute, home or parent paths, variables */
+    private static readonly OUTSIDE_WORD = /^["']?(?:\/|~|\.\.|[A-Za-z]:|\\\\)|[$%]/;
+    private static readonly PROTECTED_DENIED =
+        "Penforge's own files (account tokens, settings, other projects) are not available to Claude.";
 
     private readonly remembered = new Set<string>();
 
@@ -31,10 +42,17 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
      * @param asker - asks the user
      * @param mcpSessionId - gets the Penpot MCP session of the client's tab
      */
+    /**
+     * @param guard - guard of the project folder
+     * @param asker - asks the user
+     * @param mcpSessionId - gets the Penpot MCP session of the client's tab
+     * @param area - the project folder and the Penforge home around it (protected outside the project)
+     */
     constructor(
         private readonly guard: PathGuard,
         private readonly asker: PermissionAsker,
-        private readonly mcpSessionId: () => string | undefined
+        private readonly mcpSessionId: () => string | undefined,
+        private readonly area?: { projectRoot: string; penforgeHome: string }
     ) {}
 
     public async decide(request: ToolUseRequest): Promise<ToolUseDecision> {
@@ -54,10 +72,10 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
             if (outside.length === 0) {
                 return { allow: true };
             }
-            if (outside.some((path) => ToolPermissionPolicy.SECRETS_FILE.test(path))) {
-                return { allow: false, message: ToolPermissionPolicy.SECRETS_DENIED };
+            if (outside.some((path) => this.isProtected(path))) {
+                return { allow: false, message: ToolPermissionPolicy.PROTECTED_DENIED };
             }
-            return this.askUser(`${toolName}:${outside.join("|")}`, request, {
+            return this.askUser(null, request, {
                 title: isRead
                     ? "Allow reading a file outside the project?"
                     : "Allow changing a file outside the project?",
@@ -67,11 +85,13 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
         }
         if (ToolPermissionPolicy.SHELL_TOOLS.has(toolName)) {
             const command = String(input.command ?? "").trim();
-            if (/secrets\.json/i.test(command)) {
-                return { allow: false, message: ToolPermissionPolicy.SECRETS_DENIED };
+            if (this.namesProtected(command)) {
+                return { allow: false, message: ToolPermissionPolicy.PROTECTED_DENIED };
             }
-            const program = command.split(/\s+/)[0] ?? "";
-            return this.askUser(`${toolName}:${program}`, request, {
+            const words = command.split(/\s+/);
+            const program = words[0] ?? "";
+            const leavesProject = words.slice(1).some((word) => ToolPermissionPolicy.OUTSIDE_WORD.test(word));
+            return this.askUser(leavesProject ? null : `${toolName}:${program}`, request, {
                 title: "Allow running a command?",
                 description: `Claude wants to run: ${command}`,
                 risk: "medium",
@@ -95,18 +115,51 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
         });
     }
 
-    private async askUser(key: string, request: ToolUseRequest, prompt: PermissionPrompt): Promise<ToolUseDecision> {
-        if (this.remembered.has(key)) {
+    /**
+     * Asks the user, unless a remembered answer covers `key`; a null key is never remembered.
+     */
+    private async askUser(
+        key: string | null,
+        request: ToolUseRequest,
+        prompt: PermissionPrompt
+    ): Promise<ToolUseDecision> {
+        if (key !== null && this.remembered.has(key)) {
             return { allow: true };
         }
         const answer = await this.asker.ask(prompt, request.signal);
         if (!answer.allow) {
             return { allow: false, message: "The user did not allow this." };
         }
-        if (answer.remember) {
+        if (answer.remember && key !== null) {
             this.remembered.add(key);
         }
         return { allow: true };
+    }
+
+    /** Tells whether a path outside the project is a secrets file or lies in the Penforge home. */
+    private isProtected(path: string): boolean {
+        if (ToolPermissionPolicy.SECRETS_FILE.test(path)) {
+            return true;
+        }
+        if (!this.area) {
+            return false;
+        }
+        const expanded = path.startsWith("~") ? resolve(homedir(), path.slice(1).replace(/^[\\/]+/, "")) : path;
+        const absolute = resolve(this.area.projectRoot, expanded);
+        const rel = relative(this.area.penforgeHome, absolute);
+        return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+    }
+
+    /** Tells whether a command names a secrets file or the Penforge home. */
+    private namesProtected(command: string): boolean {
+        if (ToolPermissionPolicy.PROTECTED_COMMAND.test(command)) {
+            return true;
+        }
+        if (!this.area) {
+            return false;
+        }
+        const normalize = (text: string) => text.replace(/\\/g, "/").toLowerCase();
+        return normalize(command).includes(normalize(this.area.penforgeHome));
     }
 
     private withSessionId(input: Record<string, unknown>): Record<string, unknown> {

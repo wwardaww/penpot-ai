@@ -13,6 +13,7 @@
 //   open               serve on $PORT without a host (all interfaces)
 //   open-all / open-v6 serve on $PORT on 0.0.0.0 / ::
 //   escape             start a grandchild without NODE_OPTIONS that serves on all interfaces
+//   late-escape        serve on loopback, then after 300 ms hand the port to such a grandchild
 import { spawn } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -31,6 +32,7 @@ function serve(port, host = "127.0.0.1") {
     } else {
         server.listen(port, host, announce);
     }
+    return server;
 }
 
 const port = Number(process.env.PORT);
@@ -81,6 +83,19 @@ switch (mode) {
         const env = { ...process.env };
         delete env.NODE_OPTIONS;
         spawn(process.execPath, [fileURLToPath(import.meta.url), "open", "0.0.0.0"], { stdio: "inherit", env });
+        setInterval(() => {}, 1000);
+        break;
+    }
+    case "late-escape": {
+        const server = serve(port);
+        setTimeout(() => {
+            server.close(() => {
+                const env = { ...process.env };
+                delete env.NODE_OPTIONS;
+                spawn(process.execPath, [fileURLToPath(import.meta.url), "open", "0.0.0.0"], { stdio: "inherit", env });
+            });
+            server.closeAllConnections();
+        }, 300);
         setInterval(() => {}, 1000);
         break;
     }

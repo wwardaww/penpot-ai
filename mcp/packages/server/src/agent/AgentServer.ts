@@ -165,7 +165,16 @@ export class AgentServer {
             res.setHeader("Cache-Control", "no-store");
             res.setHeader("X-Content-Type-Options", "nosniff");
             res.setHeader("Referrer-Policy", "no-referrer");
-            res.end(download.content);
+            if (Buffer.isBuffer(download.content)) {
+                res.end(download.content);
+                return;
+            }
+            const stream = download.content();
+            stream.once("error", (error) => {
+                this.logger.warn("Download %s failed: %s", filename, error.message);
+                res.destroy(error);
+            });
+            stream.pipe(res);
         });
     }
 

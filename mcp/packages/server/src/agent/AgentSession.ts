@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { resolve } from "path";
 import type { WebSocket, RawData } from "ws";
 import type { AgentContext, ClientMessage, ContextSetMessage, DaemonMessage } from "@penpot/mcp-common";
 import { createLogger } from "../logger";
@@ -80,7 +81,11 @@ export class AgentSession implements AgentClient {
         if (this.policy?.projectId !== workspace.projectId) {
             this.policy = {
                 projectId: workspace.projectId,
-                policy: new ToolPermissionPolicy(workspace.guard, this.broker, () => this.context?.mcpSessionId),
+                policy: new ToolPermissionPolicy(workspace.guard, this.broker, () => this.context?.mcpSessionId, {
+                    projectRoot: workspace.root,
+                    // <home>/projects/<id>
+                    penforgeHome: resolve(workspace.root, "..", ".."),
+                }),
             };
         }
         const tools = this.deps.tools?.forSession(() => this.context?.mcpSessionId) ?? null;

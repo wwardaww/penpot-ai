@@ -92,6 +92,44 @@ test("never lets Claude read the daemon's token store, not even with permission"
     assert.equal(asker.prompts.length, 0, "the user is not even asked");
 });
 
+test("refuses the Penforge home outside the project without asking", async () => {
+    const home = join(base, "penforge-home");
+    const project = join(home, "projects", "p1");
+    mkdirSync(project, { recursive: true });
+    const asker = new RecordingAsker({ allow: true, remember: true });
+    const policy = new ToolPermissionPolicy(new PathGuard(project), asker, () => undefined, {
+        projectRoot: project,
+        penforgeHome: home,
+    });
+    const denied = [
+        { toolName: "Read", input: { file_path: join(home, "config.json") } },
+        { toolName: "Read", input: { file_path: join(home, "secrets.json.0a1b2c3d4e5f.tmp") } },
+        { toolName: "Grep", input: { pattern: "token", path: join(home, "projects", "other") } },
+        { toolName: "Read", input: { file_path: "../../secrets.json" } },
+        { toolName: "Bash", input: { command: `type ${join(home, "config.json")}` } },
+        { toolName: "Bash", input: { command: "cat ~/Penforge/secret*.json" } },
+        { toolName: "PowerShell", input: { command: "Get-Content $env:USERPROFILE\\Penforge\\config.json" } },
+    ];
+    for (const use of denied) {
+        const decision = await policy.decide({ ...use, signal });
+        assert.equal(decision.allow, false, JSON.stringify(use));
+    }
+    assert.equal(asker.prompts.length, 0, "the user is not even asked");
+    // files of the project itself stay allowed
+    const inside = await policy.decide({ toolName: "Read", input: { file_path: join(project, "a.txt") }, signal });
+    assert.equal(inside.allow, true);
+});
+
+test("a remembered approval never covers paths outside the project", async () => {
+    const asker = new RecordingAsker({ allow: true, remember: true });
+    const policy = new ToolPermissionPolicy(new PathGuard(root), asker, () => undefined);
+    await policy.decide({ toolName: "Bash", input: { command: "cat /etc/hosts" }, signal });
+    await policy.decide({ toolName: "Bash", input: { command: "cat ~/notes.txt" }, signal });
+    await policy.decide({ toolName: "Read", input: { file_path: join(base, "other.txt") }, signal });
+    await policy.decide({ toolName: "Read", input: { file_path: join(base, "other.txt") }, signal });
+    assert.equal(asker.prompts.length, 4, "asked every time");
+});
+
 test("asks before running a command and remembers the answer for the same program", async () => {
     const asker = new RecordingAsker({ allow: true, remember: true });
     const policy = new ToolPermissionPolicy(new PathGuard(root), asker, () => undefined);

@@ -55,6 +55,8 @@ export interface DevServerOptions {
     baseEnv: NodeJS.ProcessEnv;
     /** check that a loopback server cannot be reached from the network; a default one when unset */
     exposureCheck?: ExposureCheck;
+    /** pause between exposure checks of a ready loopback server (default 10 s) */
+    exposureRecheckMs?: number;
 }
 
 /**
@@ -92,6 +94,7 @@ export class DevServer {
     private status: PreviewStatus;
     private tree?: ProcessTree;
     private restartTimer?: NodeJS.Timeout;
+    private exposureTimer?: NodeJS.Timeout;
     private readyAt?: number;
     /** incremented on every launch and on stop; stale callbacks compare against it */
     private generation = 0;
@@ -164,6 +167,7 @@ export class DevServer {
         this.stopped = true;
         this.generation++;
         clearTimeout(this.restartTimer);
+        clearInterval(this.exposureTimer);
         await this.tree?.kill();
         if (this.status.state !== "failed") {
             this.log("system", `Dev server stopped (${reason})`);
@@ -178,6 +182,7 @@ export class DevServer {
         this.stopped = true;
         this.generation++;
         clearTimeout(this.restartTimer);
+        clearInterval(this.exposureTimer);
         this.tree?.killSync();
     }
 
@@ -237,6 +242,7 @@ export class DevServer {
                         this.log("system", `Dev server ready on port ${port}`);
                         this.readyAt = Date.now();
                         this.setStatus({ state: "ready", url: DevServer.urlFor(port) });
+                        this.watchExposure(generation);
                     }
                     return;
                 }
@@ -274,6 +280,34 @@ export class DevServer {
         return false;
     }
 
+    /**
+     * Checks a ready loopback server again every few seconds: the assigned port and the ports it
+     * announced, since a dev server may open more listeners after it first answered.
+     */
+    private watchExposure(generation: number): void {
+        clearInterval(this.exposureTimer);
+        if (this.exposure.mode !== "loopback") {
+            return;
+        }
+        let checking = false;
+        this.exposureTimer = setInterval(() => {
+            if (checking || !this.isCurrent(generation)) {
+                return;
+            }
+            checking = true;
+            void (async () => {
+                for (const port of [this.port, ...this.claimed]) {
+                    if (!(await this.loopbackOnly(generation, port))) {
+                        break;
+                    }
+                }
+            })().finally(() => {
+                checking = false;
+            });
+        }, this.options.exposureRecheckMs ?? 10_000);
+        this.exposureTimer.unref();
+    }
+
     private exited(generation: number, tree: ProcessTree): void {
         this.flush();
         if (!this.isCurrent(generation) || tree.pid === undefined) {
@@ -303,6 +337,7 @@ export class DevServer {
         this.stopped = true;
         this.generation++;
         clearTimeout(this.restartTimer);
+        clearInterval(this.exposureTimer);
         this.log("system", message);
         this.logger.warn("Dev server of project %s failed: %s", this.projectId, message);
         await this.tree?.kill();

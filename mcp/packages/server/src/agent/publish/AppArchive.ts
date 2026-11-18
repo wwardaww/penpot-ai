@@ -1,88 +1,90 @@
 import { spawn } from "child_process";
 import { existsSync } from "fs";
-import { mkdtemp, rm } from "fs/promises";
-import { tmpdir } from "os";
 import { join } from "path";
+import type { Readable } from "stream";
 import { ChildEnvironment } from "../build/ChildEnvironment";
 import { PublishError } from "./PublishError";
 
 /**
- * ZIP archive of a project's generated app (`app-src`).
+ * ZIP archive of a project's generated app (`app-src`) at its last saved version.
  *
- * Holds the app as it is on disk, tracked and new files alike but without what `.gitignore`
- * leaves out (`node_modules`, build output): the working tree is staged into a temporary index
- * (the repository's own index, history and files stay untouched) and `git archive` packs that
- * tree under one top folder.
+ * Packs the `HEAD` commit with `git archive`: only committed files, so files the app never saved
+ * (an uncommitted `.env`, build output) stay out. The archive is not built in memory: {@link open}
+ * streams it from git when the browser downloads it.
  */
 export class AppArchive {
-    /** Largest archive served. */
-    public static readonly MAX_BYTES = 200 * 1024 * 1024;
+    private static readonly COMMIT = /^[0-9a-f]{40,64}$/;
 
     /**
-     * Packs the app.
+     * @param appSrcDir - the `app-src` repository
+     * @param commit - the commit packed
+     * @param folder - name of the top folder inside the archive
+     */
+    private constructor(
+        private readonly appSrcDir: string,
+        public readonly commit: string,
+        public readonly folder: string
+    ) {}
+
+    /**
+     * Prepares the archive of the app's `HEAD`.
      *
      * @param appSrcDir - the `app-src` repository
      * @param folder - name of the top folder inside the archive
-     * @returns the ZIP bytes
-     * @throws PublishError `no-app` when there is no repository, `too-large` above {@link MAX_BYTES}
+     * @throws PublishError `no-app` when there is no repository or no commit yet
      */
-    public static async zip(appSrcDir: string, folder: string): Promise<Buffer> {
+    public static async ofHead(appSrcDir: string, folder: string): Promise<AppArchive> {
         if (!existsSync(join(appSrcDir, ".git")) || !existsSync(join(appSrcDir, "package.json"))) {
             throw new PublishError("no-app", "There is no generated app to download yet");
         }
-        const scratch = await mkdtemp(join(tmpdir(), "penforge-zip-"));
-        try {
-            const env = ChildEnvironment.scrub(process.env, {
-                GIT_INDEX_FILE: join(scratch, "index"),
-                GIT_TERMINAL_PROMPT: "0",
-            });
-            await AppArchive.git(["add", "--all", "--", "."], appSrcDir, env);
-            const tree = (await AppArchive.git(["write-tree"], appSrcDir, env)).toString("utf8").trim();
-            if (!/^[0-9a-f]{40,64}$/.test(tree)) {
-                throw new Error("git write-tree returned no tree");
-            }
-            return await AppArchive.git(["archive", "--format=zip", `--prefix=${folder}/`, tree], appSrcDir, env);
-        } finally {
-            await rm(scratch, { recursive: true, force: true });
+        const commit = (
+            await AppArchive.output(["rev-parse", "--verify", "--quiet", "HEAD^{commit}"], appSrcDir)
+        ).trim();
+        if (!AppArchive.COMMIT.test(commit)) {
+            throw new PublishError("no-app", "The app has no saved version yet");
         }
+        return new AppArchive(appSrcDir, commit, folder);
     }
 
-    private static git(args: string[], cwd: string, env: Record<string, string>): Promise<Buffer> {
+    /**
+     * Starts `git archive` and returns its output, the ZIP bytes.
+     */
+    public open(): Readable {
+        const child = spawn("git", ["archive", "--format=zip", `--prefix=${this.folder}/`, this.commit], {
+            cwd: this.appSrcDir,
+            env: AppArchive.env(),
+            shell: false,
+            windowsHide: true,
+            stdio: ["ignore", "pipe", "ignore"],
+        });
+        child.once("error", (error) => child.stdout.destroy(error));
+        child.once("close", (code) => {
+            if (code !== 0) {
+                child.stdout.destroy(new Error(`git archive failed (exit ${code})`));
+            }
+        });
+        return child.stdout;
+    }
+
+    private static env(): Record<string, string> {
+        return ChildEnvironment.scrub(process.env, { GIT_TERMINAL_PROMPT: "0" });
+    }
+
+    private static output(args: string[], cwd: string): Promise<string> {
         return new Promise((resolve, reject) => {
             const child = spawn("git", args, {
                 cwd,
-                env,
+                env: AppArchive.env(),
                 shell: false,
                 windowsHide: true,
-                stdio: ["ignore", "pipe", "pipe"],
+                stdio: ["ignore", "pipe", "ignore"],
             });
-            const chunks: Buffer[] = [];
-            let size = 0;
-            let stderr = "";
+            let out = "";
             child.stdout.on("data", (chunk: Buffer) => {
-                size += chunk.length;
-                if (size > AppArchive.MAX_BYTES) {
-                    child.kill();
-                    reject(
-                        new PublishError("too-large", "The app is too large to download", {
-                            limitMb: String(AppArchive.MAX_BYTES / 1024 / 1024),
-                        })
-                    );
-                    return;
-                }
-                chunks.push(chunk);
-            });
-            child.stderr.on("data", (chunk: Buffer) => {
-                stderr = (stderr + chunk.toString("utf8")).slice(-4000);
+                out += chunk.toString("utf8");
             });
             child.once("error", reject);
-            child.once("close", (code) => {
-                if (code === 0) {
-                    resolve(Buffer.concat(chunks));
-                } else if (size <= AppArchive.MAX_BYTES) {
-                    reject(new Error(`git ${args[0]} failed: ${stderr.trim()}`));
-                }
-            });
+            child.once("close", () => resolve(out));
         });
     }
 }

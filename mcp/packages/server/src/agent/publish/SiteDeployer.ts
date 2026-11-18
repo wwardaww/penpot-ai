@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import type { HttpTransport } from "./HttpTransport";
 import type { ProviderApi } from "./ProviderApi";
 import { PublishError, type SecretMask } from "./PublishError";
@@ -23,6 +24,22 @@ export interface SiteDeployment {
 export interface PreviousSite {
     siteId: string;
     siteName: string;
+}
+
+/**
+ * Where a deployment will go, decided before the user confirms.
+ *
+ * `existing` is the site this Penforge project deployed to before (its id is in
+ * `.penforge/publish.json` and still exists at the provider). Otherwise `siteName` is a name no
+ * project or site of the user has yet: a deployment never lands on a site the user made
+ * elsewhere.
+ */
+export interface SitePlan {
+    siteName: string;
+    siteId?: string;
+    existing: boolean;
+    /** public URL of the existing site */
+    url?: string;
 }
 
 /** Timing of status polls (shortened in tests). */
@@ -63,23 +80,56 @@ export abstract class SiteDeployer {
     public abstract login(token: string): Promise<string>;
 
     /**
+     * Decides where a deployment goes: the project's earlier site when it still exists, else a
+     * free name derived from `name`.
+     *
+     * @param token - the token
+     * @param name - wanted project/site name (the Penforge project name)
+     * @param previous - the project's earlier site at this provider
+     * @param seed - the Penforge project id; makes the suffix of a taken name the same on every call
+     * @throws PublishError `name-taken` when no free name is found
+     */
+    public abstract plan(token: string, name: string, previous: PreviousSite | null, seed: string): Promise<SitePlan>;
+
+    /**
      * Deploys a site to production and waits until it is live.
      *
      * @param token - the token
      * @param site - the built site
-     * @param name - wanted project/site name
-     * @param previous - the project's earlier site at this provider
+     * @param plan - where it goes (from {@link plan}, confirmed by the user)
      * @param onStep - progress
      * @param signal - cancels waiting
+     * @throws PublishError `name-taken` when a new name was taken since the plan
      */
     public abstract deploy(
         token: string,
         site: StaticSite,
-        name: string,
-        previous: PreviousSite | null,
+        plan: SitePlan,
         onStep: (step: DeployStep) => void,
         signal?: AbortSignal
     ): Promise<SiteDeployment>;
+
+    /**
+     * Finds the first free name among `base`, `base-<6 hex>`, ... The suffixes derive from
+     * `seed`, so planning twice for one project gives the same name.
+     *
+     * @param base - the wanted name
+     * @param seed - the Penforge project id
+     * @param taken - tells whether a name is used by one of the user's projects or sites
+     */
+    protected async freeName(base: string, seed: string, taken: (name: string) => Promise<boolean>): Promise<string> {
+        for (let attempt = 0; attempt < 5; attempt++) {
+            const suffix = createHash("sha1").update(`${seed}:${attempt}`).digest("hex").slice(0, 6);
+            const candidate = attempt === 0 ? base : `${base.slice(0, 43)}-${suffix}`;
+            if (!(await taken(candidate))) {
+                return candidate;
+            }
+        }
+        throw new PublishError("name-taken", `${this.providerName} has no free name like ${base}`, {
+            provider: this.providerName,
+            name: base,
+        });
+    }
 
     /**
      * Turns a project name into a lower-case DNS-friendly name.

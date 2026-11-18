@@ -1,10 +1,12 @@
 import { randomBytes } from "crypto";
+import type { Readable } from "stream";
 
 /** File waiting to be downloaded once. */
 export interface PendingDownload {
     filename: string;
     contentType: string;
-    content: Buffer;
+    /** the bytes, or a function that starts streaming them when the download begins */
+    content: Buffer | (() => Readable);
 }
 
 /**

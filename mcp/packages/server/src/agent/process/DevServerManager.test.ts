@@ -383,6 +383,19 @@ test("stops a server that escapes the loopback guard", { skip: !LOOPBACK_ALIASES
     await waitUntil(() => manager.liveProjects.length === 0);
 });
 
+test("stops a loopback server that opens to the network later", { skip: !LOOPBACK_ALIASES }, async () => {
+    manager = createManager({ exposureCheck: SECOND_LOOPBACK, exposureRecheckMs: 100 });
+    const workspace = await project(["late-escape"]);
+    const observer = await watched(workspace);
+    const ready = observer.next("ready");
+    const failed = observer.next("failed");
+    await manager.start(workspace);
+    await ready;
+    const status = await failed;
+    assert.equal(status.reason, "exposed");
+    await waitUntil(() => manager.liveProjects.length === 0);
+});
+
 test("restarts for LAN access and back to loopback", { skip: !LOOPBACK_ALIASES }, async () => {
     const envFile = homePath("lan-env.json");
     manager = createManager({ exposureCheck: SECOND_LOOPBACK });
