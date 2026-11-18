@@ -304,6 +304,8 @@ function instance-compose {
         PENFORGE_CLEAN_BUILD="${PENFORGE_CLEAN_BUILD:-0}" \
         PENFORGE_STORYBOOK="${PENFORGE_STORYBOOK:-0}" \
         PENFORGE_EXPORTER="${PENFORGE_EXPORTER:-0}" \
+        PENFORGE_FRONTEND_WATCH="${PENFORGE_FRONTEND_WATCH:-0}" \
+        PENFORGE_SHADOW_XMX="${PENFORGE_SHADOW_XMX:-1536m}" \
         DEVENV_TAG="$DEVENV_TAG" \
         "${opencode_env[@]}" \
         "${overrides[@]}" \

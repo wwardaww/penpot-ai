@@ -1,17 +1,28 @@
 #!/usr/bin/env bash
 
-# Penforge: warm-start variant of `pnpm run watch:app` for the devenv.
+# Penforge: devenv start of the frontend (tmux window 0).
+#
+# By default it builds the app ONCE and exits, so no shadow-cljs JVM stays
+# in memory (a watching JVM held ~2.3 GB of WSL RAM). After a change, rebuild
+# with `scripts/penforge-build` from the repository root on the host, or
+# `./scripts/penforge-watch-app` again inside the container.
 #
 # Upstream `watch:app` wipes the shadow-cljs cache and runs `cargo clean`
-# on every start, and also compiles the :storybook build. With the caches
-# kept on the WSL disk that turns a ~1 min restart into ~10 min. This
-# keeps the caches and only builds what the app needs.
+# on every start, and also compiles the :storybook build. This keeps the
+# caches (on the WSL disk) and only builds what the app needs.
 #
-#   PENFORGE_CLEAN_BUILD=1  wipe the shadow-cljs and wasm caches first
-#                           (use it if the build looks stale or broken)
-#   PENFORGE_STORYBOOK=1    also watch the :storybook build
+#   PENFORGE_FRONTEND_WATCH=1  watch and hot reload instead (old behaviour)
+#   PENFORGE_SHADOW_XMX=1536m  heap limit of the shadow-cljs JVM
+#   PENFORGE_CLEAN_BUILD=1     wipe the shadow-cljs and wasm caches first
+#                              (use it if the build looks stale or broken)
+#   PENFORGE_STORYBOOK=1       also build the :storybook build
+#   PENFORGE_BUILD_TEST=1      build the CLJS test bundle instead of the app
+#                              (target/tests/test.js; run it with node)
 
 set -ex
+
+XMX="${PENFORGE_SHADOW_XMX:-1536m}"
+shadow() { clojure "-J-Xmx$XMX" -M:dev:shadow-cljs "$@"; }
 
 pnpm install
 
@@ -35,12 +46,29 @@ fi
 
 pnpm run build:wasm
 
+if [ "${PENFORGE_BUILD_TEST:-0}" = "1" ]; then
+    shadow compile test
+    set +x
+    echo "[penforge] Test bundle ready: node target/tests/test.js [--focus <ns>]"
+    exit 0
+fi
+
 builds="main worker"
 if [ "${PENFORGE_STORYBOOK:-0}" = "1" ]; then
     builds="$builds storybook"
 fi
 
-exec pnpm exec concurrently --kill-others-on-fail \
-     "pnpm run watch:app:assets" \
-     "clojure -M:dev:shadow-cljs watch $builds" \
-     "pnpm run watch:app:libs"
+if [ "${PENFORGE_FRONTEND_WATCH:-0}" = "1" ]; then
+    exec pnpm exec concurrently --kill-others-on-fail \
+         "pnpm run watch:app:assets" \
+         "clojure -J-Xmx$XMX -M:dev:shadow-cljs watch $builds" \
+         "pnpm run watch:app:libs"
+fi
+
+pnpm run build:app:assets
+# No shadow-cljs server runs afterwards, so leave out its devtools client
+# (it would retry a WebSocket to /api/remote-relay forever).
+shadow compile $builds --config-merge '{:devtools {:enabled false}}'
+pnpm run build:app:libs
+set +x
+echo "[penforge] Frontend build completed (no watch). Rebuild after changes: scripts/penforge-build"

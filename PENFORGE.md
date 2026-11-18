@@ -21,7 +21,7 @@ Windows notes:
 - Give WSL enough memory. `%USERPROFILE%\.wslconfig`:
   ```ini
   [wsl2]
-  memory=16GB
+  memory=10GB
   processors=8
 
   [experimental]
@@ -40,11 +40,16 @@ Windows notes:
 
 ```bash
 ./manage.sh pull-devenv          # first time only
-./manage.sh run-devenv --attach  # tmux: 0 frontend, 3 backend (2 exporter with PENFORGE_EXPORTER=1)
+./manage.sh run-devenv --attach  # tmux: 0 frontend build, 3 backend (2 exporter with PENFORGE_EXPORTER=1)
+scripts/penforge-build           # rebuild the frontend after a change
 ```
 
-- Wait for `[:main] Build completed` in tmux window 0. Starts keep the
-  shadow-cljs and wasm caches and only rebuild what changed (about a minute).
+- Wait for `[penforge] Frontend build completed` in tmux window 0. Starts keep
+  the shadow-cljs and wasm caches and only rebuild what changed (about a minute).
+- The frontend is built once, not watched: no hot reload, and the shadow-cljs
+  JVM exits after the build to save memory. After changing frontend code run
+  `scripts/penforge-build` (about 30 s). `PENFORGE_FRONTEND_WATCH=1` brings the
+  watch back; `PENFORGE_SHADOW_XMX` (default `1536m`) caps the build's memory.
 - On Windows the repository sits on an NTFS drive, which the container can
   only read through a slow bridge. `run-devenv` therefore copies the working
   tree to `~/.penforge-devenv/ws0/source` in WSL and starts a hidden Windows
@@ -58,8 +63,9 @@ Windows notes:
 - The exporter (server-side PDF/PNG export, about 2 GB of memory) is off by
   default; with render-wasm, exports and the AI's screenshots render in the
   browser. To run it: `PENFORGE_EXPORTER=1 ./manage.sh run-devenv`.
-- Memory: the devenv uses about 7 GB (frontend build, backend, plus the
-  exporter if on). Give WSL 10 GB or more (`memory=10GB` in `.wslconfig`).
+- Memory: at rest the devenv uses about 4 GB (mostly the backend); a build
+  adds up to 1.5 GB while it runs, the exporter about 2 GB if on. Give WSL
+  8–10 GB (`memory=10GB` in `.wslconfig`).
 - Detach with `Ctrl+b d`. Do not kill the tmux session, it runs the app.
 - App: https://localhost:3449 (or http://localhost:3450).
 - The devenv backend runs with `disable-admin-console enable-ai`

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Penforge: build the frontend once inside the running devenv.
+#
+# The devenv no longer watches the frontend (frontend/scripts/penforge-watch-app):
+# run this after a change instead. During a wave only the coordinator runs it,
+# once all agents reported done; agents then run their tests against the
+# result (see wiki/runbook.md, "Single build, then tests").
+#
+# Usage (from the repository root, Git Bash or WSL):
+#   scripts/penforge-build                      build the app (main checkout)
+#   scripts/penforge-build --test               build the CLJS test bundle
+#   scripts/penforge-build --worktree <name>    sync .claude/worktrees/<name>
+#                                               into the container and build there
+#   scripts/penforge-build --worktree <name> --test
+#
+# Env: PENFORGE_SHADOW_XMX (default 1536m), PENFORGE_CLEAN_BUILD=1.
+
+set -euo pipefail
+export MSYS_NO_PATHCONV=1
+
+CONTAINER="${PENPOT_MAIN_CONTAINER_NAME:-penpot-devenv-ws0-main}"
+TEST=0
+WORKTREE=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --test) TEST=1 ;;
+        --worktree) WORKTREE="${2:?--worktree needs a name}"; shift ;;
+        -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
+        *) echo "unknown argument: $1" >&2; exit 2 ;;
+    esac
+    shift
+done
+
+DIR="/home/penpot/penpot/frontend"
+if [[ -n "$WORKTREE" ]]; then
+    docker exec -u penpot "$CONTAINER" bash -lc "~/penpot/scripts/penforge-worktree-sync '$WORKTREE'"
+    DIR="/home/penpot/worktrees/$WORKTREE/frontend"
+fi
+
+docker exec -u penpot \
+    -e PENFORGE_BUILD_TEST="$TEST" \
+    -e PENFORGE_SHADOW_XMX="${PENFORGE_SHADOW_XMX:-1536m}" \
+    -e PENFORGE_CLEAN_BUILD="${PENFORGE_CLEAN_BUILD:-0}" \
+    "$CONTAINER" bash -lc "cd '$DIR' && ./scripts/penforge-watch-app"
+
+if [[ "$TEST" == "1" ]]; then
+    echo "Run tests: docker exec -u penpot $CONTAINER bash -lc \"cd $DIR && node target/tests/test.js --focus <ns>\""
+fi
