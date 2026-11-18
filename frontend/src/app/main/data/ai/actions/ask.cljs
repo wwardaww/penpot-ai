@@ -216,6 +216,19 @@
         (detached/focus-window!))
       (focus-chat-input!))))
 
+(defn show-chat
+  "Show the AI chat (the sidebar tab, or the detached window when the
+  chat is detached) and put the cursor in its input."
+  []
+  (ptk/reify ::show-chat
+    ptk/WatchEvent
+    (watch [_ state _]
+      (rx/concat
+       (if (detached/detached? state)
+         (rx/empty)
+         (rx/of (chat/open-chat)))
+       (rx/of (focus-chat-input))))))
+
 ;; --- Event and action
 
 (defn ask-selection

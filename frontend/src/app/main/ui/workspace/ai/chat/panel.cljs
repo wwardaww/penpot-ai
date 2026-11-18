@@ -268,6 +268,8 @@
         (tr "penforge.chat.empty")]]
       [:ol {:class (stl/css :timeline)
             :ref list-ref
+            ;; lets Ctrl/Cmd+C copy selected chat text (see app.main.data.shortcuts)
+            :data-copyable-text true
             :aria-live "polite"
             :aria-busy (= status :streaming)}
        (for [entry entries]

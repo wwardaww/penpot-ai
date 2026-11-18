@@ -210,13 +210,26 @@
 (def ^:private check-shortcuts
   (sm/check-fn schema:shortcuts))
 
+(defn- copyable-text-selected?
+  "True when the page has a text selection inside an element marked
+  `data-copyable-text` (Penforge AI chat): Ctrl/Cmd+C must then copy
+  that text instead of the selected shapes."
+  []
+  (when-let [selection (some-> js/window .getSelection)]
+    (and (not (.-isCollapsed selection))
+         (let [node    (.-anchorNode selection)
+               element (if (= 3 (some-> node .-nodeType)) (.-parentElement node) node)]
+           (some? (some-> element (.closest "[data-copyable-text]")))))))
+
 (defn- wrap-cb
   [key cb]
   (fn [event]
     (log/debug :msg (str "Shortcut" key))
-    (when (unchecked-get event "preventDefault")
-      (.preventDefault event))
-    (cb event)))
+    ;; Penforge: leave Ctrl/Cmd+C to the browser while chat text is selected.
+    (when-not (and (= key :copy) (copyable-text-selected?))
+      (when (unchecked-get event "preventDefault")
+        (.preventDefault event))
+      (cb event))))
 
 (defn- bind!
   [shortcuts]

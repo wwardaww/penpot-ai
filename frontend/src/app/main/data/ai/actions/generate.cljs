@@ -17,10 +17,10 @@
    [app.common.data :as d]
    [app.common.uuid :as uuid]
    [app.main.data.ai.actions :as actions]
+   [app.main.data.ai.actions.ask :as ask]
    [app.main.data.ai.chat :as chat]
    [app.main.data.ai.protocol :as proto]
    [app.main.data.helpers :as dsh]
-   [app.main.data.modal :as modal]
    [app.main.data.penforge :as pf]
    [app.main.data.workspace.selection :as dws]
    [app.main.data.workspace.zoom :as dwz]
@@ -174,6 +174,8 @@
   :order 20
   :scopes #{:main-menu :command-palette}
   :enabled? can-edit?
-  :run (fn [{:keys [state selected]}]
-         (st/emit! (modal/show :penforge-generate-screen
-                               (dialog-props state selected))))})
+  ;; Screens are designed from the AI chat (the chat prompt knows how to
+ ;; build one on the canvas); the action takes the user there. The
+ ;; prompt dialog and its workflow stay available to other features.
+ :run (fn [_]
+        (st/emit! (ask/show-chat)))})

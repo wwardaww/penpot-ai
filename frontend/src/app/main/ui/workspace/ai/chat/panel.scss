@@ -65,6 +65,8 @@
   margin: 0;
   padding: 0;
   overflow-y: auto;
+  // The workspace turns text selection off; chat text must be copyable.
+  user-select: text;
   list-style: none;
 }
 
