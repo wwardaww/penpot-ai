@@ -17,6 +17,7 @@
    [cljs.test :as t :include-macros true]
    [cuerdas.core :as str]
    [frontend-tests.helpers.mock :as mock]
+   [potok.v2.core :as ptk]
    [rumext.v2 :as mf]))
 
 (def ^:private status-result
@@ -184,6 +185,23 @@
     (t/is (= "penforge.publish.site.confirm-existing"
              (share/site-confirm-text :netlify {:site-name "s" :existing true})))))
 
+(t/deftest a-renamed-site-is-asked-in-the-panel
+  (let [asking (reduce-run dap/empty-state :netlify
+                           [{:type "workflow.started" :run-id "n1"}
+                            {:type "workflow.event" :run-id "n1" :kind "log"
+                             :payload {:code "site-renamed" :params {:provider "Netlify" :from "my-shop" :to "my-shop-1a2b3c"}}}
+                            {:type "workflow.event" :run-id "n1" :kind "question"
+                             :payload {:question-id "q1" :text "…" :options []}}])
+        markup (rds/renderToStaticMarkup
+                (mf/element share/site-section*
+                            #js {:publish (assoc-in asking [:accounts :netlify] {:login "me"})
+                                 :developer false :connected true :provider :netlify}))
+        done   (reduce-run asking :netlify [{:type "workflow.done" :run-id "n1" :ok true}])]
+    (t/is (= {:run-id "n1" :question-id "q1"} (get-in asking [:questions :netlify])))
+    (t/is (str/includes? markup "penforge.publish.site.renamed"))
+    (t/is (nil? (get-in done [:questions :netlify])))
+    (t/is (nil? (get-in done [:renamed :netlify])))))
+
 (t/deftest the-header-shows-a-live-phone-session
   (let [registry @actions/registry
         idle     {:penforge {:connection {:status :connected}}}
@@ -192,3 +210,10 @@
     (t/is (dap/phone-live? live))
     (t/is (not (some #(= :ai/phone-live (:id %)) (actions/get-actions registry :header idle))))
     (t/is (some #(= :ai/phone-live (:id %)) (actions/get-actions registry :header live)))))
+
+(t/deftest stopping-a-phone-start-cancels-it-once-it-runs
+  (let [pending {:penforge {:publish (assoc-in dap/empty-state [:busy :phone] :pending)}}
+        marked  (ptk/update (dap/stop-phone) pending)]
+    (t/is (contains? (get-in marked [:penforge :publish :cancel]) :phone))
+    (let [idle {:penforge {:publish dap/empty-state}}]
+      (t/is (= idle (ptk/update (dap/stop-phone) idle)) "nothing to stop"))))

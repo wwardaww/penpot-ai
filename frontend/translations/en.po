@@ -12395,3 +12395,7 @@ msgstr "Put the app online with %s as the new site “%s”? Anyone with its add
 #: src/app/main/ui/workspace/ai/publish/share.cljs
 msgid "penforge.publish.site.confirm-existing"
 msgstr "Update your %s site “%s” with this version? Anyone with its address can open it."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.site.renamed"
+msgstr "Another %s account already uses “%s”, so the new site is “%s”. Put the app online there?"

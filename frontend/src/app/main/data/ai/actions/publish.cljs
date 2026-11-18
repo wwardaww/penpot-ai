@@ -24,6 +24,10 @@
   - `:progress` action -> last progress payload
   - `:results` action -> last result payload
   - `:errors` action -> `{:code :params :message :detail}`
+  - `:questions` action -> `{:run-id :question-id}` of a question the
+    daemon asks during a run (a site name that had to change, see
+    `:renamed` action -> `{:provider :from :to}`)
+  - `:cancel` actions whose run is to be stopped as soon as it starts
   - `:plans` target -> where a push or deployment would go (daemon
     `plan` result: repository name and visibility, site name, new or
     existing), shown in the confirmation
@@ -64,6 +68,7 @@
    :results {}
    :errors {}
    :plans {}
+   :cancel #{}
    :phone nil})
 
 ;; --- Pure helpers
@@ -112,7 +117,13 @@
 
     "workflow.event"
     (case kind
-      "progress" (assoc-in state [:progress action] payload)
+      "progress" (-> state
+                     (assoc-in [:progress action] payload)
+                     (update :questions dissoc action))
+      "question" (assoc-in state [:questions action] {:run-id run-id :question-id (:question-id payload)})
+      "log"      (if (= "site-renamed" (:code payload))
+                   (assoc-in state [:renamed action] (:params payload))
+                   state)
       "failed"   (assoc-in state [:errors action] payload)
       "phone"    (assoc state :phone payload)
       "result"   (cond-> (assoc-in state [:results action] payload)
@@ -132,6 +143,9 @@
 
     "workflow.done"
     (cond-> (-> state
+                (update :questions dissoc action)
+                (update :renamed dissoc action)
+                (update :cancel disj action)
                 (update :busy dissoc action)
                 (update :progress dissoc action))
       (= action :phone)
@@ -203,9 +217,14 @@
       (update-publish state apply-run-message action msg))
 
     ptk/WatchEvent
-    (watch [_ _ _]
-      (let [{:keys [type kind payload ok]} msg]
+    (watch [_ state _]
+      (let [{:keys [type kind payload ok run-id]} msg]
         (cond
+          ;; stopped while it was being started
+          (and (= type "workflow.started")
+               (contains? (get-in state (conj state-path :cancel)) action))
+          (rx/of (chat/cancel-workflow run-id))
+
           (and (= type "workflow.event") (= kind "result") (= action :zip) (:url payload))
           (do
             (dom/trigger-download-uri (:filename payload) "application/zip" (:url payload))
@@ -355,14 +374,37 @@
   (contains? (get-in state (conj state-path :busy)) :phone))
 
 (defn stop-phone
+  "End the phone preview; one still being started ends as soon as the
+  daemon reports it."
   []
   (ptk/reify ::stop-phone
+    ptk/UpdateEvent
+    (update [_ state]
+      (if (= :pending (get-in state (conj state-path :busy :phone)))
+        (update-publish state update :cancel (fnil conj #{}) :phone)
+        state))
+
     ptk/WatchEvent
     (watch [_ state _]
       (let [run-id (get-in state (conj state-path :busy :phone))]
         (if (string? run-id)
           (rx/of (chat/cancel-workflow run-id))
           (rx/empty))))))
+
+(defn answer-question
+  "Answer the daemon's question of the run of `action` (`publish` or
+  `cancel`)."
+  [action option-id]
+  (ptk/reify ::answer-question
+    ptk/UpdateEvent
+    (update [_ state]
+      (update-publish state update :questions dissoc action))
+
+    ptk/WatchEvent
+    (watch [_ state _]
+      (if-let [{:keys [run-id question-id]} (get-in state (conj state-path :questions action))]
+        (rx/of (chat/answer-question run-id question-id option-id))
+        (rx/empty)))))
 
 (defn select-tab
   [tab]

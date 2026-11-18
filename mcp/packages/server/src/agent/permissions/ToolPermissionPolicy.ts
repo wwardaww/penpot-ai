@@ -15,7 +15,10 @@ import type { PermissionAsker, PermissionPrompt } from "./PermissionBroker";
  *   the policy; never for a path outside the project, nor for a command that names one.
  * - The Penforge home outside the project (other projects, `config.json`, the token store
  *   `secrets.json` and its temporary files) is refused without asking, to file tools and to
- *   commands that name it or a secrets file.
+ *   commands that name it or `secrets.json`. This is a denylist on what a command names: an
+ *   approved interpreter (`node`, `python`) can still reach those files through a script, and
+ *   so can any program that runs as the user. DPAPI encryption of the tokens does not stop a
+ *   program of the same user either.
  */
 export class ToolPermissionPolicy implements ToolPermissionHandler {
     private static readonly PENPOT_TOOL_PREFIX = `mcp__${PENPOT_MCP_SERVER_NAME}__`;
@@ -27,9 +30,9 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
 
     /** the daemon's token store (W20) and its temporary files */
     private static readonly SECRETS_FILE = /(?:^|\/|\\)secrets\.json(?:\.[0-9a-f]+\.tmp)?$/i;
-    /** commands that name a secrets file or the Penforge home through a variable or `~` */
+    /** commands that name the token store or the Penforge home through a variable or `~` */
     private static readonly PROTECTED_COMMAND =
-        /secret|(?:~|\$HOME|\$\{HOME\}|%USERPROFILE%|%HOMEPATH%|\$env:USERPROFILE|\$env:HOME)[\\/]+["']?Penforge/i;
+        /secret[\w*?[\]-]*\.json|(?:~|\$HOME|\$\{HOME\}|%USERPROFILE%|%HOMEPATH%|\$env:USERPROFILE|\$env:HOME)[\\/]+["']?Penforge/i;
     /** command words that may point outside the project: absolute, home or parent paths, variables */
     private static readonly OUTSIDE_WORD = /^["']?(?:\/|~|\.\.|[A-Za-z]:|\\\\)|[$%]/;
     private static readonly PROTECTED_DENIED =

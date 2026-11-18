@@ -120,6 +120,17 @@ test("refuses the Penforge home outside the project without asking", async () =>
     assert.equal(inside.allow, true);
 });
 
+test("commands that only mention a secret are asked, not refused", async () => {
+    const asker = new RecordingAsker({ allow: true, remember: false });
+    const policy = new ToolPermissionPolicy(new PathGuard(root), asker, () => undefined, {
+        projectRoot: root,
+        penforgeHome: join(base, "penforge-home"),
+    });
+    const decision = await policy.decide({ toolName: "Bash", input: { command: "grep -r SECRET_KEY src" }, signal });
+    assert.equal(decision.allow, true);
+    assert.equal(asker.prompts.length, 1);
+});
+
 test("a remembered approval never covers paths outside the project", async () => {
     const asker = new RecordingAsker({ allow: true, remember: true });
     const policy = new ToolPermissionPolicy(new PathGuard(root), asker, () => undefined);

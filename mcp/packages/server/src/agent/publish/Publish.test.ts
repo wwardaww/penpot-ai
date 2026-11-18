@@ -735,6 +735,67 @@ test("Netlify deploys skip the user's own site names and upload only required fi
     transport.assertNoTokenInUrls();
 });
 
+/** Netlify fake where another account owns `my-shop`; records created and deleted sites. */
+function netlifyGlobalFake(log: { created: string[]; deleted: string[] }): FakeTransport {
+    return new FakeTransport()
+        .on("GET", /^api\.netlify\.com\/api\/v1\/sites\//, (_req, url) =>
+            url.pathname.endsWith("/sites/site-9") && log.created.length > log.deleted.length
+                ? {
+                      status: 200,
+                      body: {
+                          id: "site-9",
+                          name: log.created.at(-1),
+                          ssl_url: `https://${log.created.at(-1)}.netlify.app`,
+                      },
+                  }
+                : { status: 404, body: { message: "Not Found" } }
+        )
+        .on("POST", /^api\.netlify\.com\/api\/v1\/sites$/, (req) => {
+            const { name } = JSON.parse(String(req.body)) as { name: string };
+            if (name === "my-shop") {
+                return { status: 422, body: { errors: { subdomain: ["must be unique"] } } };
+            }
+            log.created.push(name);
+            return { status: 201, body: { id: "site-9", name, ssl_url: `https://${name}.netlify.app` } };
+        })
+        .on("DELETE", /^api\.netlify\.com\/api\/v1\/sites\/site-9$/, () => {
+            log.deleted.push("site-9");
+            return { status: 204 };
+        })
+        .on("POST", /^api\.netlify\.com\/api\/v1\/sites\/site-9\/deploys$/, () => ({
+            status: 200,
+            body: { id: "dep-9", required: [] },
+        }))
+        .on("GET", /^api\.netlify\.com\/api\/v1\/deploys\/dep-9$/, () => ({
+            status: 200,
+            body: { id: "dep-9", state: "ready" },
+        }));
+}
+
+test("a Netlify name owned by another account gets a new name the user confirms", async () => {
+    const workspace = await project();
+    const log = { created: [] as string[], deleted: [] as string[] };
+    const { services: s, secrets } = services(netlifyGlobalFake(log));
+    await secrets.save("netlify", NETLIFY_TOKEN, "me@x.io");
+
+    // declined: the reserved site is deleted and not linked
+    const declined = workflowContext(workspace, ["cancel"]);
+    await new PublishRun(declined, s).run({ action: "netlify", confirmed: true, siteName: "my-shop" });
+    assert.match(declined.questions[0].text, /my-shop is taken on Netlify, so the new site is my-shop-[0-9a-f]{6}/);
+    assert.deepEqual(declined.events.find((e) => e.kind === "log")!.payload.code, "site-renamed");
+    assert.deepEqual(log.deleted, ["site-9"]);
+    assert.equal((await workspace.readJson<{ netlify?: unknown }>("publish.json", {})).netlify, undefined);
+
+    // accepted: deployed to the renamed site, which is linked to the project
+    const ctx = workflowContext(workspace, ["publish"]);
+    await new PublishRun(ctx, s).run({ action: "netlify", confirmed: true, siteName: "my-shop" });
+    const result = ctx.events.find((e) => e.kind === "result")!.payload;
+    assert.match(result.siteName, /^my-shop-[0-9a-f]{6}$/);
+    assert.equal(result.url, `https://${result.siteName}.netlify.app`);
+    const record = await workspace.readJson<{ netlify?: { siteId: string } }>("publish.json", {});
+    assert.equal(record.netlify?.siteId, "site-9");
+});
+
 test("the static site builder runs the stack commands and reads the output folder", async () => {
     const workspace = await project();
     const executor = new RecordingExecutor();

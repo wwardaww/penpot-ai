@@ -19,12 +19,12 @@ export interface PublishRecord {
     netlify?: SiteRecord;
 }
 
-/** Last deployment of a site provider. */
+/** Site of a provider linked to the project; `url`/`deployedAt` once a deployment finished. */
 export interface SiteRecord {
-    url: string;
+    url?: string;
     siteId: string;
     siteName: string;
-    deployedAt: string;
+    deployedAt?: string;
 }
 
 /**

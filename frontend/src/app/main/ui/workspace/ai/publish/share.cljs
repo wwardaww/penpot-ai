@@ -309,7 +309,11 @@
         on-cancel (fn [] (reset! asking* false))
         on-accept (fn []
                     (reset! asking* false)
-                    (st/emit! (dap/deploy provider (:site-name plan))))]
+                    (st/emit! (dap/deploy provider (:site-name plan))))
+        question  (get-in publish [:questions provider])
+        renamed   (get-in publish [:renamed provider])
+        on-rename-ok     (fn [] (st/emit! (dap/answer-question provider "publish")))
+        on-rename-cancel (fn [] (st/emit! (dap/answer-question provider "cancel")))]
     [:> section* {:title (tr "penforge.publish.site.title" label)
                   :description (if developer
                                  (tr "penforge.publish.site.description.developer" label)
@@ -318,6 +322,12 @@
      (cond
        (nil? account)
        [:> not-connected* {:provider provider}]
+
+       (and busy question renamed)
+       [:> confirm* {:message (tr "penforge.publish.site.renamed" label (:from renamed) (:to renamed))
+                     :accept-label (tr "penforge.publish.site.action")
+                     :on-accept on-rename-ok
+                     :on-cancel on-rename-cancel}]
 
        busy
        [:> running* {:progress (get-in publish [:progress provider])}]

@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { ProviderApi } from "./ProviderApi";
 import { PublishError } from "./PublishError";
 import type { ProviderId } from "./SecretStore";
@@ -73,6 +74,42 @@ export class NetlifyDeployer extends SiteDeployer {
             return (await this.findSite(api, `${candidate}.netlify.app`)) !== null;
         });
         return { siteName, existing: false };
+    }
+
+    /**
+     * Creates the site of a new plan. Netlify names are global: when another account has the
+     * planned name, the site gets a random suffix and the returned plan carries the new name.
+     */
+    public async reserve(token: string, plan: SitePlan): Promise<SitePlan> {
+        if (plan.existing) {
+            return plan;
+        }
+        const api = this.api(token);
+        for (let attempt = 0; attempt < 5; attempt++) {
+            const candidate =
+                attempt === 0 ? plan.siteName : `${plan.siteName.slice(0, 43)}-${randomBytes(3).toString("hex")}`;
+            const created = await api.call<NetlifySite>("POST", "/sites", { name: candidate }, { accept: [422] });
+            if (created.status !== 422 && typeof created.data?.id === "string") {
+                return {
+                    siteName: created.data.name ?? candidate,
+                    siteId: created.data.id,
+                    existing: true,
+                    url: created.data.ssl_url ?? created.data.url,
+                };
+            }
+        }
+        throw new PublishError("name-taken", `Netlify has no free site name like ${plan.siteName}`, {
+            provider: this.providerName,
+            name: plan.siteName,
+        });
+    }
+
+    public async release(token: string, plan: SitePlan): Promise<void> {
+        if (plan.siteId) {
+            await this.api(token).call("DELETE", `/sites/${encodeURIComponent(plan.siteId)}`, undefined, {
+                accept: [404],
+            });
+        }
     }
 
     public async deploy(

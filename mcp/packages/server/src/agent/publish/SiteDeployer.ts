@@ -110,6 +110,27 @@ export abstract class SiteDeployer {
     ): Promise<SiteDeployment>;
 
     /**
+     * Creates the site of a new plan before anything is built, for providers whose site names
+     * are global: the name may belong to another account, which the plan cannot see. The
+     * default keeps the plan (the site is made by the deployment).
+     *
+     * @param token - the token
+     * @param plan - the confirmed plan
+     * @returns the plan of the created site (`existing: true`); its name may differ
+     */
+    public async reserve(_token: string, plan: SitePlan): Promise<SitePlan> {
+        return plan;
+    }
+
+    /**
+     * Deletes a site made by {@link reserve} that the user then declined.
+     *
+     * @param token - the token
+     * @param plan - the plan {@link reserve} returned
+     */
+    public async release(_token: string, _plan: SitePlan): Promise<void> {}
+
+    /**
      * Finds the first free name among `base`, `base-<6 hex>`, ... The suffixes derive from
      * `seed`, so planning twice for one project gives the same name.
      *

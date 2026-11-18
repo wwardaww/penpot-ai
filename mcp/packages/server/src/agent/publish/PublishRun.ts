@@ -308,11 +308,12 @@ export class PublishRun {
             return this.cancelled(provider);
         }
         return this.services.exclusive(workspace.projectId, async () => {
+            const target = await this.reserveSite(provider, token, plan);
             const site = await this.services.sites.build(workspace, this.ctx.signal, (step) => this.progress(step));
             const deployment = await deployer.deploy(
                 token,
                 site,
-                plan,
+                target,
                 (step) => this.progress(step),
                 this.abortSignal()
             );
@@ -333,6 +334,37 @@ export class PublishRun {
             });
             return { summary: `Online at ${deployment.url}` };
         });
+    }
+
+    /**
+     * Creates the confirmed new site where the provider needs it (Netlify), links it to the
+     * project, and asks again when the name had to change (another account owns it).
+     */
+    private async reserveSite(provider: "vercel" | "netlify", token: string, plan: SitePlan): Promise<SitePlan> {
+        const deployer = this.services.deployers[provider];
+        const target = await deployer.reserve(token, plan);
+        if (target.siteName !== plan.siteName) {
+            this.ctx.emit("log", {
+                code: "site-renamed",
+                params: { provider: deployer.providerName, from: plan.siteName, to: target.siteName },
+                text: `${plan.siteName} belongs to another ${deployer.providerName} account; the new site is ${target.siteName}`,
+            });
+            const accepted = await this.confirm(
+                `The name ${plan.siteName} is taken on ${deployer.providerName}, so the new site is ` +
+                    `${target.siteName}. Put the app online there?`,
+                provider
+            );
+            if (!accepted) {
+                await deployer.release(token, target).catch(() => undefined);
+                throw new PublishError("cancelled", "Cancelled");
+            }
+        }
+        if (!plan.existing && target.siteId) {
+            await PublishServices.updateRecord(this.ctx.workspace, {
+                [provider]: { siteId: target.siteId, siteName: target.siteName },
+            });
+        }
+        return target;
     }
 
     private async phonePreview(confirmed: boolean): Promise<{ summary: string }> {
