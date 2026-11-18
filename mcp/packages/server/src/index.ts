@@ -22,6 +22,12 @@ async function main(): Promise<void> {
         const args = process.argv.slice(2);
         let multiUser = false; // default to single-user mode
         let penforge = process.env.PENFORGE === "1" || process.env.PENFORGE === "true";
+        // Penforge server mode (W24): plugin connections are keyed per Penpot user
+        const penforgeServer = process.env.PENFORGE_MODE?.trim().toLowerCase() === "server";
+        if (penforgeServer) {
+            penforge = true;
+            multiUser = true;
+        }
 
         // parse command line arguments
         for (let i = 0; i < args.length; i++) {
@@ -47,6 +53,16 @@ async function main(): Promise<void> {
             process.env.PENPOT_MCP_SERVER_HOST ??= "127.0.0.1";
         }
         const server = new PenpotMcpServer(multiUser);
+        const hosting = penforgeServer
+            ? await import("./agent/hosting/ServerHosting").then(async ({ ServerHosting }) => {
+                  const { AgentConfig } = await import("./agent/PenforgeDaemon");
+                  const config = AgentConfig.load(process.env, `http://${server.host}:${server.port}/mcp`);
+                  return ServerHosting.fromEnv(process.env, config);
+              })
+            : null;
+        if (hosting) {
+            server.pluginBridge.setConnectionAuthenticator(hosting.bridgeAuthenticator());
+        }
         await server.start();
         let daemon: PenforgeDaemon | undefined;
         if (penforge) {
@@ -58,6 +74,7 @@ async function main(): Promise<void> {
             });
             daemon = new PenforgeDaemon(AgentConfig.load(process.env, `http://${server.host}:${server.port}/mcp`), {
                 pluginSessions: new BridgeSessionDirectory(server.pluginBridge),
+                hosting,
             });
             await daemon.start();
         }

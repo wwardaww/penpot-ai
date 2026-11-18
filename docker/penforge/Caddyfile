@@ -1,0 +1,37 @@
+# Penforge single TLS entry point.
+#
+# PENFORGE_SITE  site address, e.g. penforge.example.com (automatic HTTPS)
+#                or localhost (local run)
+# PENFORGE_TLS   "internal" (Caddy's own CA, local runs) or an email address
+#                for the ACME account (Let's Encrypt / ZeroSSL)
+
+{
+	admin off
+}
+
+{$PENFORGE_SITE} {
+	tls {$PENFORGE_TLS}
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	# Penforge plugin bridge (WebSocket, multi-user, authenticated by the
+	# Penpot session cookie)
+	handle_path /penforge/mcp/ws* {
+		reverse_proxy penforge-agent:4402
+	}
+
+	# Penforge agent: /agent (WebSocket), /health, /admin/
+	handle_path /penforge/* {
+		reverse_proxy penforge-agent:4410
+	}
+
+	# the MCP HTTP endpoint (:4401) is internal and never routed
+
+	handle {
+		reverse_proxy penpot-frontend:8080
+	}
+}

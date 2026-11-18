@@ -183,6 +183,10 @@ export class ChatService {
             if (error instanceof RunnerNotConfiguredError) {
                 client.send({ type: "error", rid: message.rid, code: "not-configured", message: error.message });
                 failure = undefined;
+            } else if (error instanceof AgentError) {
+                // e.g. `rate-limited` in server mode: the text is meant for the user
+                client.send({ type: "error", rid: message.rid, code: error.code, message: error.message });
+                failure = undefined;
             }
         }
 

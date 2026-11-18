@@ -7,9 +7,11 @@ import { AgentError, type AgentClient } from "./AgentClient";
 import type { ChatService } from "./chat/ChatService";
 import type { TurnSetup } from "./chat/TurnRunner";
 import { ClientMessageSchema } from "./ClientMessageSchema";
+import type { SessionGate } from "./SessionGate";
 import { PermissionBroker } from "./permissions/PermissionBroker";
 import { ToolPermissionPolicy } from "./permissions/ToolPermissionPolicy";
 import type { PreviewService } from "./process/PreviewService";
+import type { ToolPermissionHandler } from "./runner/ClaudeRunner";
 import type { McpToolsClient } from "./tools/McpToolsClient";
 import type { PluginSessionDirectory } from "./tools/PluginSessions";
 import type { WorkflowEngine } from "./workflows/WorkflowEngine";
@@ -30,6 +32,8 @@ export interface AgentSessionDeps {
     pluginSessions?: PluginSessionDirectory;
     /** time the client has to send `auth` */
     authTimeoutMs: number;
+    /** access control of a hosting mode; replaces {@link verifyToken} when set */
+    gate?: SessionGate;
 }
 
 /** WebSocket close code for policy violations (bad or missing authentication). */
@@ -49,11 +53,13 @@ export class AgentSession implements AgentClient {
     private readonly broker: PermissionBroker;
     private readonly authTimer: NodeJS.Timeout;
     private authenticated = false;
+    /** pending gate check of the `auth` message; later messages wait for it */
+    private authenticating?: Promise<void>;
     private context?: AgentContext;
     private workspace?: Promise<ProjectWorkspace>;
     /** Callbacks waiting for the first `context.set` (see {@link waitForContext}). */
     private contextWaiters: Array<() => void> = [];
-    private policy?: { projectId: string; policy: ToolPermissionPolicy };
+    private policy?: { projectId: string; policy: ToolPermissionHandler };
 
     constructor(
         private readonly socket: WebSocket,
@@ -80,6 +86,7 @@ export class AgentSession implements AgentClient {
     public static readonly CONTEXT_WAIT_MS = 3000;
 
     public async setup(): Promise<Omit<TurnSetup, "signal">> {
+        const gate = this.deps.gate;
         await this.waitForContext();
         const context = this.context;
         const workspacePromise = this.workspace;
@@ -90,14 +97,19 @@ export class AgentSession implements AgentClient {
         if (this.policy?.projectId !== workspace.projectId) {
             this.policy = {
                 projectId: workspace.projectId,
-                policy: new ToolPermissionPolicy(workspace.guard, this.broker, () => this.mcpSessionId(), {
-                    projectRoot: workspace.root,
-                    // <home>/projects/<id>
-                    penforgeHome: resolve(workspace.root, "..", ".."),
-                }),
+                policy: ToolPermissionPolicyFor.session(
+                    gate,
+                    workspace,
+                    new ToolPermissionPolicy(workspace.guard, this.broker, () => this.mcpSessionId(), {
+                        projectRoot: workspace.root,
+                        // <home>/projects/<id>
+                        penforgeHome: resolve(workspace.root, "..", ".."),
+                    })
+                ),
             };
         }
-        const tools = this.deps.tools?.forSession(() => this.mcpSessionId()) ?? null;
+        const toolsClient = gate ? gate.tools(this.deps.tools) : this.deps.tools;
+        const tools = toolsClient?.forSession(() => this.mcpSessionId()) ?? null;
         const mcpSessionId = this.mcpSessionId();
         // runs and turns carry the tab's MCP session, so their tools reach this tab's plugin
         return {
@@ -141,6 +153,11 @@ export class AgentSession implements AgentClient {
     }
 
     private receive(data: RawData, isBinary: boolean): void {
+        if (this.authenticating) {
+            // keeps the order of the messages sent right after `auth`
+            void this.authenticating.then(() => this.receive(data, isBinary));
+            return;
+        }
         let raw: unknown;
         try {
             raw = isBinary ? undefined : JSON.parse(data.toString());
@@ -157,7 +174,10 @@ export class AgentSession implements AgentClient {
             return;
         }
         const message = parsed.message;
-        this.dispatch(message).catch((error) => this.sendError(error, "rid" in message ? message.rid : undefined));
+        const request = () => this.dispatch(message);
+        (this.deps.gate ? this.deps.gate.run(request) : request()).catch((error) =>
+            this.sendError(error, "rid" in message ? message.rid : undefined)
+        );
     }
 
     private authenticate(message: ClientMessage | undefined): void {
@@ -165,10 +185,32 @@ export class AgentSession implements AgentClient {
             this.reject("The first message must be auth");
             return;
         }
+        const gate = this.deps.gate;
+        if (gate) {
+            this.authenticating = gate
+                .authenticate(message.token)
+                .catch((error: unknown) => {
+                    this.logger.warn("Authentication check failed: %s", String(error));
+                    return false;
+                })
+                .then((ok) => {
+                    this.authenticating = undefined;
+                    if (ok) {
+                        this.accept();
+                    } else {
+                        this.reject("Not logged in");
+                    }
+                });
+            return;
+        }
         if (!this.deps.verifyToken(message.token)) {
             this.reject("Invalid token");
             return;
         }
+        this.accept();
+    }
+
+    private accept(): void {
         clearTimeout(this.authTimer);
         this.authenticated = true;
         this.send({ type: "auth.ok", daemonVersion: this.deps.daemonVersion });
@@ -203,7 +245,8 @@ export class AgentSession implements AgentClient {
     }
 
     private async setContext(message: ContextSetMessage): Promise<void> {
-        const { type: _type, ...context } = message;
+        const { type: _type, ...sent } = message;
+        const context = this.deps.gate ? await this.deps.gate.authorize(sent) : sent;
         this.context = context;
         const workspace = this.deps.workspaces.open(context);
         this.workspace = workspace;
@@ -248,5 +291,16 @@ export class AgentSession implements AgentClient {
         for (const waiter of [...this.contextWaiters]) {
             waiter();
         }
+    }
+}
+
+/** Tool policy of a session: the local policy, narrowed by the hosting gate when there is one. */
+class ToolPermissionPolicyFor {
+    public static session(
+        gate: SessionGate | undefined,
+        workspace: ProjectWorkspace,
+        policy: ToolPermissionPolicy
+    ): ToolPermissionHandler {
+        return gate ? gate.permissions(policy, workspace) : policy;
     }
 }

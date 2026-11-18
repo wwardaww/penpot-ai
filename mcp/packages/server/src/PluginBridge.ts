@@ -72,6 +72,19 @@ export function assertPluginResponsive(
 }
 
 /**
+ * Authenticator of plugin connections that derives the user token from the upgrade request
+ * itself (Penforge server mode: the Penpot session cookie) instead of a `userToken` query
+ * parameter.
+ */
+export interface PluginConnectionAuthenticator {
+    /**
+     * @param request - the WebSocket upgrade request
+     * @returns the user token of the connection, or null to refuse it
+     */
+    userTokenFor(request: http.IncomingMessage): Promise<string | null>;
+}
+
+/**
  * Manages WebSocket connections to Penpot plugin instances and handles plugin tasks
  * over these connections.
  */
@@ -88,6 +101,7 @@ export class PluginBridge implements TaskDispatchHost {
     private readonly taskTimeouts: Map<string, NodeJS.Timeout> = new Map();
     private readonly taskConnections: Map<string, PenpotConnection> = new Map();
     private readonly dispatcher: TaskDispatcher;
+    private connectionAuthenticator?: PluginConnectionAuthenticator;
 
     /**
      * Collector of the rollbacks that task responses report, per tool execution.
@@ -120,6 +134,15 @@ export class PluginBridge implements TaskDispatchHost {
     }
 
     /**
+     * Makes new connections authenticate through the given authenticator (Penforge server mode).
+     *
+     * @param authenticator - derives the user token of a connection
+     */
+    public setConnectionAuthenticator(authenticator: PluginConnectionAuthenticator): void {
+        this.connectionAuthenticator = authenticator;
+    }
+
+    /**
      * Sets up WebSocket connection handlers for plugin communication.
      *
      * Manages client connections and provides bidirectional communication
@@ -129,10 +152,14 @@ export class PluginBridge implements TaskDispatchHost {
         this.wsServer.on("connection", (ws: WebSocket, request: http.IncomingMessage) => {
             // extract userToken from query parameters
             const url = new URL(request.url!, `ws://${request.headers.host}`);
-            const userToken = url.searchParams.get("userToken");
+            const authenticator = this.connectionAuthenticator;
+            const userToken = authenticator ? null : url.searchParams.get("userToken");
+            const userTokenReady = authenticator
+                ? authenticator.userTokenFor(request).catch(() => null)
+                : Promise.resolve(userToken);
 
             // require userToken if running in multi-user mode
-            if (this.mcpServer.isMultiUserMode() && !userToken) {
+            if (this.mcpServer.isMultiUserMode() && !userToken && !authenticator) {
                 this.logger.warn("Connection attempt without userToken in multi-user mode - rejecting");
                 ws.close(1008, "Missing userToken parameter");
                 return;
@@ -164,11 +191,17 @@ export class PluginBridge implements TaskDispatchHost {
                             return;
                         }
                         initializing = true;
-                        void this.initializeConnection(
-                            ws,
-                            this.mcpServer.isMultiUserMode() ? userToken : null,
-                            initialization.data.session
-                        )
+                        void userTokenReady
+                            .then((token) => {
+                                if (this.mcpServer.isMultiUserMode() && !token) {
+                                    throw new Error("Plugin connection not authenticated");
+                                }
+                                return this.initializeConnection(
+                                    ws,
+                                    this.mcpServer.isMultiUserMode() ? token : null,
+                                    initialization.data.session
+                                );
+                            })
                             .then(() => clearTimeout(initializationTimeout))
                             .catch((error) => {
                                 this.logger.error(error, "Failed to initialize Penpot connection");

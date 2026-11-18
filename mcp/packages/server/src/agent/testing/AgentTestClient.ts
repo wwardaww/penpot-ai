@@ -24,11 +24,12 @@ export class AgentTestClient {
      *
      * @param url - endpoint URL, e.g. `ws://127.0.0.1:4410/agent`
      * @param origin - `Origin` header to send, if any
+     * @param headers - other upgrade headers (e.g. a Penpot session cookie)
      * @throws Error with the HTTP status if the upgrade is refused
      */
-    public static connect(url: string, origin?: string): Promise<AgentTestClient> {
+    public static connect(url: string, origin?: string, headers?: Record<string, string>): Promise<AgentTestClient> {
         return new Promise((resolve, reject) => {
-            const socket = new WebSocket(url, origin ? { origin } : {});
+            const socket = new WebSocket(url, { ...(origin ? { origin } : {}), ...(headers ? { headers } : {}) });
             socket.once("open", () => resolve(new AgentTestClient(socket)));
             socket.once("unexpected-response", (_request, response) =>
                 reject(new Error(`HTTP ${response.statusCode}`))

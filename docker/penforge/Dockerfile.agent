@@ -1,0 +1,53 @@
+# syntax=docker/dockerfile:1
+#
+# Penforge agent image: the Penpot MCP server (multi-user) and the Penforge
+# daemon in server mode, in one Node process.
+#
+# Build context: the repository's `mcp/` folder (see docker-compose.yaml).
+# Only Node is needed to build it (no JVM).
+
+ARG NODE_IMAGE=node:24-bookworm-slim
+
+FROM ${NODE_IMAGE} AS build
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    CI=1
+WORKDIR /src
+COPY . .
+RUN corepack enable \
+ && pnpm install --frozen-lockfile --filter "./packages/server..." \
+ && pnpm --filter ./packages/common run build \
+ && pnpm --filter ./packages/server run build \
+ && pnpm --filter ./packages/server deploy --prod --legacy /out \
+ && test -f /out/dist/index.js
+
+FROM ${NODE_IMAGE} AS image
+LABEL org.opencontainers.image.title="penforge-agent"
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git ca-certificates tini \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /data \
+ && chown node:node /data
+
+COPY --from=build --chown=root:root /out /opt/penforge/agent
+
+ENV NODE_ENV=production \
+    PENFORGE_MODE=server \
+    PENFORGE_HOME=/data \
+    PENFORGE_AGENT_HOST=0.0.0.0 \
+    PENFORGE_AGENT_PORT=4410 \
+    PENPOT_MCP_SERVER_HOST=0.0.0.0 \
+    PENPOT_MCP_SERVER_PORT=4401 \
+    PENPOT_MCP_WEBSOCKET_PORT=4402 \
+    HOME=/data/home
+
+WORKDIR /opt/penforge/agent
+USER node
+VOLUME ["/data"]
+EXPOSE 4410 4402
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:4410/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["node", "dist/index.js"]

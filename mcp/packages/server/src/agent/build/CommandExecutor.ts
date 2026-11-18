@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "child_process";
 import type { AbortSignalLike } from "@penpot/mcp-common";
 import { CommandSchema } from "./BuildFiles";
 import { CommandLauncher } from "../process/CommandLauncher";
+import { CodeExecutionGate } from "../hosting/CodeExecutionGate";
 import { ChildEnvironment } from "./ChildEnvironment";
 
 /** Options of one command run. */
@@ -47,6 +48,12 @@ export class ProcessCommandExecutor implements CommandExecutor {
     private static readonly IS_WINDOWS = process.platform === "win32";
 
     public execute(argv: string[], options: CommandOptions): Promise<CommandOutcome> {
+        try {
+            // W24: closed in server mode, where generated apps run in the sandbox only
+            CodeExecutionGate.check();
+        } catch (error) {
+            return Promise.reject(error);
+        }
         const checked = CommandSchema.safeParse(argv);
         if (!checked.success) {
             return Promise.reject(new Error(`Refusing to run ${JSON.stringify(argv)}: ${checked.error.message}`));

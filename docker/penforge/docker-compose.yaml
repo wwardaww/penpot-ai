@@ -1,0 +1,163 @@
+# Penforge server stack: Penpot + Penforge AI for a team, behind one TLS
+# entry point. Configure it in `.env` (copy `env.example`), then:
+#
+#   docker compose -p penforge up -d
+#
+# See README.md.
+
+x-public-uri: &public-uri
+  PENPOT_PUBLIC_URI: ${PENFORGE_PUBLIC_URI:?set PENFORGE_PUBLIC_URI in .env}
+
+x-penpot-secret: &penpot-secret
+  PENPOT_SECRET_KEY: ${PENPOT_SECRET_KEY:?set PENPOT_SECRET_KEY in .env}
+
+x-database: &database
+  PENPOT_DATABASE_URI: postgresql://penpot-postgres/penpot
+  PENPOT_DATABASE_USERNAME: penpot
+  PENPOT_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+
+x-body-size: &body-size
+  PENPOT_HTTP_SERVER_MAX_BODY_SIZE: 367001600
+  PENPOT_HTTP_SERVER_MAX_MULTIPART_BODY_SIZE: 367001600
+
+networks:
+  penforge:
+
+volumes:
+  penpot_postgres_v15:
+  penpot_assets:
+  penforge_data:
+  caddy_data:
+  caddy_config:
+
+services:
+  # Single TLS entry point: Penpot on /, Penforge on /penforge/*
+  penforge-proxy:
+    image: ${PENFORGE_CADDY_IMAGE:-caddy:2.10-alpine}
+    restart: always
+    ports:
+      - "${PENFORGE_HTTP_PORT:-80}:80"
+      - "${PENFORGE_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      PENFORGE_SITE: ${PENFORGE_SITE:?set PENFORGE_SITE in .env}
+      PENFORGE_TLS: ${PENFORGE_TLS:-internal}
+    depends_on:
+      - penpot-frontend
+      - penforge-agent
+    networks:
+      - penforge
+
+  penpot-frontend:
+    image: ${PENFORGE_FRONTEND_IMAGE:-penpotapp/frontend:latest}
+    restart: always
+    entrypoint: ["/bin/bash", "/penforge/frontend-entrypoint.sh"]
+    command: ["nginx", "-g", "daemon off;"]
+    volumes:
+      - penpot_assets:/opt/data/assets
+      - ./frontend-entrypoint.sh:/penforge/frontend-entrypoint.sh:ro
+    depends_on:
+      - penpot-backend
+      - penpot-exporter
+    networks:
+      - penforge
+    environment:
+      <<: [*public-uri, *body-size]
+      PENPOT_FLAGS: ${PENPOT_FRONTEND_FLAGS:-enable-ai enable-registration enable-login-with-password}
+
+  penpot-backend:
+    image: ${PENFORGE_BACKEND_IMAGE:-penpotapp/backend:latest}
+    restart: always
+    volumes:
+      - penpot_assets:/opt/data/assets
+    depends_on:
+      penpot-postgres:
+        condition: service_healthy
+      penpot-valkey:
+        condition: service_healthy
+    networks:
+      - penforge
+    environment:
+      <<: [*public-uri, *penpot-secret, *database, *body-size]
+      # disable-admin-console: the Nitrate console is not part of this stack
+      PENPOT_FLAGS: ${PENPOT_BACKEND_FLAGS:-enable-ai disable-admin-console enable-registration enable-login-with-password disable-email-verification enable-access-tokens}
+      PENPOT_REDIS_URI: redis://penpot-valkey/0
+      PENPOT_OBJECTS_STORAGE_BACKEND: fs
+      PENPOT_OBJECTS_STORAGE_FS_DIRECTORY: /opt/data/assets
+      PENPOT_TELEMETRY_ENABLED: "false"
+
+  penpot-exporter:
+    image: ${PENFORGE_EXPORTER_IMAGE:-penpotapp/exporter:latest}
+    restart: always
+    depends_on:
+      penpot-valkey:
+        condition: service_healthy
+    networks:
+      - penforge
+    environment:
+      <<: [*public-uri, *penpot-secret]
+      PENPOT_INTERNAL_URI: http://penpot-frontend:8080
+      PENPOT_REDIS_URI: redis://penpot-valkey/0
+
+  # Penpot MCP server (multi-user) + Penforge daemon in server mode
+  penforge-agent:
+    image: ${PENFORGE_AGENT_IMAGE:-penforge/agent:local}
+    build:
+      context: ../../mcp
+      dockerfile: ../docker/penforge/Dockerfile.agent
+    restart: always
+    volumes:
+      - penforge_data:/data
+    depends_on:
+      - penpot-backend
+    networks:
+      - penforge
+    environment:
+      PENFORGE_MODE: server
+      PENFORGE_PUBLIC_URI: ${PENFORGE_PUBLIC_URI}
+      PENFORGE_ALLOWED_ORIGINS: ${PENFORGE_PUBLIC_URI}
+      PENFORGE_PENPOT_BACKEND_URI: http://penpot-backend:6060
+      PENFORGE_SECRET_KEY: ${PENFORGE_SECRET_KEY:?set PENFORGE_SECRET_KEY in .env (openssl rand -base64 32)}
+      PENFORGE_ADMIN_EMAILS: ${PENFORGE_ADMIN_EMAILS:-}
+      # api-key (default) or fake (tests without an Anthropic key)
+      PENFORGE_RUNNER: ${PENFORGE_RUNNER:-api-key}
+      # Anthropic API base URL (default https://api.anthropic.com), e.g. a gateway
+      PENFORGE_ANTHROPIC_BASE_URL: ${PENFORGE_ANTHROPIC_BASE_URL:-}
+      PENPOT_MCP_LOG_LEVEL: ${PENFORGE_LOG_LEVEL:-info}
+
+  penpot-postgres:
+    image: postgres:15
+    restart: always
+    stop_signal: SIGINT
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U penpot"]
+      interval: 2s
+      timeout: 10s
+      retries: 5
+      start_period: 2s
+    volumes:
+      - penpot_postgres_v15:/var/lib/postgresql/data
+    networks:
+      - penforge
+    environment:
+      POSTGRES_INITDB_ARGS: --data-checksums
+      POSTGRES_DB: penpot
+      POSTGRES_USER: penpot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+  penpot-valkey:
+    image: valkey/valkey:8.1
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping | grep PONG"]
+      interval: 1s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+    networks:
+      - penforge
+    environment:
+      VALKEY_EXTRA_FLAGS: --maxmemory 128mb --maxmemory-policy volatile-lfu

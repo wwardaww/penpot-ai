@@ -1,0 +1,8 @@
+# context = mcp/
+**/node_modules
+**/dist
+**/.turbo
+**/*.log
+packages/plugin
+packages/browser-extension
+types-generator
