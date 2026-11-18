@@ -144,7 +144,7 @@ test("get_node_properties calls the plugin helper with defaults and returns its 
     assert.deepEqual(JSON.parse(textOf(result)), { id: "n1", name: "Title" });
     assert.deepEqual(await runGeneratedCode(codes[0]), {
         method: "getNodeProperties",
-        params: { nodeId: "n1", depth: 1 },
+        params: { nodeId: "n1", depth: 1, childOffset: 0, childLimit: 100 },
     });
 });
 

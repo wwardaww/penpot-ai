@@ -76,10 +76,30 @@ export class NodeSerializer {
      * @param shape - the shape to serialize
      * @param depth - number of tree levels serialized in full, starting with the shape itself (1 = the shape
      *   only, with a summary of its children; 2 = the shape and its children in full; ...)
+     * @param page - when given, only the direct children from `offset` (at most `limit` of them) are
+     *   serialized and `childrenPage` reports the range, so a board with thousands of children is
+     *   not walked in full (W11)
      */
-    public static serializeNode(shape: Shape, depth: number = 1): JsonObject {
+    public static serializeNode(
+        shape: Shape,
+        depth: number = 1,
+        page?: { offset?: number; limit?: number }
+    ): JsonObject {
         const levels = Math.max(1, Math.min(NodeSerializer.MAX_DEPTH, Math.floor(depth)));
-        return NodeSerializer.serialize(shape, levels);
+        if (!page || page.limit === undefined) {
+            return NodeSerializer.serialize(shape, levels);
+        }
+        const all: Shape[] = Array.isArray((shape as any).children) ? (shape as any).children : [];
+        const total = all.length;
+        const offset = Math.min(Math.max(0, Math.floor(page.offset ?? 0)), total);
+        const limit = Math.max(1, Math.floor(page.limit));
+        const slice = all.slice(offset, offset + limit);
+        const result = NodeSerializer.serialize(shape, levels, slice);
+        const end = offset + slice.length;
+        if (offset > 0 || end < total) {
+            result.childrenPage = { offset, returned: slice.length, total, nextOffset: end < total ? end : null };
+        }
+        return result;
     }
 
     /**
@@ -96,9 +116,10 @@ export class NodeSerializer {
         };
     }
 
-    private static serialize(shape: Shape, levels: number): JsonObject {
+    private static serialize(shape: Shape, levels: number, pageOfChildren?: Shape[]): JsonObject {
         const s = shape as any;
         const children: Shape[] = Array.isArray(s.children) ? s.children : [];
+        const listed = pageOfChildren ?? children;
         const result: JsonObject = {
             id: shape.id,
             name: shape.name,
@@ -128,9 +149,9 @@ export class NodeSerializer {
             childCount: children.length,
         };
         if (levels > 1) {
-            result.children = children.map((child) => NodeSerializer.serialize(child, levels - 1));
+            result.children = listed.map((child) => NodeSerializer.serialize(child, levels - 1));
         } else {
-            result.children = children.map((child) => NodeSerializer.summarize(child));
+            result.children = listed.map((child) => NodeSerializer.summarize(child));
         }
         return result;
     }
