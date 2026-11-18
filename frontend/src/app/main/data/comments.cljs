@@ -125,6 +125,8 @@
   ([params]
    (create-thread-on-workspace params identity true))
   ([params on-thread-created open?]
+   (create-thread-on-workspace params on-thread-created open? nil))
+  ([params on-thread-created open? {:keys [penforge-bot?]}]
    (dm/assert! (sm/check schema:create-thread-on-workspace params))
 
    (ptk/reify ::create-thread-on-workspace
@@ -136,7 +138,10 @@
              params (-> params
                         (update-mentions)
                         (assoc :frame-id frame-id))]
-         (->> (rp/cmd! :create-comment-thread params)
+         (->> (rp/cmd! (if penforge-bot?
+                         :create-penforge-comment-thread
+                         :create-comment-thread)
+                       params)
               (rx/mapcat #(rp/cmd! :get-comment-thread {:file-id (:file-id %) :id (:id %)}))
               (rx/tap on-thread-created)
               (rx/map
@@ -654,6 +659,16 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Helpers
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(def penforge-bot-id
+  "Id of the Penforge bot profile, the author of the comments the
+  Penforge AI writes. Same value as `app.penforge.bot/id` (backend)."
+  #uuid "00000000-0000-4000-8000-00000000b07a")
+
+(defn penforge-bot?
+  "True when the owner of a thread or comment is the Penforge bot."
+  [owner]
+  (= penforge-bot-id (:id owner)))
 
 (defn get-owner
   [thread-or-comment]

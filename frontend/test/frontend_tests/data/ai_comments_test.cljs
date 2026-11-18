@@ -82,6 +82,18 @@
     (t/is (= #{(str by-editor) (str other-page)}
              (set (ai-comments/trusted-thread-ids state nil))))))
 
+(t/deftest trusted-threads-include-the-penforge-bot
+  (let [replied (uuid/next)
+        audit   (uuid/next)
+        thread  (fn [id owner-id participants]
+                  {:id id :page-id page-id :owner-id owner-id
+                   :participants participants :is-resolved false})
+        state   (assoc (base-state) :comment-threads
+                       {replied (thread replied editor-id #{editor-id dcm/penforge-bot-id})
+                        audit   (thread audit dcm/penforge-bot-id #{dcm/penforge-bot-id})})]
+    (t/is (= #{(str replied) (str audit)}
+             (set (ai-comments/trusted-thread-ids state page-id))))))
+
 (t/deftest fix-thread-marks-the-thread-running-once
   (with-redefs [client/enabled? (constantly true)]
     (let [thread {:id thread-id :page-id page-id}
