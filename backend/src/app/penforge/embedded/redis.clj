@@ -28,10 +28,10 @@
    [cuerdas.core :as str])
   (:import
    clojure.lang.MapEntry
-   io.lettuce.core.SetArgs
    io.lettuce.core.codec.StringCodec
    io.lettuce.core.protocol.CommandArgs
    io.lettuce.core.pubsub.RedisPubSubListener
+   io.lettuce.core.SetArgs
    java.lang.AutoCloseable
    java.time.Duration))
 

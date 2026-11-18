@@ -360,6 +360,9 @@ async function main(): Promise<void> {
     const env = await childBaseEnv();
     const data = dataLayout(dataRoot());
     const state = DesktopState.load(data.stateFile);
+    // the splash opens first: closing the wizard must not leave the app without a window
+    // (that would fire `window-all-closed` and quit)
+    const splash = createSplash();
     if (!state.data.wizard.done) {
         try {
             await runWizard(state, env);
@@ -369,7 +372,6 @@ async function main(): Promise<void> {
         }
     }
 
-    const splash = createSplash();
     try {
         const claude = await detectClaude(env, homedir());
         running = await boot({
