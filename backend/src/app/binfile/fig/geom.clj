@@ -27,15 +27,26 @@
 
 (def identity-matrix [1.0 0.0 0.0 1.0 0.0 0.0])
 
+(defn finite
+  "`v` as a double when it is a finite number, else `default`. A `.fig`
+  stores NaN for a value that is not set (an auto layout counter gap that
+  follows the main gap), and penpot shapes only take finite numbers."
+  ([v] (finite v 0.0))
+  ([v default]
+   (let [d (when (number? v) (double v))]
+     (if (and (some? d) (Double/isFinite d))
+       d
+       (double default)))))
+
 (defn from-fig
   "The transform a Figma `transform` struct describes; identity when it
   is missing."
   [{:keys [m00 m01 m02 m10 m11 m12] :as m}]
   (if (nil? m)
     identity-matrix
-    [(double (or m00 1)) (double (or m10 0))
-     (double (or m01 0)) (double (or m11 1))
-     (double (or m02 0)) (double (or m12 0))]))
+    [(finite m00 1.0) (finite m10 0.0)
+     (finite m01 0.0) (finite m11 1.0)
+     (finite m02 0.0) (finite m12 0.0)]))
 
 (defn multiply
   "The transform that applies `m2` first and then `m1`."

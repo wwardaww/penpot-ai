@@ -11,6 +11,7 @@
    [app.binfile.fig.container :as container]
    [app.binfile.fig.map :as fig.map]
    [app.binfile.fig.tree :as tree]
+   [app.common.files.builder :as fb]
    [app.common.files.validate :as cfv]
    [app.common.uuid :as uuid]
    [backend-tests.binfile.fig.fixtures :as fx]
@@ -26,6 +27,14 @@
     (assoc (fig.map/map-document (tree/index (:message doc))
                                  {:file-id file-id :name "Fixture" :project-id (uuid/next) :media media})
            :media media)))
+
+(defn- map-message
+  "A message mapped as a fig file through the real reader."
+  [message]
+  (let [path (fx/write-zip! (fx/temp-file ".fig") (fx/canvas message))
+        doc  (container/read-file path)]
+    (fig.map/map-document (tree/index (:message doc))
+                          {:file-id (uuid/next) :name "Fixture" :project-id (uuid/next) :media {}})))
 
 (defn- objects-by-name
   [file]
@@ -151,4 +160,37 @@
 
 (t/deftest the-mapped-file-is-valid
   (let [{:keys [file]} (mapped)]
+    (t/is (nil? (cfv/validate-file file {})))))
+
+(t/deftest an-unset-counter-gap-follows-the-main-gap
+  (let [{:keys [file report]} (map-message (fx/wrap-document))
+        tags  (one file "Tags")
+        chips (one file "Chips")]
+    (t/testing "Figma stores NaN for the counter gap of a wrapping row"
+      (t/is (= :wrap (:layout-wrap-type tags)))
+      (t/is (= {:column-gap 8.0 :row-gap 8.0} (:layout-gap tags))))
+    (t/testing "an auto counter gap spreads the lines"
+      (t/is (= {:column-gap 4.0 :row-gap 12.0} (:layout-gap chips)))
+      (t/is (= :space-between (:layout-align-content chips))))
+    (t/is (zero? (:total report)))
+    (t/is (nil? (cfv/validate-file file {})))))
+
+(t/deftest a-rejected-node-is-left-out-and-reported
+  (let [add-shape fb/add-shape
+        {:keys [file report]}
+        (with-redefs [fb/add-shape (fn [state attrs]
+                                     (if (= "Dot" (:name attrs))
+                                       (throw (ex-info "expected valid shape"
+                                                       {:type :assertion :hint "expected valid shape"}))
+                                       (add-shape state attrs)))]
+          (map-message (:message (fx/medium-document))))
+        names (objects-by-name file)]
+    (t/is (not (contains? names "Dot")))
+    (t/testing "the rest of the file is there"
+      (t/is (contains? names "Card"))
+      (t/is (contains? names "Triangle"))
+      (t/is (contains? names "Union")))
+    (t/is (= 1 (get-in report [:counts :failed])))
+    (t/is (some #(= {:fig-type "ELLIPSE" :reason "skipped, penpot rejected it: expected valid shape" :count 1} %)
+                (:summary report)))
     (t/is (nil? (cfv/validate-file file {})))))
