@@ -3,12 +3,14 @@ import { isAbsolute, relative, resolve } from "path";
 import { PENPOT_MCP_SERVER_NAME } from "../runner/LocalCliRunner";
 import type { ToolPermissionHandler, ToolUseDecision, ToolUseRequest } from "../runner/ClaudeRunner";
 import type { PathGuard } from "../workspace/pathGuard";
+import { DestructiveDesign } from "./DestructiveDesign";
 import type { PermissionAsker, PermissionPrompt } from "./PermissionBroker";
 
 /**
  * Permission policy for Claude's tool uses within one project.
  *
- * - Penpot MCP tools are always allowed; the tab's MCP session id is added when missing.
+ * - Penpot MCP tools are allowed; the tab's MCP session id is added when missing. Uses that delete
+ *   pages, library items, tokens or comments ({@link DestructiveDesign}) need the user's permission.
  * - File tools are allowed inside the project folder; outside it the user is asked.
  * - Shell commands, web access and unknown tools need the user's permission. A permission the user
  *   asked to remember holds for the same tool and target (command name, host) for the lifetime of
@@ -61,7 +63,20 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
     public async decide(request: ToolUseRequest): Promise<ToolUseDecision> {
         const { toolName, input } = request;
         if (toolName.startsWith(ToolPermissionPolicy.PENPOT_TOOL_PREFIX)) {
-            return { allow: true, updatedInput: this.withSessionId(input) };
+            const updatedInput = this.withSessionId(input);
+            const deletes = DestructiveDesign.check(
+                toolName.slice(ToolPermissionPolicy.PENPOT_TOOL_PREFIX.length),
+                input
+            );
+            if (deletes === null) {
+                return { allow: true, updatedInput };
+            }
+            const decision = await this.askUser(`penpot-delete:${deletes}`, request, {
+                title: "Allow deleting design content?",
+                description: `Claude wants to delete ${deletes} in this file. Check that you asked for it.`,
+                risk: "high",
+            });
+            return decision.allow ? { allow: true, updatedInput } : decision;
         }
         if (toolName === "AskUserQuestion") {
             return { allow: false, message: "Ask the user in your reply instead; this tool is not available." };
