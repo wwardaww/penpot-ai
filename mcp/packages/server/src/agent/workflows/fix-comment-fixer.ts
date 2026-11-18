@@ -7,8 +7,9 @@ import type {
     WorkflowContext,
     WorkflowToolFilter,
 } from "@penpot/mcp-common";
+import type { DesignNode } from "../chat/DesignTree";
 import { PENPOT_MCP_SERVER_NAME } from "../runner/LocalCliRunner";
-import { CommentFixCopies, type CopiesReport, type StyleChange } from "./fix-comment-copies";
+import { CommentFixCopies, type CopiesReport, type CopyOffer, type StyleChange } from "./fix-comment-copies";
 
 /** Comment of a canvas thread, as returned by `list_canvas_comments`. */
 export interface CanvasComment {
@@ -56,6 +57,8 @@ export interface FixHint {
     request?: string;
     /** structural changes (adding, removing, reordering layers) through `execute_code` are allowed */
     allowStructural?: boolean;
+    /** keep the offer to change copies on other screens for later (a batch asks once at the end) */
+    deferCopies?: boolean;
 }
 
 /**
@@ -268,6 +271,7 @@ export class CommentFixer {
     private static readonly EXECUTE_TOOL = "execute_code";
     private static readonly PROMPT_NAME = "fix-comment";
     private static readonly MAX_PROPERTIES_CHARS = 8000;
+    private readonly deferred: CopyOffer[] = [];
 
     /**
      * @param ctx - context of the workflow run
@@ -389,7 +393,9 @@ export class CommentFixer {
                 return { ...base, outcome: "unchanged", note: "", resolved: false, replied: false };
             }
             const resolved = await this.resolve(thread.threadId, verdict.note);
-            const copiesReport = before ? await copies.offer(before, styleChanges, thread.seqNumber) : null;
+            const copiesReport = before
+                ? await this.followCopies(copies, before, styleChanges, thread.seqNumber, hint.deferCopies === true)
+                : null;
             return {
                 ...base,
                 outcome: "fixed",
@@ -401,6 +407,42 @@ export class CommentFixer {
         }
         const replied = verdict.note ? await this.reply(thread.threadId, verdict.note) : false;
         return { ...base, outcome: "no-change", note: verdict.note, resolved: false, replied };
+    }
+
+    /**
+     * Takes the copy offers kept by fixes with `deferCopies`.
+     */
+    public takeDeferredCopies(): CopyOffer[] {
+        return this.deferred.splice(0);
+    }
+
+    /**
+     * Finds what should follow a style fix on other screens and, unless deferred, asks about it.
+     * Never throws: the fix is done whatever happens here.
+     */
+    private async followCopies(
+        copies: CommentFixCopies,
+        before: DesignNode,
+        changes: StyleChange[],
+        seqNumber: number,
+        defer: boolean
+    ): Promise<CopiesReport | null> {
+        try {
+            const prepared = await copies.prepare(before, changes, seqNumber);
+            if (prepared === "main") {
+                return { kind: "main", found: 0, applied: 0, boards: [], recorded: false };
+            }
+            if (!prepared) {
+                return null;
+            }
+            if (defer) {
+                this.deferred.push(prepared);
+                return null;
+            }
+            return (await copies.settle([prepared]))[0] ?? null;
+        } catch {
+            return null;
+        }
     }
 
     /**

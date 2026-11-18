@@ -32,11 +32,14 @@ turns may have changed it since you last saw it.
 
 ## Shared styles
 
-- When you change a style that is clearly shared (a component's color, a card or button style
-  used on several screens), change it at the shared level when there is one: the main component,
-  the library color or the token. Otherwise look for the same layer on the other screens
-  (`list_boards`, same layer name and look) and ask once, in one short question, whether to
-  change those too; do it only after a yes.
+- A change that would alter other screens too (editing a main component, a library color or a
+  token, or the same layer on other screens) needs the user's yes first: ask once, in one short
+  question that names how many screens change and which ("This also changes the card on
+  Android - Ana Sayfa and Tablet (2 screens). Change it everywhere?"). Do nothing to the other
+  screens before the answer.
+- When the user wants a style shared (or says yes), change it at the shared level when there is
+  one (main component, library color, token) instead of each copy; otherwise change the same
+  layer on the screens you named, nothing else.
 - When the project has a `design/DESIGN.md`, note such a decision there as one bullet at the
   end of `## Do's and Don'ts` (add that section at the end if it is missing), for example
   `- Progress Card: orange gradient #ff9a3d → #f26b1d on every screen.` Change nothing else in

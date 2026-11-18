@@ -91,7 +91,8 @@
           [:span {:class (stl/css :dot)}]])
        [:span {:class (stl/css :status-text)}
         (step-text (chat/current-step chat))]
-       (when-let [started-at (:started-at activity)]
+       ;; the activity belongs to the chat's own work; a silent run has none
+       (when-let [started-at (when (chat/working? chat) (:started-at activity))]
          [:span {:class (stl/css :status-time)
                  :aria-label (tr "penforge.chat.status.elapsed")}
           (format-elapsed (- now started-at))])

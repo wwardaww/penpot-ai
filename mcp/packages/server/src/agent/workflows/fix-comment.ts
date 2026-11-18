@@ -6,6 +6,7 @@ import {
     ShippedWorkflowLookup,
     type WorkflowLookup,
 } from "./fix-comment-fixer";
+import type { CopiesReport } from "./fix-comment-copies";
 
 /** Params of the `fix-comment` workflow. */
 export interface FixCommentParams {
@@ -35,11 +36,26 @@ class FixCommentWording {
      *
      * @param report - the report
      */
+    /**
+     * Sentence about the copies of a fixed layer, or "".
+     */
+    public static copies(copies: CopiesReport | undefined): string {
+        if (!copies) {
+            return "";
+        }
+        if (copies.kind === "main") {
+            return " The component's copies on other screens follow it.";
+        }
+        if (copies.applied === 0) {
+            return "";
+        }
+        const screens = copies.boards.length;
+        return ` Also changed on ${screens} other ${screens === 1 ? "screen" : "screens"}.`;
+    }
+
     public static summary(report: FixReport): string {
         const note = report.note ? `: ${report.note}` : "";
-        const copies = report.copies?.applied
-            ? ` Also changed on ${report.copies.applied} other ${report.copies.applied === 1 ? "screen" : "screens"}.`
-            : "";
+        const copies = FixCommentWording.copies(report.copies);
         switch (report.outcome) {
             case "fixed":
                 return report.resolved

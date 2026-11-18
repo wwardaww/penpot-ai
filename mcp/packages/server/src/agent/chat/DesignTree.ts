@@ -56,21 +56,35 @@ export class DesignTree {
     }
 
     /**
-     * Short text of a style for people: colors of fills and strokes, radius, opacity.
+     * Short text of a style change for people, old value then new value per key, e.g.
+     * `fill gradient #7b61ff/#5b3fe0 → gradient #ff9a3d/#f26b1d, radius 8 → 12`.
+     *
+     * @param before - the style before the change (missing keys read as "none")
+     * @param after - the style after the change
      */
-    public static describe(style: Record<string, unknown>): string {
-        const parts: string[] = [];
-        for (const [key, value] of Object.entries(style)) {
-            const colors = DesignTree.colors(value);
-            if ((key === "fills" || key === "strokes") && colors.length > 0) {
-                parts.push(`${key === "fills" ? "fill" : "stroke"} ${colors.join(" → ")}`);
-            } else if (key === "radius" || key === "opacity") {
-                parts.push(`${key} ${typeof value === "object" ? JSON.stringify(value) : String(value)}`);
-            } else {
-                parts.push(key);
+    public static describeChange(before: Record<string, unknown>, after: Record<string, unknown>): string {
+        const label: Record<string, string> = { fills: "fill", strokes: "stroke" };
+        return Object.keys(after)
+            .map((key) => `${label[key] ?? key} ${DesignTree.value(before[key])} → ${DesignTree.value(after[key])}`)
+            .join(", ");
+    }
+
+    /** Text of one style value: paints as colors (a gradient's stops joined by "/"), else JSON. */
+    private static value(value: unknown): string {
+        if (value === undefined || value === null || (Array.isArray(value) && value.length === 0)) {
+            return "none";
+        }
+        if (Array.isArray(value)) {
+            const paints = value.map((paint) => {
+                const gradient = paint && typeof paint === "object" ? (paint as { gradient?: unknown }).gradient : null;
+                const colors = DesignTree.colors(gradient ?? paint);
+                return gradient ? `gradient ${colors.join("/")}` : colors.join("/");
+            });
+            if (paints.every((paint) => paint.length > 0)) {
+                return paints.join(" + ");
             }
         }
-        return parts.join(", ");
+        return typeof value === "object" ? JSON.stringify(value) : String(value);
     }
 
     private static colors(value: unknown): string[] {

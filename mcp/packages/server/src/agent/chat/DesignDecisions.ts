@@ -12,6 +12,10 @@ import { createLogger } from "../../logger";
 export class DesignDecisions {
     /** Heading of the section that holds the decisions. */
     public static readonly SECTION = "Do's and Don'ts";
+    /** Longest layer name written; longer names are cut. */
+    public static readonly MAX_NAME_LENGTH = 60;
+    /** Longest change text written. */
+    public static readonly MAX_CHANGE_LENGTH = 240;
     private readonly logger = createLogger("DesignDecisions");
 
     /**
@@ -20,16 +24,24 @@ export class DesignDecisions {
     constructor(private readonly workspace: WorkflowWorkspaceApi) {}
 
     /**
-     * Records a decision.
+     * Records that a layer's style changed on every screen.
      *
-     * @param decision - one line of text, e.g. `Progress Card: fill #ff9a3d → #f26b1d on every screen`
+     * The layer name comes from the design (people, imported files), so it is written as quoted
+     * data only: no line breaks, no Markdown or quote characters, at most
+     * {@link MAX_NAME_LENGTH} characters. The sentence around it is fixed.
+     *
+     * @param layerName - the layer name
+     * @param change - the change, old → new (see `DesignTree.describeChange`)
+     * @param seqNumber - number of the comment the decision came from
      * @returns true when DESIGN.md was updated and committed
      */
-    public async record(decision: string): Promise<boolean> {
-        const line = decision.replace(/\s+/g, " ").trim();
-        if (line.length === 0) {
+    public async record(layerName: string, change: string, seqNumber: number): Promise<boolean> {
+        const name = DesignDecisions.clean(layerName, DesignDecisions.MAX_NAME_LENGTH);
+        const what = DesignDecisions.clean(change, DesignDecisions.MAX_CHANGE_LENGTH, true);
+        if (name.length === 0 || what.length === 0) {
             return false;
         }
+        const line = `Layer "${name}" on every screen: ${what} (from comment #${Math.trunc(seqNumber)}).`;
         try {
             const repository = new DesignMdRepository(this.workspace);
             const check = await repository.prepareWrite();
@@ -51,10 +63,27 @@ export class DesignDecisions {
                       }
                     : DesignMdBody.fillSection(document, DesignDecisions.SECTION, bullet);
             await repository.write(DesignMdSerializer.serialize(updated));
-            return (await repository.commit(`record decision: ${line}`)) !== null;
+            return (await repository.commit(`record decision for layer "${name}"`)) !== null;
         } catch (error) {
             this.logger.warn("Could not record a design decision: %s", String(error));
             return false;
         }
+    }
+
+    /**
+     * Text as plain data: one line, no Markdown, quote or control characters, cut to `max`.
+     *
+     * @param text - the text
+     * @param max - most characters
+     * @param keepHash - keep `#` (color values of a change text)
+     */
+    public static clean(text: string, max: number, keepHash: boolean = false): string {
+        const markup = keepHash ? /[`*_[\]()<>|\\"{}~]+/g : /[`*_#[\]()<>|\\"{}~]+/g;
+        const plain = text
+            .replace(/\p{Cc}+/gu, " ")
+            .replace(markup, "")
+            .replace(/\s+/g, " ")
+            .trim();
+        return plain.length > max ? `${plain.slice(0, max - 1).trimEnd()}…` : plain;
     }
 }
