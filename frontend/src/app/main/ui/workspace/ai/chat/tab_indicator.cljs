@@ -26,9 +26,10 @@
   (l/derived (fn [state]
                (let [chat (get-in state [:penforge :chat])]
                  (cond
-                   (not (chat/working? chat)) nil
+                   ;; also a silent run's question (a comment fix asking about copies)
                    (chat/waiting? chat) "waiting"
-                   :else "working")))
+                   (chat/working? chat) "working"
+                   :else nil)))
              st/state))
 
 (defn indicator-state

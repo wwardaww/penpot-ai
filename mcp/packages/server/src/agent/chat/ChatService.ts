@@ -225,13 +225,15 @@ export class ChatService {
         if (!before || !after) {
             return;
         }
-        for (const problem of CanvasCheck.problems(before, after)) {
+        const problems = [...CanvasCheck.problems(before, after), ...(await check.styleDifferences(before, after))];
+        for (const problem of problems) {
             client.send({
                 type: "chat.tool",
                 conversationId,
                 toolName: ChatService.CANVAS_CHECK,
                 summary: problem.text,
-                status: "error",
+                // a style difference may be intended: a note, not a failed step
+                status: problem.severity === "error" ? "error" : "done",
                 code: problem.code,
                 params: problem.params,
             });

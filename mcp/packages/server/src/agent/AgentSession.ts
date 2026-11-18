@@ -48,6 +48,8 @@ export class AgentSession implements AgentClient {
     private authenticated = false;
     private context?: AgentContext;
     private workspace?: Promise<ProjectWorkspace>;
+    /** Callbacks waiting for the first `context.set` (see {@link waitForContext}). */
+    private contextWaiters: Array<() => void> = [];
     private policy?: { projectId: string; policy: ToolPermissionPolicy };
 
     constructor(
@@ -71,7 +73,11 @@ export class AgentSession implements AgentClient {
         }
     }
 
+    /** How long a request that needs the context waits for a `context.set` sent right after it. */
+    public static readonly CONTEXT_WAIT_MS = 3000;
+
     public async setup(): Promise<Omit<TurnSetup, "signal">> {
+        await this.waitForContext();
         const context = this.context;
         const workspacePromise = this.workspace;
         if (!context || !workspacePromise) {
@@ -90,6 +96,26 @@ export class AgentSession implements AgentClient {
         }
         const tools = this.deps.tools?.forSession(() => this.context?.mcpSessionId) ?? null;
         return { context, workspace, permissions: this.policy.policy, tools };
+    }
+
+    /**
+     * Waits briefly for the first context. A reconnecting tab sends `context.set` and its first
+     * requests (e.g. `chat.history`) at about the same time, in no fixed order; a request that
+     * arrives first would otherwise fail with `no-context` and, for the history, never be retried.
+     */
+    private waitForContext(): Promise<void> {
+        if (this.context || this.closed.aborted) {
+            return Promise.resolve();
+        }
+        return new Promise((resolve) => {
+            const done = () => {
+                clearTimeout(timer);
+                this.contextWaiters = this.contextWaiters.filter((waiter) => waiter !== done);
+                resolve();
+            };
+            const timer = setTimeout(done, AgentSession.CONTEXT_WAIT_MS);
+            this.contextWaiters.push(done);
+        });
     }
 
     private receive(data: RawData, isBinary: boolean): void {
@@ -159,6 +185,9 @@ export class AgentSession implements AgentClient {
         this.context = context;
         const workspace = this.deps.workspaces.open(context);
         this.workspace = workspace;
+        for (const waiter of [...this.contextWaiters]) {
+            waiter();
+        }
         try {
             await workspace;
         } catch (error) {
@@ -194,5 +223,8 @@ export class AgentSession implements AgentClient {
         clearTimeout(this.authTimer);
         this.closeController.abort();
         this.broker.denyAll();
+        for (const waiter of [...this.contextWaiters]) {
+            waiter();
+        }
     }
 }

@@ -22,6 +22,7 @@
    [app.features.fdata :as feat.fdata]
    [app.loggers.audit :as-alias audit]
    [app.loggers.webhooks :as-alias webhooks]
+   [app.penforge.bot :as bot]
    [app.rpc :as-alias rpc]
    [app.rpc.commands.files :as files]
    [app.rpc.commands.profile :as profile]
@@ -56,6 +57,15 @@
       (ex/raise :type :not-found
                 :code :object-not-found
                 :hint "not found"))))
+
+(defn- bot-editor?
+  "True when `owner-id` is the Penforge bot and `profile-id` can edit the
+  file (`:ai` flag on): editors may change or delete the bot comments,
+  which have no human owner."
+  [cfg profile-id owner-id file-id]
+  (and (contains? cf/flags :ai)
+       (bot/bot? owner-id)
+       (files/has-edit-permissions? cfg profile-id file-id)))
 
 (defn- format-comment
   [{:keys [content]}]
@@ -99,7 +109,10 @@
   (not= :none (-> props :notifications :email-comments)))
 
 (defn send-comment-emails!
-  [{:keys [::db/conn] :as cfg} profile comment thread file]
+  "Sends the e-mails of a new comment by `profile`. `requester-id` is the
+  profile that asked for it when it is not the author (Penforge bot
+  comments): like the author, it gets no e-mail about it."
+  [{:keys [::db/conn] :as cfg} profile comment thread file & {:keys [requester-id]}]
   (let [team-users        (get-team-users conn (:team-id file))
         comment-reference (format-comment-ref thread file)
         comment-content   (format-comment comment)
@@ -109,7 +122,7 @@
         ;; Users mentioned in this comment
         comment-mentions
         (-> (:mentions comment)
-            (disj profile-id))
+            (disj profile-id requester-id))
 
         ;; Users mentioned in this thread
         thread-mentions
@@ -117,14 +130,14 @@
             ;; Remove the mentions in the comment because we're already sending a
             ;; notification
             (set/difference comment-mentions)
-            (disj profile-id))
+            (disj profile-id requester-id))
 
         ;; All users
         notificate-users-ids
         (-> (set (keys team-users))
             (set/difference comment-mentions)
             (set/difference thread-mentions)
-            (disj profile-id))]
+            (disj profile-id requester-id))]
 
     (doseq [mention comment-mentions]
       (let [{:keys [fullname email props]} (get team-users mention)]
@@ -198,7 +211,7 @@
           (bfc/file->response)))))
 
 ;; FIXME: rename
-(defn- get-comment-thread
+(defn get-comment-thread
   [conn thread-id & {:as opts}]
   (-> (db/get-by-id conn :comment-thread thread-id opts)
       (decode-row)))
@@ -500,6 +513,27 @@
       (assoc :owner-email (:email profile))
       (assoc :owner-photo-id (:photo-id profile))))
 
+(defn create-comment-thread!
+  "Creates a comment thread with its first comment once the caller
+  (`::rpc/profile-id`) passed the permission checks. `author-id` is the
+  profile recorded as the owner of the thread and of the comment: the
+  caller for the upstream command, another profile only on the
+  Penforge path. The quotes are always checked for the caller."
+  [cfg {:keys [::rpc/profile-id file-id page-id] :as params} author-id]
+  (let [{:keys [team-id project-id] :as file} (get-file cfg file-id page-id)]
+    (-> cfg
+        (assoc ::quotes/profile-id profile-id)
+        (assoc ::quotes/team-id team-id)
+        (assoc ::quotes/project-id project-id)
+        (assoc ::quotes/file-id file-id)
+        (quotes/check! {::quotes/id ::quotes/comment-threads-per-file}
+                       {::quotes/id ::quotes/comments-per-file}))
+
+    (let [params (assoc params ::file file)
+          thread (db/tx-run! cfg create-comment-thread params author-id)]
+
+      (vary-meta thread assoc ::audit/props (assoc thread :team-id team-id)))))
+
 (sv/defmethod ::create-comment-thread
   {::doc/added "1.15"
    ::webhooks/event? true
@@ -509,24 +543,12 @@
   [cfg {:keys [::rpc/profile-id file-id page-id share-id] :as params}]
   (let [perms (files/check-comment-permissions! cfg profile-id file-id share-id)]
     (check-page-scope perms page-id)
-
-    (let [{:keys [team-id project-id] :as file} (get-file cfg file-id page-id)]
-      (-> cfg
-          (assoc ::quotes/profile-id profile-id)
-          (assoc ::quotes/team-id team-id)
-          (assoc ::quotes/project-id project-id)
-          (assoc ::quotes/file-id file-id)
-          (quotes/check! {::quotes/id ::quotes/comment-threads-per-file}
-                         {::quotes/id ::quotes/comments-per-file}))
-
-      (let [params (assoc params ::file file)
-            thread (db/tx-run! cfg create-comment-thread params)]
-
-        (vary-meta thread assoc ::audit/props (assoc thread :team-id team-id))))))
+    (create-comment-thread! cfg params profile-id)))
 
 (defn- create-comment-thread
   [{:keys [::db/conn] :as cfg}
-   {:keys [::rpc/profile-id ::rpc/request-at ::file position content mentions frame-id] :as params}]
+   {:keys [::rpc/request-at ::file position content mentions frame-id] :as params}
+   profile-id]
 
   (let [;; NOTE: we take the next seq number from a separate query
         ;; because we need to lock the file for avoid race conditions
@@ -574,7 +596,8 @@
     (update-thread-seqn conn file-id seqn)
 
     ;; Send mentions emails
-    (send-comment-emails! cfg profile comment thread file)
+    (send-comment-emails! cfg profile comment thread file
+                          :requester-id (::rpc/profile-id params))
 
     (-> thread
         (add-owner profile)
@@ -622,6 +645,8 @@
 
 ;; --- COMMAND: Add Comment
 
+(declare create-comment!)
+
 (def ^:private
   schema:create-comment
   [:map {:title "create-comment"}
@@ -635,19 +660,37 @@
    ::webhooks/event? true
    ::sm/params schema:create-comment
    ::db/transaction true}
-  [{:keys [::db/conn] :as cfg} {:keys [::rpc/profile-id ::rpc/request-at thread-id share-id content mentions]}]
+  [{:keys [::db/conn] :as cfg} {:keys [::rpc/profile-id thread-id share-id] :as params}]
   (let [{:keys [file-id page-id] :as thread}
         (get-comment-thread conn thread-id ::sql/for-update true)
 
         perms (files/check-comment-permissions! cfg profile-id file-id share-id)]
 
     (check-page-scope perms page-id)
+    (create-comment! cfg thread params profile-id)))
 
+(defn create-comment!
+  "Adds a comment to `thread` (read with `get-comment-thread` and locked
+  for update in the same transaction) once the caller
+  (`::rpc/profile-id`) passed the permission checks. `author-id` is the
+  profile recorded as the owner of the comment and added to the thread
+  participants: the caller for the upstream command, another profile
+  only on the Penforge path. The quote is checked for the caller."
+  [{:keys [::db/conn] :as cfg}
+   {:keys [file-id page-id] thread-id :id :as thread}
+   {:keys [::rpc/profile-id ::rpc/request-at content mentions]}
+   author-id]
+  ;; `profile-id` names the author below; the nested let keeps the
+  ;; upstream body of `create-comment` as it was.
+  (let [caller-id  profile-id
+        profile-id author-id]
+
+    #_{:clj-kondo/ignore [:redundant-let]}
     (let [{:keys [team-id project-id] :as file}
           (get-file cfg file-id page-id)]
 
       (quotes/check! cfg {::quotes/id ::quotes/comments-per-file
-                          ::quotes/profile-id profile-id
+                          ::quotes/profile-id caller-id
                           ::quotes/team-id team-id
                           ::quotes/project-id project-id
                           ::quotes/file-id file-id})
@@ -688,7 +731,7 @@
         ;; Update the current profile status in relation to the current thread
         (upsert-comment-thread-status! conn profile-id thread-id)
 
-        (send-comment-emails! cfg profile comment thread file)
+        (send-comment-emails! cfg profile comment thread file :requester-id caller-id)
 
         (vary-meta comment assoc ::audit/props (assoc comment :team-id team-id))))))
 
@@ -720,7 +763,8 @@
     (check-page-scope perms page-id)
 
     ;; Don't allow edit comments to not owners
-    (when-not (= owner-id profile-id)
+    (when-not (or (= owner-id profile-id)
+                  (bot-editor? cfg profile-id owner-id file-id))
       (ex/raise :type :validation
                 :code :not-allowed))
 
@@ -762,7 +806,8 @@
 
     (check-page-scope perms page-id)
 
-    (when-not (= owner-id profile-id)
+    (when-not (or (= owner-id profile-id)
+                  (bot-editor? cfg profile-id owner-id file-id))
       (ex/raise :type :validation
                 :code :not-allowed))
 
@@ -792,7 +837,8 @@
         perms (files/check-comment-permissions! cfg profile-id file-id share-id)]
 
     (check-page-scope perms page-id)
-    (when-not (= owner-id profile-id)
+    (when-not (or (= owner-id profile-id)
+                  (bot-editor? cfg profile-id owner-id file-id))
       (ex/raise :type :validation
                 :code :not-allowed))
 

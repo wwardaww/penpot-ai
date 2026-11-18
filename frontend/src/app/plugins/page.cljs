@@ -447,7 +447,8 @@
                       :content content}
                      (fn [data]
                        (resolve (pc/comment-thread-proxy plugin-id file-id id data)))
-                     false)
+                     false
+                     {:penforge-bot? (pc/penforge-author? plugin-id)})
                     (se/add-event plugin-id)))))))))
 
     :removeCommentThread

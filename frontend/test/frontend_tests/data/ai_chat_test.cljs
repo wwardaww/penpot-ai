@@ -312,3 +312,15 @@
         [tool error] (:entries chat)]
     (t/is (= ["boards-overlap" {:names ["A" "B"]}] ((juxt :code :params) tool)))
     (t/is (= ["file-type" {:name "a.exe"}] ((juxt :reason :params) error)))))
+
+(t/deftest only-questions-of-running-work-wait
+  (let [question {:kind :question :id "q1" :run-id "run1" :text "?" :options []}
+        stale    (-> base
+                     (assoc :entries [question])
+                     (assoc-in [:runs "run1"] {:status :done :silent true})
+                     (assoc-in [:runs "run2"] {:status :running :silent true}))]
+    (t/is (not (chat/waiting? stale)) "an old question of an ended run does not wait")
+    (t/is (chat/waiting? (assoc-in stale [:runs "run1" :status] :running)))
+    (t/is (not (chat/waiting? (-> base
+                                  (assoc :entries [{:kind :permission :id "p1" :title "t" :risk :low}]))))
+          "a permission request waits only during its turn")))

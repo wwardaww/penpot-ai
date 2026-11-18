@@ -328,14 +328,20 @@
        (some (fn [[_ run]] (= :running (:status run))) (:runs chat)))))
 
 (defn waiting?
-  "True while the AI waits for the user: a permission request or a
-  question is open."
+  "True while the AI waits for the user: an unanswered question of a run
+  that is still running, or an unanswered permission request of the
+  streaming turn. Questions of runs that ended stay unanswered and do not
+  count."
   [chat]
-  (and (busy? chat)
-       (boolean
-        (some #(and (contains? #{:permission :question} (:kind %))
-                    (nil? (:answer %)))
-              (:entries chat)))))
+  (let [streaming (= :streaming (:status chat))]
+    (boolean
+     (some (fn [{:keys [kind answer run-id]}]
+             (and (nil? answer)
+                  (case kind
+                    :question (= :running (get-in chat [:runs run-id :status]))
+                    :permission streaming
+                    false)))
+           (:entries chat)))))
 
 (defn- progress-text
   [progress]
@@ -582,6 +588,16 @@
               ;; Restore the stored messages once connected.
               (->> stream
                    (rx/filter (ptk/type? ::client/connected))
+                   (rx/map (fn [_] (request-history))))
+
+              ;; A history request that reached the daemon before this
+              ;; tab's context failed with `no-context`: ask again.
+              (->> (client/messages stream)
+                   (rx/filter #(and (= "error" (:type %))
+                                    (= "no-context" (:code %))
+                                    (some? (:rid %))))
+                   (rx/take 3)
+                   (rx/delay 1000)
                    (rx/map (fn [_] (request-history))))
 
               (->> stream
