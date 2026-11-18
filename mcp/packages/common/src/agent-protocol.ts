@@ -321,7 +321,15 @@ export type PreviewState = "starting" | "ready" | "stopped" | "failed";
  * `project-closed` (no tab watched it for a while), `daemon-stopped`.
  */
 export type PreviewReason =
-    "restarting" | "start-timeout" | "crashed" | "command-failed" | "stopped" | "project-closed" | "daemon-stopped";
+    | "restarting"
+    | "start-timeout"
+    | "crashed"
+    | "command-failed"
+    | "stopped"
+    | "project-closed"
+    | "daemon-stopped"
+    /** the server could be reached from the network although it must stay on this computer (W20) */
+    | "exposed";
 
 /**
  * Status of a project's dev server; sent on every state change (and on `preview.start` of a

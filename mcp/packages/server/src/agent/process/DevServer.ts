@@ -2,7 +2,9 @@ import type { PreviewLogMessage, PreviewReason, PreviewState } from "@penpot/mcp
 import { createLogger } from "../../logger";
 import { ChildEnvironment } from "../build/ChildEnvironment";
 import { CommandLauncher } from "./CommandLauncher";
+import { ExposureCheck } from "./ExposureCheck";
 import { HttpProbe } from "./HttpProbe";
+import { LoopbackGuard } from "./LoopbackGuard";
 import type { PortPool } from "./PortPool";
 import { ProcessTree } from "./ProcessTree";
 import type { StackConfig } from "./StackConfig";
@@ -30,6 +32,15 @@ export interface DevServerObserver {
     onLog(line: LogLine): void;
 }
 
+/**
+ * Who may reach a dev server.
+ *
+ * `loopback` (the default): only this computer; the server is forced onto `127.0.0.1` and checked
+ * before it is reported ready. `lan`: also other devices on the local network (the phone preview,
+ * after the user agreed); `host` is the address the server advertises to them.
+ */
+export type DevServerExposure = { mode: "loopback" } | { mode: "lan"; host: string };
+
 /** Tunables of a dev server. */
 export interface DevServerOptions {
     /** restarts after crashes before the server is given up */
@@ -42,14 +53,21 @@ export interface DevServerOptions {
     healthyMs: number;
     /** environment the child environment is derived from (secrets are dropped) */
     baseEnv: NodeJS.ProcessEnv;
+    /** check that a loopback server cannot be reached from the network; a default one when unset */
+    exposureCheck?: ExposureCheck;
+    /** pause between exposure checks of a ready loopback server (default 10 s) */
+    exposureRecheckMs?: number;
 }
 
 /**
  * Dev server of one project's generated app.
  *
  * Runs the stack's dev command (an argument vector, no shell) in its own process tree with the
- * assigned port, bound to the loopback interface where the stack honours `HOST`, with an
- * environment free of secrets. Reports `starting` until the server answers HTTP, then `ready`.
+ * assigned port and an environment free of secrets. By default the server stays on the loopback
+ * interface: `HOST` is `127.0.0.1`, a Node preload ({@link LoopbackGuard}) binds every server of
+ * the command to `127.0.0.1`, and before `ready` the server is checked from the machine's network
+ * addresses ({@link ExposureCheck}); one reachable from there is stopped and reported `failed`
+ * (`exposed`). With the `lan` exposure (phone preview) it may listen on all interfaces. Reports `starting` until the server answers HTTP, then `ready`.
  * Restarts it after a crash (up to {@link DevServerOptions.maxRestarts} times in a row; a server
  * that stayed up for {@link DevServerOptions.healthyMs} starts counting again), reports `failed`
  * when it does not come up in time or keeps crashing, and kills the whole tree on {@link stop}.
@@ -69,12 +87,14 @@ export class DevServer {
 
     private readonly logger = createLogger("DevServer");
     private readonly probe: HttpProbe;
+    private readonly exposureCheck: ExposureCheck;
     private readonly logs: LogLine[] = [];
     private readonly partial = new Map<LogLine["stream"], string>();
     private readonly claimed = new Set<number>();
     private status: PreviewStatus;
     private tree?: ProcessTree;
     private restartTimer?: NodeJS.Timeout;
+    private exposureTimer?: NodeJS.Timeout;
     private readyAt?: number;
     /** incremented on every launch and on stop; stale callbacks compare against it */
     private generation = 0;
@@ -87,6 +107,7 @@ export class DevServer {
      * @param ports - the port pool, for ports the server announces itself
      * @param observer - receives status changes and output
      * @param options - tunables
+     * @param exposure - who may reach the server; this computer only by default
      */
     constructor(
         public readonly projectId: string,
@@ -94,9 +115,11 @@ export class DevServer {
         public readonly port: number,
         private readonly ports: PortPool,
         private readonly observer: DevServerObserver,
-        private readonly options: DevServerOptions
+        private readonly options: DevServerOptions,
+        public readonly exposure: DevServerExposure = { mode: "loopback" }
     ) {
         this.probe = new HttpProbe(stack.readyPath);
+        this.exposureCheck = options.exposureCheck ?? new ExposureCheck();
         this.status = { state: "starting", url: DevServer.urlFor(port), restarts: 0 };
     }
 
@@ -144,6 +167,7 @@ export class DevServer {
         this.stopped = true;
         this.generation++;
         clearTimeout(this.restartTimer);
+        clearInterval(this.exposureTimer);
         await this.tree?.kill();
         if (this.status.state !== "failed") {
             this.log("system", `Dev server stopped (${reason})`);
@@ -158,6 +182,7 @@ export class DevServer {
         this.stopped = true;
         this.generation++;
         clearTimeout(this.restartTimer);
+        clearInterval(this.exposureTimer);
         this.tree?.killSync();
     }
 
@@ -174,11 +199,15 @@ export class DevServer {
         this.log("system", `> ${argv.join(" ")}  (port ${this.port})`);
         this.logger.info("Starting dev server of project %s on port %d: %s", this.projectId, this.port, argv.join(" "));
 
+        const reach: Record<string, string> =
+            this.exposure.mode === "lan"
+                ? { REACT_NATIVE_PACKAGER_HOSTNAME: this.exposure.host }
+                : { HOST: LoopbackGuard.HOST, NODE_OPTIONS: LoopbackGuard.nodeOptions() };
         const env = ChildEnvironment.scrub(this.options.baseEnv, {
             [this.stack.portEnv]: String(this.port),
-            HOST: "127.0.0.1",
             BROWSER: "none",
             FORCE_COLOR: "0",
+            ...reach,
         });
         let tree: ProcessTree;
         try {
@@ -206,10 +235,14 @@ export class DevServer {
             // the assigned port first, then ports the server announced and that were reserved
             for (const port of [this.port, ...this.claimed]) {
                 if (await this.probe.answers(port)) {
+                    if (!(await this.loopbackOnly(generation, port))) {
+                        return;
+                    }
                     if (this.isCurrent(generation) && this.status.state === "starting") {
                         this.log("system", `Dev server ready on port ${port}`);
                         this.readyAt = Date.now();
                         this.setStatus({ state: "ready", url: DevServer.urlFor(port) });
+                        this.watchExposure(generation);
                     }
                     return;
                 }
@@ -222,6 +255,57 @@ export class DevServer {
             }
             await new Promise((resolve) => setTimeout(resolve, this.options.probeIntervalMs));
         }
+    }
+
+    /**
+     * Checks that a loopback server cannot be reached from the network; stops it otherwise.
+     *
+     * @returns whether the server may be reported ready
+     */
+    private async loopbackOnly(generation: number, port: number): Promise<boolean> {
+        if (this.exposure.mode !== "loopback") {
+            return true;
+        }
+        const exposed = await this.exposureCheck.exposedOn(port);
+        if (exposed.length === 0) {
+            return true;
+        }
+        if (this.isCurrent(generation)) {
+            await this.fail(
+                "exposed",
+                `The app server listens on the network (${exposed.join(", ")}:${port}), not only on this computer; ` +
+                    "it was stopped. Make its dev command bind 127.0.0.1."
+            );
+        }
+        return false;
+    }
+
+    /**
+     * Checks a ready loopback server again every few seconds: the assigned port and the ports it
+     * announced, since a dev server may open more listeners after it first answered.
+     */
+    private watchExposure(generation: number): void {
+        clearInterval(this.exposureTimer);
+        if (this.exposure.mode !== "loopback") {
+            return;
+        }
+        let checking = false;
+        this.exposureTimer = setInterval(() => {
+            if (checking || !this.isCurrent(generation)) {
+                return;
+            }
+            checking = true;
+            void (async () => {
+                for (const port of [this.port, ...this.claimed]) {
+                    if (!(await this.loopbackOnly(generation, port))) {
+                        break;
+                    }
+                }
+            })().finally(() => {
+                checking = false;
+            });
+        }, this.options.exposureRecheckMs ?? 10_000);
+        this.exposureTimer.unref();
     }
 
     private exited(generation: number, tree: ProcessTree): void {
@@ -253,6 +337,7 @@ export class DevServer {
         this.stopped = true;
         this.generation++;
         clearTimeout(this.restartTimer);
+        clearInterval(this.exposureTimer);
         this.log("system", message);
         this.logger.warn("Dev server of project %s failed: %s", this.projectId, message);
         await this.tree?.kill();
