@@ -90,6 +90,15 @@
   (and (contains? cf/flags :ai)
        (= plugin-id r/mcp-plugin-id)))
 
+(defn- can-change-owned?
+  "Whether `plugin-id` may edit or remove an item of `owner-id`: one of
+  `profile`, or a Penforge bot one for the Penforge AI (the backend also
+  needs edit rights on the file)."
+  [plugin-id profile owner-id]
+  (or (= (:id profile) owner-id)
+      (and (penforge-author? plugin-id)
+           (= dc/penforge-bot-id owner-id))))
+
 (defn comment-proxy? [p]
   (obj/type-of? p "CommentProxy"))
 
@@ -133,7 +142,7 @@
              (not (dc/valid-comment-content? content))
              (u/not-valid plugin-id :content "Not valid")
 
-             (not= (:id profile) (:owner-id data))
+             (not (can-change-owned? plugin-id profile (:owner-id data)))
              (u/not-valid plugin-id :content "Cannot change content from another user's comments")
 
              (not (r/check-permission plugin-id "comment:write"))
@@ -293,7 +302,7 @@
             (not (r/check-permission plugin-id "comment:write"))
             (u/not-valid plugin-id :remove "Plugin doesn't have 'comment:write' permission")
 
-            (not= (:id profile) (:owner-id data))
+            (not (can-change-owned? plugin-id profile (:owner-id data)))
             (u/not-valid plugin-id :remove "Cannot change content from another user's comments")
 
             :else

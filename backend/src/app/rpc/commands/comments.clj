@@ -22,6 +22,7 @@
    [app.features.fdata :as feat.fdata]
    [app.loggers.audit :as-alias audit]
    [app.loggers.webhooks :as-alias webhooks]
+   [app.penforge.bot :as bot]
    [app.rpc :as-alias rpc]
    [app.rpc.commands.files :as files]
    [app.rpc.commands.profile :as profile]
@@ -56,6 +57,15 @@
       (ex/raise :type :not-found
                 :code :object-not-found
                 :hint "not found"))))
+
+(defn- bot-editor?
+  "True when `owner-id` is the Penforge bot and `profile-id` can edit the
+  file (`:ai` flag on): editors may change or delete the bot comments,
+  which have no human owner."
+  [cfg profile-id owner-id file-id]
+  (and (contains? cf/flags :ai)
+       (bot/bot? owner-id)
+       (files/has-edit-permissions? cfg profile-id file-id)))
 
 (defn- format-comment
   [{:keys [content]}]
@@ -99,7 +109,10 @@
   (not= :none (-> props :notifications :email-comments)))
 
 (defn send-comment-emails!
-  [{:keys [::db/conn] :as cfg} profile comment thread file]
+  "Sends the e-mails of a new comment by `profile`. `requester-id` is the
+  profile that asked for it when it is not the author (Penforge bot
+  comments): like the author, it gets no e-mail about it."
+  [{:keys [::db/conn] :as cfg} profile comment thread file & {:keys [requester-id]}]
   (let [team-users        (get-team-users conn (:team-id file))
         comment-reference (format-comment-ref thread file)
         comment-content   (format-comment comment)
@@ -109,7 +122,7 @@
         ;; Users mentioned in this comment
         comment-mentions
         (-> (:mentions comment)
-            (disj profile-id))
+            (disj profile-id requester-id))
 
         ;; Users mentioned in this thread
         thread-mentions
@@ -117,14 +130,14 @@
             ;; Remove the mentions in the comment because we're already sending a
             ;; notification
             (set/difference comment-mentions)
-            (disj profile-id))
+            (disj profile-id requester-id))
 
         ;; All users
         notificate-users-ids
         (-> (set (keys team-users))
             (set/difference comment-mentions)
             (set/difference thread-mentions)
-            (disj profile-id))]
+            (disj profile-id requester-id))]
 
     (doseq [mention comment-mentions]
       (let [{:keys [fullname email props]} (get team-users mention)]
@@ -583,7 +596,8 @@
     (update-thread-seqn conn file-id seqn)
 
     ;; Send mentions emails
-    (send-comment-emails! cfg profile comment thread file)
+    (send-comment-emails! cfg profile comment thread file
+                          :requester-id (::rpc/profile-id params))
 
     (-> thread
         (add-owner profile)
@@ -717,7 +731,7 @@
         ;; Update the current profile status in relation to the current thread
         (upsert-comment-thread-status! conn profile-id thread-id)
 
-        (send-comment-emails! cfg profile comment thread file)
+        (send-comment-emails! cfg profile comment thread file :requester-id caller-id)
 
         (vary-meta comment assoc ::audit/props (assoc comment :team-id team-id))))))
 
@@ -749,7 +763,8 @@
     (check-page-scope perms page-id)
 
     ;; Don't allow edit comments to not owners
-    (when-not (= owner-id profile-id)
+    (when-not (or (= owner-id profile-id)
+                  (bot-editor? cfg profile-id owner-id file-id))
       (ex/raise :type :validation
                 :code :not-allowed))
 
@@ -791,7 +806,8 @@
 
     (check-page-scope perms page-id)
 
-    (when-not (= owner-id profile-id)
+    (when-not (or (= owner-id profile-id)
+                  (bot-editor? cfg profile-id owner-id file-id))
       (ex/raise :type :validation
                 :code :not-allowed))
 
@@ -821,7 +837,8 @@
         perms (files/check-comment-permissions! cfg profile-id file-id share-id)]
 
     (check-page-scope perms page-id)
-    (when-not (= owner-id profile-id)
+    (when-not (or (= owner-id profile-id)
+                  (bot-editor? cfg profile-id owner-id file-id))
       (ex/raise :type :validation
                 :code :not-allowed))
 

@@ -18,6 +18,7 @@
    [app.plugins.comments :as comments]
    [app.plugins.page :as page]
    [app.plugins.register :as r]
+   [app.plugins.utils :as u]
    [beicon.v2.core :as rx]
    [cljs.test :as t :include-macros true]
    [frontend-tests.helpers.mock :as mock]))
@@ -332,3 +333,31 @@
 (t/deftest penforge-bot-owner
   (t/is (true? (dc/penforge-bot? (dc/get-owner {:owner-id dc/penforge-bot-id}))))
   (t/is (false? (dc/penforge-bot? (dc/get-owner {:owner-id (random-uuid)})))))
+
+(defn- remove-bot-thread
+  "Removes a Penforge bot thread as `pid` with `flags`; returns (a promise
+  of) `:deleted` or `:refused`."
+  [flags pid]
+  (let [outcome (atom nil)
+        thread  (comments/comment-thread-proxy
+                 pid (random-uuid) (random-uuid)
+                 {:id (random-uuid) :owner-id dc/penforge-bot-id})]
+    (-> (mock/with-mocks*
+          {cf/flags           flags
+           r/check-permission (constantly true)
+           u/not-valid        (mock/stub (fn [& _] (reset! outcome :refused) nil))
+           dc/delete-comment-thread-on-workspace
+           (mock/stub (fn [_ callback]
+                        (reset! outcome :deleted)
+                        (callback)
+                        [:delete-thread]))
+           st/emit!           mock/noop
+           st/state           (atom {:profile {:id (random-uuid)}})}
+          (some-> (.remove thread) (await)))
+        (.then (fn [] @outcome)))))
+
+(t/deftest ^:async penforge-ai-can-remove-bot-threads
+  (t/is (= :deleted (await (remove-bot-thread ai-flags r/mcp-plugin-id))))
+  (t/is (= :refused (await (remove-bot-thread ai-flags third-party-plugin-id)))
+        "other plugins keep the owner rule")
+  (t/is (= :refused (await (remove-bot-thread no-ai-flags r/mcp-plugin-id)))))

@@ -14,6 +14,7 @@
    [app.config :as cf]
    [app.db :as db]
    [app.db.sql :as-alias sql]
+   [app.loggers.webhooks :as-alias webhooks]
    [app.penforge.bot :as bot]
    [app.penforge.project-settings :as pps]
    [app.rpc :as-alias rpc]
@@ -110,12 +111,14 @@
   "Creates a comment thread authored by the Penforge bot. Same params
   and result as `create-comment-thread`, without share links."
   {::doc/added "2.20"
+   ::webhooks/event? true
    ::rtry/enabled true
    ::rtry/when rtry/conflict-exception?
    ::sm/params schema:create-penforge-comment-thread}
   [cfg {:keys [::rpc/profile-id file-id] :as params}]
   (check-enabled!)
   (files/check-edition-permissions! cfg profile-id file-id)
+  ;; Outside the transaction: a no-op once the bot exists.
   (let [author-id (bot/ensure-profile! cfg)]
     (comments/create-comment-thread! cfg params author-id)))
 
@@ -129,11 +132,14 @@
   "Adds a comment authored by the Penforge bot to a thread. Same params
   and result as `create-comment`, without share links."
   {::doc/added "2.20"
-   ::sm/params schema:create-penforge-comment
-   ::db/transaction true}
-  [{:keys [::db/conn] :as cfg} {:keys [::rpc/profile-id thread-id] :as params}]
+   ::webhooks/event? true
+   ::sm/params schema:create-penforge-comment}
+  [cfg {:keys [::rpc/profile-id thread-id] :as params}]
   (check-enabled!)
-  (let [thread (comments/get-comment-thread conn thread-id ::sql/for-update true)]
-    (files/check-edition-permissions! conn profile-id (:file-id thread))
-    (let [author-id (bot/ensure-profile! conn)]
-      (comments/create-comment! cfg thread params author-id))))
+  ;; Outside the transaction: a no-op once the bot exists.
+  (let [author-id (bot/ensure-profile! cfg)]
+    (db/tx-run! cfg
+                (fn [{:keys [::db/conn] :as cfg}]
+                  (let [thread (comments/get-comment-thread conn thread-id ::sql/for-update true)]
+                    (files/check-edition-permissions! conn profile-id (:file-id thread))
+                    (comments/create-comment! cfg thread params author-id))))))

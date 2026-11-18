@@ -10,6 +10,7 @@
    [app.common.uuid :as uuid]
    [app.config :as cf]
    [app.db :as db]
+   [app.email :as eml]
    [app.penforge.bot :as bot]
    [app.rpc :as-alias rpc]
    [app.rpc.commands.profile :as profile]
@@ -210,3 +211,107 @@
           (t/is (true? (:is-blocked row)))
           (t/is (true? (:is-muted row)))
           (t/is (= "!" (:password row))))))))
+
+;; --- Editors manage the bot comments
+
+(t/deftest editors-can-delete-and-edit-bot-comments
+  (with-ai-flag
+    (fn []
+      (let [{:keys [owner viewer] :as env} (setup)
+            editor (th/create-profile* 4 {:is-active true})
+            _      (th/create-team-role* {:team-id (get-in env [:team :id])
+                                          :profile-id (:id editor)
+                                          :role :editor})
+            thread (:result (th/command! (thread-params :create-penforge-comment-thread
+                                                        (:id owner) env "[Audit] Low contrast")))
+            reply  (:result (th/command! {::th/type :create-penforge-comment
+                                          ::rpc/profile-id (:id owner)
+                                          :thread-id (:id thread)
+                                          :content "More detail"}))]
+
+        (t/testing "a viewer cannot change them"
+          (let [out (th/command! {::th/type :update-comment
+                                  ::rpc/profile-id (:id viewer)
+                                  :id (:id reply)
+                                  :content "changed"})]
+            (t/is (some? (:error out))))
+          (let [out (th/command! {::th/type :delete-comment-thread
+                                  ::rpc/profile-id (:id viewer)
+                                  :id (:id thread)})]
+            (t/is (some? (:error out)))))
+
+        (t/testing "an editor edits and deletes a bot comment"
+          (let [out (th/command! {::th/type :update-comment
+                                  ::rpc/profile-id (:id editor)
+                                  :id (:id reply)
+                                  :content "changed"})]
+            (t/is (th/success? out))
+            (t/is (= "changed" (:content (th/db-get :comment {:id (:id reply)})))))
+          (let [out (th/command! {::th/type :delete-comment
+                                  ::rpc/profile-id (:id editor)
+                                  :id (:id reply)})]
+            (t/is (th/success? out))
+            (t/is (nil? (th/db-get :comment {:id (:id reply)})))))
+
+        (t/testing "the owner deletes a bot thread"
+          (let [out (th/command! {::th/type :delete-comment-thread
+                                  ::rpc/profile-id (:id owner)
+                                  :id (:id thread)})]
+            (t/is (th/success? out))
+            (t/is (nil? (th/db-get :comment-thread {:id (:id thread)})))))
+
+        (t/testing "the owner rule stays for comments of people"
+          (let [user-thread (:result (th/command! (thread-params :create-comment-thread
+                                                                 (:id owner) env "mine")))
+                out         (th/command! {::th/type :delete-comment-thread
+                                          ::rpc/profile-id (:id editor)
+                                          :id (:id user-thread)})]
+            (t/is (th/ex-of-code? (:error out) :not-allowed))))))))
+
+(t/deftest bot-comments-need-the-ai-flag-to-be-deleted-by-editors
+  (let [{:keys [owner] :as env} (setup)
+        thread (with-redefs [cf/flags (conj cf/flags :ai)]
+                 (:result (th/command! (thread-params :create-penforge-comment-thread
+                                                      (:id owner) env "hello"))))
+        out    (th/command! {::th/type :delete-comment-thread
+                             ::rpc/profile-id (:id owner)
+                             :id (:id thread)})]
+    (t/is (th/ex-of-code? (:error out) :not-allowed))))
+
+;; --- Notifications
+
+(t/deftest bot-comments-do-not-mail-the-requester
+  (with-ai-flag
+    (fn []
+      (let [{:keys [owner team] :as env} (setup)
+            watcher (th/create-profile* 5 {:is-active true
+                                           :props {:notifications {:email-comments :all}}})
+            _       (th/create-team-role* {:team-id (:id team)
+                                           :profile-id (:id watcher)
+                                           :role :editor})
+            thread  (:result (th/command! (thread-params :create-comment-thread
+                                                         (:id owner) env "make it blue")))
+            sent    (atom [])]
+        (with-redefs [eml/send-template (fn [_ params] (swap! sent conj (:to params)) nil)]
+          (t/is (th/success? (th/command! {::th/type :create-penforge-comment
+                                           ::rpc/profile-id (:id owner)
+                                           :thread-id (:id thread)
+                                           :content "Done."})))
+          (t/is (th/success? (th/command! (thread-params :create-penforge-comment-thread
+                                                         (:id owner) env "[Audit] x")))))
+        (t/is (not-any? #{(:email owner)} @sent))
+        (t/is (= 2 (count (filter #{(:email watcher)} @sent))))))))
+
+;; --- Bot profile upkeep
+
+(t/deftest ensure-profile-writes-nothing-once-the-bot-exists
+  (with-ai-flag
+    (fn []
+      (let [{:keys [owner] :as env} (setup)
+            xmin (fn []
+                   (-> (th/db-exec-one! ["SELECT xmin::text AS xmin FROM profile WHERE id = ?" bot/id])
+                       (:xmin)))]
+        (th/command! (thread-params :create-penforge-comment-thread (:id owner) env "first"))
+        (let [before (xmin)]
+          (th/command! (thread-params :create-penforge-comment-thread (:id owner) env "second"))
+          (t/is (= before (xmin))))))))

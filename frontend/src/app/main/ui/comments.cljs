@@ -648,6 +648,16 @@
     penforge-avatar-url
     (cfg/resolve-profile-photo-url owner)))
 
+(defn- can-change?
+  "Whether `profile` may edit or delete a thread or comment of `owner`:
+  its own, or a Penforge bot one when the profile can edit the file
+  (`:ai` flag on; the backend checks the same)."
+  [profile owner permissions]
+  (or (= (:id profile) (:id owner))
+      (and (contains? cfg/flags :ai)
+           (dcm/penforge-bot? owner)
+           (true? (:can-edit permissions)))))
+
 (def ^:private schema:comment-avatar
   [:map
    [:class {:optional true} :string]
@@ -923,6 +933,7 @@
   [{:keys [thread origin]}]
   (let [owner    (dcm/get-owner thread)
         profile  (mf/deref refs/profile)
+        perms    (mf/deref refs/permissions)
         options  (mf/deref ref:comments-local-options)
 
         toggle-resolved
@@ -975,7 +986,7 @@
         [:> checkbox* {:class (stl/css :checkbox-wrapper)
                        :checked (:is-resolved thread)
                        :on-change toggle-resolved}])
-      (when (= (:id profile) (:id owner))
+      (when (can-change? profile owner perms)
         [:> icon-button* {:variant "ghost"
                           :aria-label (tr "labels.options")
                           :on-click on-toggle-options
@@ -992,6 +1003,7 @@
   [{:keys [comment thread]}]
   (let [owner    (dcm/get-owner comment)
         profile  (mf/deref refs/profile)
+        perms    (mf/deref refs/permissions)
         options  (mf/deref ref:comments-local-options)
         edition? (mf/use-state false)
 
@@ -1040,7 +1052,7 @@
         [:div {:class (stl/css :author-timeago)}
          (ct/timeago (:modified-at comment))]]
 
-       (when (= (:id profile) (:id owner))
+       (when (can-change? profile owner perms)
          [:> icon-button* {:variant "ghost"
                            :aria-label (tr "labels.options")
                            :on-click on-toggle-options
