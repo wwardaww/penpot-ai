@@ -1,0 +1,196 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+@use "ds/_utils.scss" as *;
+@use "ds/mixins.scss" as *;
+@use "ds/typography.scss" as *;
+
+// Only for the modal placeholders (%modal-overlay-base,
+// %modal-container-base), until the modals move to the DS modal.
+@use "refactor/common-refactor.scss" as deprecated;
+
+.modal-overlay {
+  @extend %modal-overlay-base;
+}
+
+.modal-dialog {
+  @extend %modal-container-base;
+
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-m);
+  inline-size: px2rem(560);
+  max-inline-size: calc(100vw - var(--sp-xxxl) * 2);
+  max-block-size: calc(100vh - var(--sp-xxxl) * 2);
+}
+
+// Goes on the tooltip wrapper of the close icon button.
+.close-btn {
+  position: absolute;
+  inset-block-start: var(--sp-s);
+  inset-inline-end: var(--sp-xs);
+}
+
+.modal-title {
+  margin: 0;
+  color: var(--color-foreground-primary);
+}
+
+.modal-content {
+  min-block-size: 0;
+  overflow-y: auto;
+}
+
+.tabs {
+  display: flex;
+  gap: var(--sp-xs);
+  border-block-end: $b-1 solid var(--color-background-quaternary);
+}
+
+.tab {
+  @include use-typography("body-medium");
+
+  padding: var(--sp-s) var(--sp-m);
+  border: none;
+  border-block-end: $b-2 solid transparent;
+  background: none;
+  color: var(--color-foreground-secondary);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--color-foreground-primary);
+  }
+}
+
+.tab-active {
+  border-block-end-color: var(--color-accent-primary);
+  color: var(--color-foreground-primary);
+}
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-m);
+}
+
+.section,
+.account {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  padding: var(--sp-m);
+  border: $b-1 solid var(--color-background-quaternary);
+  border-radius: $br-8;
+}
+
+.highlighted {
+  border-color: var(--color-accent-primary);
+}
+
+.section-title {
+  margin: 0;
+  color: var(--color-foreground-primary);
+}
+
+.muted {
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-s);
+}
+
+.buttons {
+  display: flex;
+  gap: var(--sp-s);
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  padding: var(--sp-s);
+  border-radius: $br-8;
+  background: var(--color-background-tertiary);
+}
+
+.confirm-text {
+  margin: 0;
+  color: var(--color-foreground-primary);
+}
+
+.running {
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.problem {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-s);
+  padding: var(--sp-s);
+  border-radius: $br-8;
+  background: var(--color-background-error);
+}
+
+.problem-text {
+  flex: 1;
+  margin: 0;
+  color: var(--color-foreground-error);
+}
+
+.detail,
+.code {
+  @include use-typography("code-font");
+
+  overflow-x: auto;
+  margin: 0;
+  color: var(--color-foreground-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.link {
+  color: var(--color-accent-primary);
+  word-break: break-all;
+}
+
+.phone {
+  display: flex;
+  gap: var(--sp-m);
+  align-items: flex-start;
+}
+
+.phone-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+}
+
+.warning {
+  margin: 0;
+  color: var(--color-accent-warning);
+}
+
+.qr {
+  flex: none;
+  inline-size: px2rem(176);
+  block-size: px2rem(176);
+  border-radius: $br-4;
+}

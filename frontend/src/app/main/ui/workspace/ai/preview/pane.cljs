@@ -71,6 +71,7 @@
     (= reason :command-failed) (tr "penforge.preview.reason.command-failed")
     (= reason :project-closed) (tr "penforge.preview.reason.project-closed")
     (= reason :daemon-stopped) (tr "penforge.preview.reason.daemon-stopped")
+    (= reason :exposed)        (tr "penforge.preview.reason.exposed")
     (= code "bad-request")     (tr "penforge.preview.reason.invalid-setup")
     (= status :failed)         (tr "penforge.preview.status.failed")
     :else                      (tr "penforge.preview.stopped-hint")))

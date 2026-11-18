@@ -12014,3 +12014,348 @@ msgstr "Working…"
 #: src/app/main/ui/workspace/ai/chat/status.cljs
 msgid "penforge.chat.status.writing"
 msgstr "Writing the answer…"
+
+# penforge:W20
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.actions.share"
+msgstr "Share and publish"
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.actions.accounts"
+msgstr "Publishing accounts"
+
+#: src/app/main/ui/workspace/ai/preview/pane.cljs
+msgid "penforge.preview.reason.exposed"
+msgstr "The app could be opened by other computers on your network, so Penforge stopped it. Ask the AI to make its preview run on this computer only."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.title"
+msgstr "Share and publish"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.tab.share"
+msgstr "Share"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.tab.accounts"
+msgstr "Accounts"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.no-app"
+msgstr "Build the app first; then you can share it here."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.working"
+msgstr "Working…"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.cancel"
+msgstr "Cancel"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.connected-as"
+msgstr "Connected as %s"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.needs-account"
+msgstr "Connect your %s account first."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.connect-account"
+msgstr "Connect account"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.zip.title"
+msgstr "Download the code"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.zip.description"
+msgstr "Get the app's files as a ZIP file."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.zip.description.developer"
+msgstr "ZIP of app-src as it is on disk, without files ignored by .gitignore."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.zip.action"
+msgstr "Download ZIP"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.zip.preparing"
+msgstr "Preparing…"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.title"
+msgstr "Save to GitHub"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.title.developer"
+msgstr "Push to GitHub"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.description"
+msgstr "Keep the app's code in your GitHub account."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.description.developer"
+msgstr "Creates the repository if needed and pushes app-src HEAD to main. The token never goes into .git/config."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.name"
+msgstr "Repository name"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.name-placeholder"
+msgstr "Project name"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.private"
+msgstr "Private repository"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.repo"
+msgstr "Repository: %s"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.action"
+msgstr "Send to GitHub"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.update"
+msgstr "Send the latest version"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.confirm"
+msgstr "Send the app to GitHub (%s)?"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.confirm-public"
+msgstr "The repository %s will be public: anyone can see the app's code. Create it?"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.make-public"
+msgstr "Create public repository"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.github.done"
+msgstr "Sent to GitHub:"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.site.title"
+msgstr "Put online with %s"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.site.description"
+msgstr "Get a public web address for the app on %s."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.site.description.developer"
+msgstr "Runs the stack's build command and deploys the static output to %s production."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.site.action"
+msgstr "Put online"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.site.update"
+msgstr "Update the site"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.site.confirm"
+msgstr "Put the app online with %s? Anyone with the address can open it."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.site.live"
+msgstr "Online at"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.phone.title"
+msgstr "Open on your phone"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.phone.description"
+msgstr "Scan a QR code with the Expo Go app to try the app on your phone."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.phone.action"
+msgstr "Show QR code"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.phone.confirm"
+msgstr "While the QR code is shown, phones and computers on your local network can open the app. Penforge closes this access again when you stop or close this panel. Continue?"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.phone.scan"
+msgstr "Scan the code with Expo Go (Android) or the Camera app (iPhone). Your phone must use the same Wi-Fi network."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.phone.lan-open"
+msgstr "The app is open to your local network until you stop."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.phone.qr-label"
+msgstr "QR code that opens the app in Expo Go"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.phone.stop"
+msgstr "Stop"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.step.save"
+msgstr "Saving the app…"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.step.repo"
+msgstr "Preparing the GitHub repository…"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.step.push"
+msgstr "Sending the app to GitHub…"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.step.install"
+msgstr "Installing the app's packages…"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.step.build"
+msgstr "Building the app…"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.step.upload"
+msgstr "Uploading the app…"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.step.deploy"
+msgstr "Putting the app online…"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.step.phone"
+msgstr "Starting the app for your phone…"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.accounts.intro"
+msgstr "Penforge keeps your tokens on this computer only. The browser never stores them and only sees the account name."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.accounts.help.github"
+msgstr "Create a classic token with the “repo” scope (or a fine-grained token with Administration and Contents: read and write)."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.accounts.help.vercel"
+msgstr "Create a token in your Vercel account settings."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.accounts.help.netlify"
+msgstr "Create a personal access token in your Netlify user settings."
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.accounts.create-token"
+msgstr "Create a token"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.accounts.token-label"
+msgstr "%s token"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.accounts.token-placeholder"
+msgstr "Paste the token"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.accounts.connect"
+msgstr "Connect"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.accounts.checking"
+msgstr "Checking…"
+
+#: src/app/main/ui/workspace/ai/publish/share.cljs
+msgid "penforge.publish.accounts.disconnect"
+msgstr "Disconnect"
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.accounts.connected"
+msgstr "Connected as %s"
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.no-app"
+msgstr "There is no app yet. Build it first."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.not-connected"
+msgstr "Connect the account first."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.token-invalid"
+msgstr "%s did not accept the token. Check that you copied all of it and that it has not expired."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.token-scope"
+msgstr "The %s token is missing a permission for this. Create a token with the scopes shown in Accounts."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.token-format"
+msgstr "This does not look like a %s token."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.name-taken"
+msgstr "The name “%s” is already taken. Choose another name."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.repo-diverged"
+msgstr "The GitHub repository has changes that are not in this app. Choose another repository name, or bring those changes in first."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.build-failed"
+msgstr "The app could not be built. Ask the AI to fix the build, then try again."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.no-output"
+msgstr "The build made no web page to publish."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.too-large"
+msgstr "The app is too large to publish from here."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.deploy-failed"
+msgstr "%s could not put the app online."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.timeout"
+msgstr "%s took too long. Try again later."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.network"
+msgstr "%s cannot be reached. Check your internet connection."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.rate-limited"
+msgstr "%s asks to wait a moment. Try again later."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.no-phone-preview"
+msgstr "This app cannot be opened on a phone from here (only Expo apps can)."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.no-network"
+msgstr "This computer is not on a local network, so a phone cannot reach it."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.preview-failed"
+msgstr "The app did not start for the phone."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.busy"
+msgstr "Another publish step is still running. Wait for it to finish."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.daemon"
+msgstr "Penforge's AI service is not connected."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.unknown"
+msgstr "Something went wrong."
+
+#: src/app/main/data/ai/actions/publish.cljs
+msgid "penforge.publish.error.other"
+msgstr "Something went wrong: %s"

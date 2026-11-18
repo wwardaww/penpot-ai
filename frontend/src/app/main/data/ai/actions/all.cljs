@@ -19,8 +19,11 @@
    [app.main.data.ai.actions.design-md]
    [app.main.data.ai.actions.detached]
    [app.main.data.ai.actions.generate]
+   [app.main.data.ai.actions.publish]
    ;; W15: registers the audit results modal
    [app.main.ui.workspace.ai.audit.panel]
    [app.main.ui.workspace.ai.build.actions]
    ;; W19: AI history dialog; requires app.main.data.ai.actions.checkpoints
-   [app.main.ui.workspace.ai.checkpoints.history]))
+   [app.main.ui.workspace.ai.checkpoints.history]
+   ;; W20: Share panel modal (ZIP, GitHub, Vercel, Netlify, phone, accounts)
+   [app.main.ui.workspace.ai.publish.share]))
