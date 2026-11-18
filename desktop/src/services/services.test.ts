@@ -19,11 +19,13 @@ describe("service settings", () => {
         assert.equal(env.PENPOT_DATABASE_URI, "postgresql://127.0.0.1:9001/postgres");
         assert.equal(env.PENPOT_PENFORGE_LOCAL_SECRET, ctx.state.localLoginSecret);
         assert.equal(env.PENPOT_MEDIA_PROCESSING_SERVICE_URI, "http://127.0.0.1:9003");
+        assert.equal(env.PENPOT_TMP_DIRECTORY, ctx.data.tmp);
         for (const flag of ["enable-penforge-local", "enable-ai", "disable-registration", "disable-smtp"]) {
             assert.ok(BACKEND_FLAGS.includes(flag), flag);
         }
         const args = backendArgs(ctx);
         assert.ok(args.includes("--enable-preview"));
+        assert.ok(args.includes("-Duser.language=en"), "locale-independent env parsing");
         assert.equal(args.at(-1), "app.main");
     });
 

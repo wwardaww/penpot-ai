@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, parse } from "node:path";
 import { waitForHttp } from "../health/probes";
 import { DB_NAME, DB_USER } from "./postgres";
 import { exitedReason, type ServiceContext, type ServiceDefinition } from "./context";
@@ -34,6 +34,7 @@ export function backendEnv(ctx: ServiceContext): NodeJS.ProcessEnv {
         PENPOT_REDIS_URI: "mem://desktop",
         PENPOT_OBJECTS_STORAGE_BACKEND: "fs",
         PENPOT_OBJECTS_STORAGE_FS_DIRECTORY: ctx.data.assets,
+        PENPOT_TMP_DIRECTORY: ctx.data.tmp,
         PENPOT_SECRET_KEY: ctx.state.backendSecretKey,
         PENPOT_PENFORGE_LOCAL_SECRET: ctx.state.localLoginSecret,
         PENPOT_MEDIA_PROCESSOR_SHARED_KEY: ctx.state.mediaProcessorKey,
@@ -41,11 +42,21 @@ export function backendEnv(ctx: ServiceContext): NodeJS.ProcessEnv {
     };
 }
 
+/** Where yetti's `/tmp/undertow/` lands for the backend's working directory. */
+export function undertowDir(ctx: ServiceContext): string {
+    return ctx.platform === "win32" ? join(parse(ctx.runtime.backendDir).root, "tmp", "undertow") : "/tmp/undertow";
+}
+
 export function backendArgs(ctx: ServiceContext): string[] {
     return [
         `-Xmx${ctx.backendHeapMb}m`,
         "-XX:+UseSerialGC",
         "-XX:-OmitStackTraceInFastThrow",
+        // `environ` lower-cases env names with the default locale: under a Turkish locale
+        // `PENPOT_DATABASE_URI` becomes `:penpot-database-urı` and the setting is lost
+        "-Duser.language=en",
+        "-Duser.country=US",
+        "-Dfile.encoding=UTF-8",
         `-Djava.io.tmpdir=${ctx.data.tmp}`,
         "-Djava.util.logging.manager=org.apache.logging.log4j.jul.LogManager",
         `-Dlog4j2.configurationFile=${join(ctx.runtime.backendDir, "log4j2.xml")}`,
@@ -66,6 +77,9 @@ export const backendService: ServiceDefinition = {
     async prepare(ctx) {
         mkdirSync(ctx.data.assets, { recursive: true });
         mkdirSync(ctx.data.tmp, { recursive: true });
+        // the multipart parser (yetti) writes uploads to the fixed `/tmp/undertow/`, which
+        // Windows resolves against the drive of the working directory
+        mkdirSync(undertowDir(ctx), { recursive: true });
     },
 
     spec(ctx) {
