@@ -32,27 +32,34 @@ class FixCommentWording {
     }
 
     /**
-     * Gets the summary of a finished fix.
-     *
-     * @param report - the report
-     */
-    /**
      * Sentence about the copies of a fixed layer, or "".
      */
     public static copies(copies: CopiesReport | undefined): string {
         if (!copies) {
             return "";
         }
+        const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
         if (copies.kind === "main") {
-            return " The component's copies on other screens follow it.";
+            return (
+                ` The component is also used on ${plural(copies.boards.length, "other screen", "other screens")}; ` +
+                "its copies follow unless they changed this themselves."
+            );
         }
+        const skipped = copies.skipped
+            ? ` ${plural(copies.skipped, "layer was", "layers were")} left as they are, because another fix ` +
+              "changed them meanwhile."
+            : "";
         if (copies.applied === 0) {
-            return "";
+            return skipped;
         }
-        const screens = copies.boards.length;
-        return ` Also changed on ${screens} other ${screens === 1 ? "screen" : "screens"}.`;
+        return ` Also changed on ${plural(copies.boards.length, "other screen", "other screens")}.${skipped}`;
     }
 
+    /**
+     * Gets the summary of a finished fix.
+     *
+     * @param report - the report
+     */
     public static summary(report: FixReport): string {
         const note = report.note ? `: ${report.note}` : "";
         const copies = FixCommentWording.copies(report.copies);

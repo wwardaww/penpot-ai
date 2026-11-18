@@ -295,6 +295,13 @@ class FixCommentsWording {
         if (screens.size > 0) {
             parts.push(`also changed on ${screens.size} other ${screens.size === 1 ? "screen" : "screens"}`);
         }
+        const leftCopies = (result.copies ?? []).reduce((sum, copies) => sum + (copies.skipped ?? 0), 0);
+        if (leftCopies > 0) {
+            parts.push(
+                `left ${leftCopies} ${leftCopies === 1 ? "layer" : "layers"} on other screens as they were, ` +
+                    "because another fix changed them"
+            );
+        }
         return parts.join(", ");
     }
 }

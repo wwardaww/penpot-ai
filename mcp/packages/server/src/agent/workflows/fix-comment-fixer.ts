@@ -429,8 +429,10 @@ export class CommentFixer {
     ): Promise<CopiesReport | null> {
         try {
             const prepared = await copies.prepare(before, changes, seqNumber);
-            if (prepared === "main") {
-                return { kind: "main", found: 0, applied: 0, boards: [], recorded: false };
+            if (prepared?.kind === "main") {
+                return prepared.boards.length === 0
+                    ? null
+                    : { kind: "main", found: 0, applied: 0, boards: prepared.boards, recorded: false };
             }
             if (!prepared) {
                 return null;

@@ -41,10 +41,19 @@ export interface CopiesReport {
     found: number;
     /** layers changed (after the user said so) */
     applied: number;
-    /** screens of those layers */
+    /** layers left out at the end: changed meanwhile, or wanted differently by two fixes */
+    skipped?: number;
+    /** screens of those layers (`main`: screens with instances of the component) */
     boards: string[];
     /** the decision was written to DESIGN.md */
     recorded: boolean;
+}
+
+/** The fixed layer belongs to a main component: its instances follow it by themselves. */
+export interface MainComponentNote {
+    kind: "main";
+    /** screens with instances of the component (other than the fixed layer's) */
+    boards: string[];
 }
 
 /** Layer as the survey script reports it. */
@@ -68,6 +77,8 @@ interface Survey {
     target: SurveyLayer;
     /** the layer is inside a main component */
     inMain: boolean;
+    /** screens with instances of that main component */
+    instanceBoards: string[];
     /** the layer is inside a component copy */
     component: { name: string; mainLayerId: string; boards: string[] } | null;
     candidates: SurveyLayer[];
@@ -148,13 +159,13 @@ export class CommentFixCopies {
      * @param before - the fixed layer before the fix
      * @param changes - the style changes Claude made during the fix
      * @param seqNumber - number of the comment
-     * @returns an offer, `main` when the instances follow by themselves, or null
+     * @returns an offer, a note when the layer is in a main component, or null
      */
     public async prepare(
         before: DesignNode,
         changes: StyleChange[],
         seqNumber: number
-    ): Promise<CopyOffer | "main" | null> {
+    ): Promise<CopyOffer | MainComponentNote | null> {
         const style = Object.assign(
             {},
             ...changes.filter((change) => change.nodeId === before.id).map((change) => change.style)
@@ -168,7 +179,7 @@ export class CommentFixCopies {
             return null;
         }
         if (survey.inMain) {
-            return "main";
+            return { kind: "main", boards: survey.instanceBoards ?? [] };
         }
         const base = { seqNumber, layerName: before.name, style, oldStyle };
         if (survey.component) {
@@ -214,10 +225,15 @@ export class CommentFixCopies {
         if (answer !== CommentFixCopies.APPLY) {
             return declined;
         }
-        const applied = await this.apply(offers).catch(() => new Map<string, boolean>());
+        // offers of a batch wait for the end: later fixes may have changed their targets since
+        const plan = await this.recheck(offers);
+        const applied = await this.apply(offers, plan).catch(() => new Map<string, boolean>());
+        const planned = new Set(plan.flat());
         const reports: CopiesReport[] = [];
         for (const offer of offers) {
+            // a target two offers wanted alike was applied once, for both
             const count = offer.targets.filter((target) => applied.get(target) === true).length;
+            const skipped = offer.targets.filter((target) => !planned.has(target)).length;
             const recorded =
                 count > 0 &&
                 (await new DesignDecisions(this.ctx.workspace).record(
@@ -225,9 +241,57 @@ export class CommentFixCopies {
                     DesignTree.describeChange(offer.oldStyle, offer.style),
                     offer.seqNumber
                 ));
-            reports.push(CommentFixCopies.report(offer, count, recorded));
+            reports.push({
+                ...CommentFixCopies.report(offer, count, recorded),
+                ...(skipped > 0 ? { skipped } : {}),
+            });
         }
         return reports;
+    }
+
+    /**
+     * Targets of each offer that may still change: a target wanted by two offers with different
+     * styles is left out of both (the same style is applied once, by the first), and a target
+     * whose current look no longer equals the offer's old look (a later fix changed it) is left
+     * out.
+     *
+     * @returns the targets to apply, per offer
+     */
+    private async recheck(offers: CopyOffer[]): Promise<string[][]> {
+        const owner = new Map<string, number>();
+        const conflicting = new Set<string>();
+        offers.forEach((offer, index) => {
+            for (const target of offer.targets) {
+                const first = owner.get(target);
+                if (first === undefined) {
+                    owner.set(target, index);
+                } else if (!DesignTree.same(offers[first].style, offer.style)) {
+                    conflicting.add(target);
+                }
+            }
+        });
+        const plan: string[][] = [];
+        for (const [index, offer] of offers.entries()) {
+            const targets: string[] = [];
+            for (const target of offer.targets) {
+                if (conflicting.has(target) || owner.get(target) !== index) {
+                    continue;
+                }
+                const result = await this.ctx.tools.call(CommentFixCopies.PROPERTIES_TOOL, {
+                    nodeId: target,
+                    depth: 1,
+                });
+                const node = result.isError ? null : DesignTree.parse(result.text);
+                if (
+                    node &&
+                    Object.keys(offer.oldStyle).every((key) => DesignTree.same(node.style[key], offer.oldStyle[key]))
+                ) {
+                    targets.push(target);
+                }
+            }
+            plan.push(targets);
+        }
+        return plan;
     }
 
     /**
@@ -341,26 +405,33 @@ if (!target) {
 }
 const home = boardOf(target);
 const inMain = Boolean(call(target, "isComponentMainInstance"));
+const instancesOf = (component, skipMain) => {
+    const boards = new Set();
+    for (const shape of penpotUtils.findShapes((s) => Boolean(call(s, "isComponentRoot")), penpot.root)) {
+        const used = call(shape, "component");
+        if (used && used.id === component.id && boardOf(shape).id !== home.id
+            && !(skipMain && call(shape, "isComponentMainInstance"))) {
+            boards.add(boardOf(shape).name);
+        }
+    }
+    return [...boards];
+};
+const ownRoot = call(target, "componentRoot");
+const ownComponent = inMain && ownRoot ? call(ownRoot, "component") : null;
+const instanceBoards = ownComponent ? instancesOf(ownComponent, true) : [];
 let component = null;
 if (!inMain && call(target, "isComponentCopyInstance")) {
     const ref = call(target, "componentRefShape");
     const root = call(target, "componentRoot");
     const main = root ? call(root, "component") : null;
     if (ref && main) {
-        const boards = new Set();
-        for (const shape of penpotUtils.findShapes((s) => Boolean(call(s, "isComponentRoot")), penpot.root)) {
-            const used = call(shape, "component");
-            if (used && used.id === main.id && boardOf(shape).id !== home.id) {
-                boards.add(boardOf(shape).name);
-            }
-        }
-        component = { name: main.name, mainLayerId: ref.id, boards: [...boards] };
+        component = { name: main.name, mainLayerId: ref.id, boards: instancesOf(main, false) };
     }
 }
 const candidates = inMain || component
     ? []
     : penpotUtils.findShapes((s) => s.name === target.name && s.id !== target.id, penpot.root).map(layer);
-return { target: layer(target), inMain, component, candidates };
+return { target: layer(target), inMain, instanceBoards, component, candidates };
 `;
         const result = await this.ctx.tools.call(CommentFixCopies.EXECUTE_TOOL, { code });
         if (result.isError) {
@@ -374,12 +445,21 @@ return { target: layer(target), inMain, component, candidates };
         }
     }
 
-    /** Applies every offer's style to its targets in one undo step; returns success per target. */
-    private async apply(offers: CopyOffer[]): Promise<Map<string, boolean>> {
-        const targets = offers.flatMap((offer) => offer.targets.map((nodeId) => ({ nodeId, mutations: offer.style })));
+    /**
+     * Applies the planned targets of every offer in one undo step, then returns to the page the
+     * user was on (changing a component's main may open its page); returns success per target.
+     */
+    private async apply(offers: CopyOffer[], plan: string[][]): Promise<Map<string, boolean>> {
+        const targets = offers.flatMap((offer, index) =>
+            plan[index].map((nodeId) => ({ nodeId, mutations: offer.style }))
+        );
+        if (targets.length === 0) {
+            return new Map();
+        }
         const code = `
 const params = ${JSON.stringify({ targets })};
 const history = penpot.history;
+const startPage = penpot.currentPage;
 const block = history.undoBlockBegin();
 const done = {};
 try {
@@ -393,6 +473,9 @@ try {
     }
 } finally {
     history.undoBlockFinish(block);
+    if (startPage && penpot.currentPage && penpot.currentPage.id !== startPage.id) {
+        await penpot.openPage(startPage);
+    }
 }
 return done;
 `;
