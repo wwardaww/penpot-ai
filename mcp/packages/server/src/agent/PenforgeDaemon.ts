@@ -1,3 +1,4 @@
+import { join } from "path";
 import { createLogger } from "../logger";
 import { AgentConfig, PENFORGE_DAEMON_VERSION } from "./AgentConfig";
 import { AgentServer, PairingToken } from "./AgentServer";
@@ -5,6 +6,9 @@ import { ChatService } from "./chat/ChatService";
 import { TurnRunner } from "./chat/TurnRunner";
 import { DevServerManager } from "./process/DevServerManager";
 import { PreviewService } from "./process/PreviewService";
+import { DownloadRegistry } from "./publish/DownloadRegistry";
+import { PublishServices } from "./publish/PublishServices";
+import { SecretStore } from "./publish/SecretStore";
 import { PromptRegistry } from "./prompts/promptRegistry";
 import type { ClaudeRunner } from "./runner/ClaudeRunner";
 import { createRunner } from "./runner/createRunner";
@@ -22,6 +26,8 @@ export interface PenforgeDaemonParts {
     tools?: McpToolsClient | null;
     /** dev server manager of the previews */
     devServers?: DevServerManager;
+    /** services of the `publish` workflow (W20); built from the config when unset */
+    publish?: (downloads: DownloadRegistry, downloadUrl: (id: string) => string) => PublishServices;
     authTimeoutMs?: number;
 }
 
@@ -41,6 +47,7 @@ export class PenforgeDaemon {
     private readonly tools: McpToolsClient | null;
     private readonly previews: PreviewService;
     private readonly server: AgentServer;
+    private readonly publish: PublishServices;
 
     /**
      * @param config - the daemon configuration
@@ -57,7 +64,9 @@ export class PenforgeDaemon {
         const turns = new TurnRunner(this.runner, parts.prompts ?? PromptRegistry.locate());
         this.chat = new ChatService(turns);
         this.workflows = new WorkflowEngine(this.registry, turns);
-        this.previews = new PreviewService(parts.devServers ?? new DevServerManager());
+        const devServers = parts.devServers ?? new DevServerManager();
+        this.previews = new PreviewService(devServers);
+        const downloads = new DownloadRegistry();
         this.server = new AgentServer(
             config,
             this.token,
@@ -75,8 +84,14 @@ export class PenforgeDaemon {
                 daemonVersion: PENFORGE_DAEMON_VERSION,
                 runner: this.runner.kind,
                 workflows: this.registry.names(),
-            })
+            }),
+            downloads
         );
+        const downloadUrl = (id: string) => `${this.server.baseUrl}/download/${id}`;
+        this.publish =
+            parts.publish?.(downloads, downloadUrl) ??
+            new PublishServices(new SecretStore(join(config.home, "secrets.json")), downloads, downloadUrl, devServers);
+        PublishServices.install(this.publish);
     }
 
     /** Pairing URL to open in the browser. */
@@ -111,6 +126,7 @@ export class PenforgeDaemon {
         this.runner.cancel();
         await this.previews.stopAll();
         await this.server.stop();
+        PublishServices.uninstall(this.publish);
         await this.tools?.close();
     }
 }

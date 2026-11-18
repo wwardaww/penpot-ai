@@ -6,6 +6,7 @@ import { WebSocketServer } from "ws";
 import { createLogger } from "../logger";
 import { AgentConfig } from "./AgentConfig";
 import { AgentSession, type AgentSessionDeps } from "./AgentSession";
+import type { DownloadRegistry } from "./publish/DownloadRegistry";
 
 /**
  * Ephemeral pairing token of the daemon.
@@ -49,6 +50,7 @@ export class PairingToken {
  * origin; WebSocket upgrades must carry an allowed `Origin`. Sessions from an allowed origin need
  * the pairing token only when `requirePairing` is on. `/pair` prints the pairing URL to the
  * daemon's log and returns it only to clients without an `Origin` (local programs, not web pages).
+ * `/download/<id>` serves a file of the {@link DownloadRegistry} once (W20 ZIP download).
  */
 export class AgentServer {
     private static readonly LOOPBACK_HOSTS = ["127.0.0.1", "localhost", "[::1]"];
@@ -64,12 +66,14 @@ export class AgentServer {
      * @param token - the pairing token
      * @param sessionDeps - services passed to each session
      * @param health - extra fields reported by `/health`
+     * @param downloads - files the browser may download once
      */
     constructor(
         private readonly config: AgentConfig,
         private readonly token: PairingToken,
         private readonly sessionDeps: Omit<AgentSessionDeps, "verifyToken">,
-        private readonly health: () => Record<string, unknown>
+        private readonly health: () => Record<string, unknown>,
+        private readonly downloads?: DownloadRegistry
     ) {
         this.allowedOrigins = new Set(config.allowedOrigins);
         this.wsServer = new WebSocketServer({ noServer: true, maxPayload: 32 * 1024 * 1024 });
@@ -84,6 +88,12 @@ export class AgentServer {
     public get port(): number {
         const address = this.httpServer?.address();
         return address && typeof address === "object" ? address.port : this.config.port;
+    }
+
+    /** HTTP base URL of the endpoint (`http://127.0.0.1:4410`). */
+    public get baseUrl(): string {
+        const host = this.config.host.includes(":") ? `[${this.config.host}]` : this.config.host;
+        return `http://${host}:${this.port}`;
     }
 
     /** Number of connected sessions. */
@@ -142,6 +152,20 @@ export class AgentServer {
             } else {
                 res.json({ printed: true });
             }
+        });
+        app.get("/download/:id", (req, res) => {
+            const download = this.downloads?.take(String(req.params.id));
+            if (!download) {
+                res.status(404).json({ error: "not found" });
+                return;
+            }
+            const filename = download.filename.replace(/[^A-Za-z0-9._-]/g, "_");
+            res.setHeader("Content-Type", download.contentType);
+            res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+            res.setHeader("Cache-Control", "no-store");
+            res.setHeader("X-Content-Type-Options", "nosniff");
+            res.setHeader("Referrer-Policy", "no-referrer");
+            res.end(download.content);
         });
     }
 

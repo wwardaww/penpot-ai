@@ -79,6 +79,19 @@ test("asks before writing outside the project and denies on refusal", async () =
     assert.equal(asker.prompts[0]?.risk, "high");
 });
 
+test("never lets Claude read the daemon's token store, not even with permission", async () => {
+    const asker = new RecordingAsker({ allow: true, remember: true });
+    const policy = new ToolPermissionPolicy(new PathGuard(root), asker, () => undefined);
+    for (const decision of [
+        await policy.decide({ toolName: "Read", input: { file_path: join(base, "secrets.json") }, signal }),
+        await policy.decide({ toolName: "Edit", input: { file_path: join(base, "Secrets.JSON") }, signal }),
+        await policy.decide({ toolName: "Bash", input: { command: "cat ~/Penforge/secrets.json" }, signal }),
+    ]) {
+        assert.equal(decision.allow, false);
+    }
+    assert.equal(asker.prompts.length, 0, "the user is not even asked");
+});
+
 test("asks before running a command and remembers the answer for the same program", async () => {
     const asker = new RecordingAsker({ allow: true, remember: true });
     const policy = new ToolPermissionPolicy(new PathGuard(root), asker, () => undefined);

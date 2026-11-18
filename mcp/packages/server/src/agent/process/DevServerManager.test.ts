@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createServer, type Server } from "node:net";
+import { createConnection, createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
@@ -10,12 +10,14 @@ import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import { CommandPolicy } from "./CommandPolicy";
 import type { DevServerObserver, LogLine, PreviewStatus } from "./DevServer";
 import { DevServerManager, type DevServerManagerOptions } from "./DevServerManager";
+import { ExposureCheck } from "./ExposureCheck";
 import { PortPool } from "./PortPool";
 
 /** Fixture path with forward slashes: command arguments may not hold backslashes. */
 const FAKE_SERVER = join(dirname(fileURLToPath(import.meta.url)), "testing", "fakeDevServer.mjs").replace(/\\/g, "/");
 const FIRST_PORT = 47310;
 const NODE_POLICY = new CommandPolicy(["node"]);
+const NO_ADDRESSES = new ExposureCheck({ externalAddresses: () => [] });
 
 /** Observer that records everything and lets a test wait for a state. */
 class RecordingObserver implements DevServerObserver {
@@ -65,6 +67,8 @@ function createManager(options: DevServerManagerOptions = {}): DevServerManager 
         restartDelayMs: 50,
         idleStopMs: 60_000,
         commandPolicy: NODE_POLICY,
+        // tests of the exposure check name their addresses; the others skip it
+        exposureCheck: NO_ADDRESSES,
         ...options,
     });
 }
@@ -328,6 +332,87 @@ test("the dev server gets no secrets and binds to loopback", async () => {
     assert.ok(env.PATH ?? env.Path, "PATH passes");
     assert.equal(env.HOST, "127.0.0.1");
     assert.equal(env.PORT, String(FIRST_PORT));
+    assert.match(env.NODE_OPTIONS ?? "", /^--require "[^"]+loopback\.cjs"$/, "the loopback preload is loaded");
+    assert.equal(env.REACT_NATIVE_PACKAGER_HOSTNAME, undefined);
+});
+
+/**
+ * Exposure check that probes a second loopback address: a server bound to 127.0.0.1 refuses
+ * it, a server bound to all interfaces accepts it (Windows and Linux route 127.0.0.0/8 locally).
+ */
+const SECOND_LOOPBACK = new ExposureCheck({ externalAddresses: () => ["127.0.0.2"] });
+const LOOPBACK_ALIASES = process.platform !== "darwin";
+
+async function acceptsOn(host: string, port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+        const socket = createConnection({ host, port });
+        socket.once("connect", () => {
+            socket.destroy();
+            resolve(true);
+        });
+        socket.once("error", () => resolve(false));
+    });
+}
+
+test("keeps a server that listens without a host on loopback", { skip: !LOOPBACK_ALIASES }, async () => {
+    manager = createManager({ exposureCheck: SECOND_LOOPBACK });
+    for (const mode of ["open", "open-all", "open-v6"]) {
+        const host = mode;
+        const workspace = await project([mode]);
+        const observer = await watched(workspace);
+        const ready = observer.next("ready");
+        await manager.start(workspace);
+        const status = await ready;
+        const port = Number(new URL(status.url!).port);
+        assert.equal(await acceptsOn("127.0.0.1", port), true, `${host}: loopback answers`);
+        assert.equal(await acceptsOn("127.0.0.2", port), false, `${host}: not reachable from elsewhere`);
+        await manager.stop(workspace.projectId);
+    }
+});
+
+test("stops a server that escapes the loopback guard", { skip: !LOOPBACK_ALIASES }, async () => {
+    manager = createManager({ exposureCheck: SECOND_LOOPBACK });
+    const workspace = await project(["escape"]);
+    const observer = await watched(workspace);
+    const failed = observer.next("failed");
+    await manager.start(workspace);
+    const status = await failed;
+    assert.equal(status.reason, "exposed");
+    assert.match(status.message ?? "", /127\.0\.0\.2/);
+    assert.ok(!observer.statuses.some((s) => s.state === "ready"), "never reported ready");
+    await waitUntil(() => manager.liveProjects.length === 0);
+});
+
+test("restarts for LAN access and back to loopback", { skip: !LOOPBACK_ALIASES }, async () => {
+    const envFile = homePath("lan-env.json");
+    manager = createManager({ exposureCheck: SECOND_LOOPBACK });
+    const workspace = await project(["env", envFile]);
+    const observer = await watched(workspace);
+    let ready = observer.next("ready");
+    await manager.start(workspace);
+    await ready;
+    assert.deepEqual(manager.exposureOf(workspace.projectId), { mode: "loopback" });
+
+    // the env fixture serves on 127.0.0.1; only the environment matters here
+    ready = observer.next("ready");
+    await manager.start(workspace, { exposure: { mode: "lan", host: "192.0.2.7" } });
+    await ready;
+    let env = JSON.parse(readFileSync(envFile, "utf8")) as Record<string, string>;
+    assert.equal(env.REACT_NATIVE_PACKAGER_HOSTNAME, "192.0.2.7");
+    assert.equal(env.NODE_OPTIONS, undefined, "no loopback preload while the phone may connect");
+    assert.deepEqual(manager.exposureOf(workspace.projectId), { mode: "lan", host: "192.0.2.7" });
+    assert.ok(observer.statuses.some((s) => s.state === "stopped" && s.reason === "restarting"));
+
+    // a plain start keeps the running server's exposure
+    await manager.start(workspace);
+    assert.equal(manager.exposureOf(workspace.projectId)?.mode, "lan");
+
+    ready = observer.next("ready");
+    await manager.start(workspace, { exposure: { mode: "loopback" } });
+    await ready;
+    env = JSON.parse(readFileSync(envFile, "utf8")) as Record<string, string>;
+    assert.match(env.NODE_OPTIONS ?? "", /loopback\.cjs/);
+    assert.deepEqual(manager.exposureOf(workspace.projectId), { mode: "loopback" });
 });
 
 test("runs a Windows batch shim without a shell", { skip: process.platform !== "win32" }, async () => {

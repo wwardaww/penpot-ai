@@ -4,6 +4,7 @@ import { CaptureNodeScreenshotTool } from "./CaptureNodeScreenshotTool";
 import { GenerateCodeHintsTool } from "./GenerateCodeHintsTool";
 import { GetNodePropertiesTool } from "./GetNodePropertiesTool";
 import { GetPrototypeGraphTool } from "./GetPrototypeGraphTool";
+import { OpenPublishTool } from "../../agent/publish/OpenPublishTool";
 import { ListBoardsTool } from "./ListBoardsTool";
 import { ListCanvasCommentsTool } from "./ListCanvasCommentsTool";
 import { PenforgeOverviewTool } from "./PenforgeOverviewTool";
@@ -44,6 +45,8 @@ export class PenforgeTools {
             new ListBoardsTool(mcpServer),
             new GetPrototypeGraphTool(mcpServer),
             new GenerateCodeHintsTool(mcpServer),
+            // W20: lets the AI chat open the Share panel
+            new OpenPublishTool(mcpServer),
         ];
     }
 }

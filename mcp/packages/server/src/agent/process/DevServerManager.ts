@@ -3,6 +3,7 @@ import { createLogger } from "../../logger";
 import type { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import {
     DevServer,
+    type DevServerExposure,
     type DevServerObserver,
     type DevServerOptions,
     type LogLine,
@@ -20,6 +21,15 @@ export interface DevServerManagerOptions extends Partial<DevServerOptions> {
     idleStopMs?: number;
     /** rules for the dev command; package managers only by default */
     commandPolicy?: CommandPolicy;
+}
+
+/** Options of {@link DevServerManager.start}. */
+export interface DevServerStartOptions {
+    /**
+     * who may reach the server; when it differs from the running server's, the server restarts
+     * with it. Unset: the running server's, or loopback only for a new one
+     */
+    exposure?: DevServerExposure;
 }
 
 /**
@@ -82,6 +92,7 @@ export class DevServerManager {
             restartDelayMs: options.restartDelayMs ?? DevServerManager.DEFAULTS.restartDelayMs,
             healthyMs: options.healthyMs ?? DevServerManager.DEFAULTS.healthyMs,
             baseEnv: options.baseEnv ?? process.env,
+            exposureCheck: options.exposureCheck,
         };
         this.policy = options.commandPolicy ?? new CommandPolicy();
     }
@@ -90,22 +101,42 @@ export class DevServerManager {
      * Starts the dev server of a project, or reuses the running one.
      *
      * @param workspace - the project workspace
+     * @param options - who may reach the server (see {@link DevServerStartOptions})
      * @returns the server's current status
      * @throws AgentError `not-configured` when the project has no generated app
      */
-    public async start(workspace: ProjectWorkspace): Promise<PreviewStatus> {
+    public async start(workspace: ProjectWorkspace, options: DevServerStartOptions = {}): Promise<PreviewStatus> {
         const projectId = workspace.projectId;
+        const wanted = options.exposure;
+        await this.pending.get(projectId)?.catch(() => undefined);
         const running = this.servers.get(projectId);
         if (running?.isLive) {
-            this.scheduleIdleStop(projectId);
-            return running.currentStatus;
+            if (wanted === undefined || DevServerManager.sameExposure(running.exposure, wanted)) {
+                this.scheduleIdleStop(projectId);
+                return running.currentStatus;
+            }
+            this.logger.info("Restarting the dev server of project %s for %s access", projectId, wanted.mode);
+            await running.stop("restarting");
         }
         let pending = this.pending.get(projectId);
         if (!pending) {
-            pending = this.launch(workspace).finally(() => this.pending.delete(projectId));
+            pending = this.launch(workspace, wanted ?? { mode: "loopback" }).finally(() =>
+                this.pending.delete(projectId)
+            );
             this.pending.set(projectId, pending);
         }
         return (await pending).currentStatus;
+    }
+
+    /**
+     * Gets who may reach a project's running dev server.
+     *
+     * @param projectId - the project
+     * @returns the exposure, or undefined when no server is starting or ready
+     */
+    public exposureOf(projectId: string): DevServerExposure | undefined {
+        const server = this.servers.get(projectId);
+        return server?.isLive ? server.exposure : undefined;
     }
 
     /**
@@ -179,7 +210,7 @@ export class DevServerManager {
         });
     }
 
-    private async launch(workspace: ProjectWorkspace): Promise<DevServer> {
+    private async launch(workspace: ProjectWorkspace, exposure: DevServerExposure): Promise<DevServer> {
         const projectId = workspace.projectId;
         const stack = await StackConfig.load(workspace, this.policy);
         const port = await this.ports.acquire();
@@ -192,13 +223,18 @@ export class DevServerManager {
                 onStatus: (status) => this.statusChanged(server, status),
                 onLog: (line) => this.forEachWatcher(projectId, (watcher) => watcher.onLog(line)),
             },
-            this.serverOptions
+            this.serverOptions,
+            exposure
         );
         this.servers.set(projectId, server);
         this.installExitHook();
         server.start();
         this.scheduleIdleStop(projectId);
         return server;
+    }
+
+    private static sameExposure(a: DevServerExposure, b: DevServerExposure): boolean {
+        return a.mode === b.mode && (a.mode !== "lan" || (b.mode === "lan" && a.host === b.host));
     }
 
     private statusChanged(server: DevServer, status: PreviewStatus): void {

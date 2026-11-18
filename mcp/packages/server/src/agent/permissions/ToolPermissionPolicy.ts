@@ -20,6 +20,10 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
     private static readonly SHELL_TOOLS = new Set(["Bash", "PowerShell"]);
     private static readonly PATH_FIELDS = ["file_path", "path", "notebook_path"];
 
+    /** the daemon's token store (W20), never readable by Claude, not even with permission */
+    private static readonly SECRETS_FILE = /(?:^|\/|\\)secrets\.json$/i;
+    private static readonly SECRETS_DENIED = "Penforge's account tokens are not available to Claude.";
+
     private readonly remembered = new Set<string>();
 
     /**
@@ -50,6 +54,9 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
             if (outside.length === 0) {
                 return { allow: true };
             }
+            if (outside.some((path) => ToolPermissionPolicy.SECRETS_FILE.test(path))) {
+                return { allow: false, message: ToolPermissionPolicy.SECRETS_DENIED };
+            }
             return this.askUser(`${toolName}:${outside.join("|")}`, request, {
                 title: isRead
                     ? "Allow reading a file outside the project?"
@@ -60,6 +67,9 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
         }
         if (ToolPermissionPolicy.SHELL_TOOLS.has(toolName)) {
             const command = String(input.command ?? "").trim();
+            if (/secrets\.json/i.test(command)) {
+                return { allow: false, message: ToolPermissionPolicy.SECRETS_DENIED };
+            }
             const program = command.split(/\s+/)[0] ?? "";
             return this.askUser(`${toolName}:${program}`, request, {
                 title: "Allow running a command?",
