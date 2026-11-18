@@ -35,6 +35,13 @@ Build rules:
   (bottom 34 px) free of controls, touch targets at least 44 px high, primary action within
   thumb reach.
 {{/mobile}}
+- Prototype: when the request says which existing screen leads here ("the add-task page for the
+  home screen"), wire it after the screen is built with one `update_prototype` call (the only
+  change allowed outside the board): the opening control there (`+`, "Add", a row) clicks
+  `navigate-to` the new board, the new screen's Back/Close does `previous-screen`, Save/Done
+  `navigate-to` the source screen, and when the page has no flow, `set-flow` starts at the
+  source screen. Skip links whose source layer is unclear, never replace an existing link (a
+  `conflict` result), and name the links you made in your answer.
 {{#designer}}
 - When you finish, describe the screen in one or two plain sentences, no code.
 {{/designer}}

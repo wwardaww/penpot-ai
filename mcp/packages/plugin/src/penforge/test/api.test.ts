@@ -219,6 +219,7 @@ test("listBoards and getPrototypeGraph report flows and navigation edges", () =>
             trigger: "click",
             sourceId: button.id,
             sourceName: "Open",
+            interactionIndex: 0,
             pageId: page.id,
         },
     ]);

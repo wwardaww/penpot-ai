@@ -4,6 +4,7 @@ import { NodeSerializer } from "./serialize.ts";
 import type { JsonObject } from "./serialize.ts";
 import { CommentService } from "./comments.ts";
 import { PrototypeReader } from "./prototype.ts";
+import { PrototypeWriter } from "./prototype-write.ts";
 import { ScreenshotCapturer } from "./screenshot.ts";
 import type { ScreenshotFormat } from "./screenshot.ts";
 
@@ -125,6 +126,51 @@ export class PenforgeApi {
      */
     public static getPrototypeGraph(): JsonObject {
         return new PrototypeReader().graph(PenforgeApi.locator().pages());
+    }
+
+    /**
+     * Creates, updates and removes prototype interactions and flows of one page in one undo step.
+     *
+     * The page is the page of the first referenced node (or `pageId`, or the current page); it is
+     * opened first because writes only work on the active page. Every operation is checked before
+     * the first change, so an error leaves the file untouched.
+     *
+     * @param params - `operations` and optional `pageId`
+     */
+    public static async updatePrototype(params: { operations: unknown; pageId?: string }): Promise<JsonObject> {
+        PrototypeWriter.validate(params.operations);
+        const operations = params.operations;
+        const p = PenforgeApi.api();
+        const locator = PenforgeApi.locator();
+        const firstId = PrototypeWriter.referencedIds(operations)[0];
+        let pageId = params.pageId;
+        if (firstId !== undefined) {
+            const page = locator.require(firstId).page;
+            if (pageId !== undefined && pageId !== page.id) {
+                throw new Error(`Node ${firstId} is not on page ${pageId}`);
+            }
+            pageId = page.id;
+        }
+        if (pageId !== undefined && p.currentPage?.id !== pageId) {
+            await p.openPage(locator.page(pageId));
+        }
+        const page = p.currentPage;
+        if (!page) {
+            throw new Error("No page is open");
+        }
+        const writer = new PrototypeWriter(page);
+        const bound = writer.bind(operations);
+        const history = p.history;
+        const blockId = history && typeof history.undoBlockBegin === "function" ? history.undoBlockBegin() : undefined;
+        let results: JsonObject[];
+        try {
+            results = PrototypeWriter.run(bound);
+        } finally {
+            if (blockId !== undefined) {
+                history.undoBlockFinish(blockId);
+            }
+        }
+        return { pageId: page.id, undoGrouped: blockId !== undefined, results, graph: writer.graph() };
     }
 
     /**

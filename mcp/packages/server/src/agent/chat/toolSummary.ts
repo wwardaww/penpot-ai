@@ -17,6 +17,7 @@ export class ToolSummary {
         [/^mcp__penpot__(capture_node_screenshot|export_shape)$/, "Looking at the design"],
         [/^mcp__penpot__(update_design_node|execute_code|import_image)$/, "Working on the design"],
         [/^mcp__penpot__(resolve_canvas_comment)$/, "Updating comments"],
+        [/^mcp__penpot__(update_prototype)$/, "Wiring the prototype"],
         [/^mcp__penpot__(generate_code_hints)$/, "Studying the design's structure"],
         [/^mcp__penpot__/, "Using Penpot"],
         [/^(Read|Glob|Grep|LS|NotebookRead)$/, "Reading project files"],

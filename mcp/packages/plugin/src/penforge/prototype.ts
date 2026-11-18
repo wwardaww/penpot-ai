@@ -30,9 +30,10 @@ export class PrototypeReader {
                     width: r(board.width),
                     height: r(board.height),
                     flowsStarted: flows.filter((flow) => flow.startingBoard?.id === board.id).map((flow) => flow.name),
-                    interactions: PrototypeReader.interactionsOf(board).map(({ source, interaction }) => ({
+                    interactions: PrototypeReader.interactionsOf(board).map(({ source, interaction, index }) => ({
                         sourceId: source.id,
                         sourceName: source.name,
+                        index,
                         ...NodeSerializer.interaction(interaction),
                     })),
                 });
@@ -64,7 +65,7 @@ export class PrototypeReader {
             }
             for (const board of topLevel) {
                 boards.push({ id: board.id, name: board.name, pageId: page.id });
-                for (const { source, interaction } of PrototypeReader.interactionsOf(board)) {
+                for (const { source, interaction, index } of PrototypeReader.interactionsOf(board)) {
                     const serialized = NodeSerializer.interaction(interaction);
                     const action = serialized.action as JsonObject;
                     if (!action.destinationId) {
@@ -77,6 +78,7 @@ export class PrototypeReader {
                         trigger: serialized.trigger,
                         sourceId: source.id,
                         sourceName: source.name,
+                        interactionIndex: index,
                         pageId: page.id,
                     });
                 }
@@ -91,12 +93,12 @@ export class PrototypeReader {
         return children.filter((child): child is Board => child.type === "board");
     }
 
-    private static interactionsOf(board: Board): { source: Shape; interaction: any }[] {
-        const result: { source: Shape; interaction: any }[] = [];
+    private static interactionsOf(board: Board): { source: Shape; interaction: any; index: number }[] {
+        const result: { source: Shape; interaction: any; index: number }[] = [];
         const walk = (shape: Shape) => {
-            for (const interaction of shape.interactions ?? []) {
-                result.push({ source: shape, interaction });
-            }
+            (shape.interactions ?? []).forEach((interaction, index) => {
+                result.push({ source: shape, interaction, index });
+            });
             const children: Shape[] = Array.isArray((shape as any).children) ? (shape as any).children : [];
             for (const child of children) {
                 walk(child);

@@ -12873,3 +12873,95 @@ msgstr "The app already had %s type error(s); the update added none."
 #: src/app/main/data/ai/actions/token_sync.cljs
 msgid "penforge.token-sync.summary.uncommitted"
 msgstr "Not saved to the app history because they had other unsaved changes: %s."
+
+# penforge:W27
+
+#: src/app/main/data/ai/actions/prototype.cljs
+msgid "penforge.actions.wire-prototype"
+msgstr "Wire prototype"
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.title"
+msgstr "Wire prototype"
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.not-connected"
+msgstr "Connect the AI to wire the prototype."
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.open-ai"
+msgstr "Open AI chat"
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.running"
+msgstr "Finding the links between screens…"
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.applying"
+msgstr "Wiring the prototype…"
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.review-hint"
+msgstr "Pick the links to add. Existing links stay as they are."
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.action.back"
+msgstr "back"
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.action.close"
+msgstr "close overlay"
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.action.overlay"
+msgstr "%s (overlay)"
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.flow"
+msgstr "Flow \"%s\" starts at %s"
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.apply"
+msgid_plural "penforge.prototype.apply"
+msgstr[0] "Apply 1 change"
+msgstr[1] "Apply %s changes"
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.done"
+msgid_plural "penforge.prototype.done"
+msgstr[0] "Added 1 link."
+msgstr[1] "Added %s links."
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.done-flow"
+msgstr "The flow is set."
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.kept"
+msgid_plural "penforge.prototype.kept"
+msgstr[0] "1 layer already had a link, so it was left as it was."
+msgstr[1] "%s layers already had a link, so they were left as they were."
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.play-hint"
+msgstr "Press Play (View mode) to try the prototype. Ctrl+Z undoes all links at once."
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.needs-two-screens"
+msgstr "This page needs at least two screens (top-level boards) to wire."
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.none"
+msgstr "No links to propose: the screens have no clear buttons, or they are wired already."
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.error.busy"
+msgstr "The AI is busy with another task. Try again when it finishes."
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.error.cancelled"
+msgstr "Stopped."
+
+#: src/app/main/ui/workspace/ai/prototype/dialog.cljs
+msgid "penforge.prototype.error"
+msgstr "Could not wire the prototype: %s"

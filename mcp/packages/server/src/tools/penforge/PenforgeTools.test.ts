@@ -266,3 +266,56 @@ test("penforge_overview returns the guide naming every contract tool", async () 
         assert.ok(text.includes(name), `guide does not mention ${name}`);
     }
 });
+
+test("update_prototype passes validated operations to the plugin helper", async (t) => {
+    const codes = stubPlugin(t, () => ({ pageId: "p1", undoGrouped: true, results: [], graph: {} }));
+    const operations = [
+        { op: "add-interaction", sourceId: "plus", action: { type: "navigate-to", destinationId: "add" } },
+        {
+            op: "add-interaction",
+            sourceId: "save",
+            trigger: "click",
+            action: {
+                type: "navigate-to",
+                destinationId: "home",
+                animation: { type: "slide", way: "out", direction: "right", duration: 300 },
+            },
+        },
+        { op: "add-interaction", sourceId: "back", action: { type: "previous-screen" } },
+        { op: "remove-interaction", sourceId: "old", index: 1 },
+        { op: "set-flow", name: "Main", startingBoardId: "home" },
+    ];
+    const result = await client.callTool({ name: "update_prototype", arguments: { operations } });
+    assert.equal(JSON.parse(textOf(result)).undoGrouped, true);
+    assert.deepEqual(await runGeneratedCode(codes[0]), { method: "updatePrototype", params: { operations } });
+});
+
+test("update_prototype rejects malformed operations without calling the plugin", async (t) => {
+    const codes = stubPlugin(t, () => null);
+    const cases: [object[], RegExp][] = [
+        [[], /operations/],
+        [[{ op: "teleport", sourceId: "a" }], /op/],
+        [[{ op: "add-interaction", sourceId: "a", action: { type: "navigate-to" } }], /destinationId/],
+        [
+            [{ op: "add-interaction", sourceId: "a", trigger: "double-click", action: { type: "previous-screen" } }],
+            /trigger/,
+        ],
+        [[{ op: "remove-interaction", sourceId: "a", index: -1 }], /index/],
+        [
+            [
+                {
+                    op: "add-interaction",
+                    sourceId: "a",
+                    action: { type: "navigate-to", destinationId: "b", animation: { type: "spin", duration: 1 } },
+                },
+            ],
+            /animation|type/,
+        ],
+    ];
+    for (const [operations, expected] of cases) {
+        const result: any = await client.callTool({ name: "update_prototype", arguments: { operations } });
+        assert.equal(result.isError, true, JSON.stringify(operations));
+        assert.match(textOf(result), expected);
+    }
+    assert.deepEqual(codes, []);
+});

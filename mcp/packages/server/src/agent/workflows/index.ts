@@ -26,3 +26,4 @@ export { workflow as publish } from "./publish";
 export { workflow as visualQa } from "./visual-qa";
 export { workflow as cleanupImport } from "./cleanup-import";
 export { workflow as tokenSync } from "./token-sync";
+export { workflow as wirePrototype } from "./wire-prototype";
