@@ -5,6 +5,9 @@ import { ChatService } from "./chat/ChatService";
 import { TurnRunner } from "./chat/TurnRunner";
 import { DevServerManager } from "./process/DevServerManager";
 import { PreviewService } from "./process/PreviewService";
+import { ChromeScreenshotterFactory } from "./qa/ChromeScreenshotter";
+import { DevServerPreviewAccess } from "./qa/PreviewAccess";
+import { VisualQaHost, type VisualQaServices } from "./qa/QaRun";
 import { PromptRegistry } from "./prompts/promptRegistry";
 import type { ClaudeRunner } from "./runner/ClaudeRunner";
 import { createRunner } from "./runner/createRunner";
@@ -40,6 +43,7 @@ export class PenforgeDaemon {
     private readonly workflows: WorkflowEngine;
     private readonly tools: McpToolsClient | null;
     private readonly previews: PreviewService;
+    private readonly visualQa: VisualQaServices;
     private readonly server: AgentServer;
 
     /**
@@ -57,7 +61,17 @@ export class PenforgeDaemon {
         const turns = new TurnRunner(this.runner, parts.prompts ?? PromptRegistry.locate());
         this.chat = new ChatService(turns);
         this.workflows = new WorkflowEngine(this.registry, turns);
-        this.previews = new PreviewService(parts.devServers ?? new DevServerManager());
+        const devServers = parts.devServers ?? new DevServerManager();
+        const workspaces = new WorkspaceManager(config.projectsDir);
+        this.previews = new PreviewService(devServers);
+        // W18: the visual QA (workflow and chat tool) uses the same dev servers as the preview
+        this.visualQa = {
+            previews: new DevServerPreviewAccess(devServers, workspaces),
+            browsers: new ChromeScreenshotterFactory(),
+            workspaces,
+            projectsDir: config.projectsDir,
+            tools: this.tools,
+        };
         this.server = new AgentServer(
             config,
             this.token,
@@ -66,7 +80,7 @@ export class PenforgeDaemon {
                 chat: this.chat,
                 workflows: this.workflows,
                 previews: this.previews,
-                workspaces: new WorkspaceManager(config.projectsDir),
+                workspaces,
                 tools: this.tools,
                 authTimeoutMs: parts.authTimeoutMs ?? 10_000,
             },
@@ -94,6 +108,7 @@ export class PenforgeDaemon {
      */
     public async start(): Promise<void> {
         await this.server.start();
+        VisualQaHost.install(this.visualQa);
         this.logger.info("Penforge home: %s; runner: %s", this.config.home, this.runner.kind);
         if (this.config.requirePairing) {
             this.logger.info("Pair Penforge with your browser: %s", this.pairUrl);
@@ -109,6 +124,7 @@ export class PenforgeDaemon {
         this.workflows.cancelAll();
         this.chat.cancelAll();
         this.runner.cancel();
+        VisualQaHost.uninstall(this.visualQa);
         await this.previews.stopAll();
         await this.server.stop();
         await this.tools?.close();

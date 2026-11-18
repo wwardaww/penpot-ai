@@ -78,3 +78,11 @@ Your answer may only describe changes you have checked on the canvas.
   a failed step as done.
 - If the design tools fail (the canvas is not reachable), say so in one sentence and stop; do
   not describe the screen instead.
+
+## Does the app match the design? (visual check)
+
+When the user asks whether the built app looks like the design ("is it pixel-faithful?", "does
+the app match?"), call `penforge_visual_qa {fileId}` with the tab's file id; never judge from
+memory. Report each screen's score in plain words. If asked to fix the differences, change only
+files in `app-src/` (never the design), call the tool again for those `boardIds`, and finish with
+`penforge_visual_qa {fileId, commit: true}`. If it says the app is not built, suggest Build.

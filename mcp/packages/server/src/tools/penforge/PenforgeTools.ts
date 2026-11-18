@@ -9,6 +9,7 @@ import { ListCanvasCommentsTool } from "./ListCanvasCommentsTool";
 import { PenforgeOverviewTool } from "./PenforgeOverviewTool";
 import { ResolveCanvasCommentTool } from "./ResolveCanvasCommentTool";
 import { UpdateDesignNodeTool } from "./UpdateDesignNodeTool";
+import { VisualQaTool } from "../../agent/qa/VisualQaTool";
 
 /**
  * Factory of the Penforge typed MCP tools (architecture §6).
@@ -44,6 +45,8 @@ export class PenforgeTools {
             new ListBoardsTool(mcpServer),
             new GetPrototypeGraphTool(mcpServer),
             new GenerateCodeHintsTool(mcpServer),
+            // W18: visual QA for the AI chat; answers only while the Penforge daemon runs
+            new VisualQaTool(mcpServer),
         ];
     }
 }
