@@ -14,7 +14,7 @@ export class PenforgeOverviewTool extends Tool<EmptyToolArgs> {
 
 Prefer these tools over \`execute_code\`. They are deterministic, validate their input and keep
 undo and sync working. Use \`execute_code\` only for what they cannot do (creating shapes,
-components, flows, bulk edits), after reading the 'Penpot High-Level Overview'.
+components, bulk edits), after reading the 'Penpot High-Level Overview'.
 
 ## Read
 - \`get_node_properties {nodeId, depth?=1}\`: full snapshot of one node: geometry, constraints,
@@ -35,6 +35,11 @@ components, flows, bulk edits), after reading the 'Penpot High-Level Overview'.
   \`get_node_properties\` (e.g. \`fills: [{color: "#1A2B3C", opacity: 1}]\`). All changes form one
   undo step. The result holds the new snapshot: check it instead of reading the node again.
 - \`resolve_canvas_comment {threadId, resolutionNote?}\`: reply with what you changed, then resolve.
+- \`update_prototype {operations}\`: prototype links and flows of one page in one undo step:
+  \`add-interaction {sourceId, trigger?="click", action: {type: "navigate-to", destinationId}}\`
+  (also open-overlay, close-overlay, previous-screen, open-url), \`update-interaction\` /
+  \`remove-interaction {sourceId, index}\`, \`set-flow {name, startingBoardId}\`, \`remove-flow\`.
+  It never replaces an existing link: a clash comes back as \`conflict\`.
 
 ## Workflow
 1. Find the node: \`list_boards\`, then \`get_node_properties\` on a board (children summary).
