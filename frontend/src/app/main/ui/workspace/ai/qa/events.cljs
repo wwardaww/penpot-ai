@@ -27,8 +27,10 @@
 
   `apply-run-message` is the pure reducer of the run's messages."
   (:require
+   ["rxjs" :as rxjs]
    [app.main.data.ai.actions :as actions]
    [app.main.data.ai.chat :as chat]
+   [app.main.data.ai.client :as client]
    [app.main.data.ai.protocol :as proto]
    [app.main.data.modal :as modal]
    [app.main.data.notifications :as ntf]
@@ -68,6 +70,9 @@
       (= kind "failed")
       (assoc qa :error-code (:code payload) :error (:message payload))
 
+      (= kind "question")
+      (assoc qa :question payload)
+
       (and (= kind "result") (:skipped payload))
       (assoc qa :skipped true :settings (:settings payload))
 
@@ -89,20 +94,31 @@
                :summary (:summary msg))
         (cond-> (and (not (:ok msg)) (nil? (:error qa)))
           (assoc :error (:error msg)))
-        (dissoc :progress :activity))
+        (dissoc :progress :activity :question))
+
+    "interrupted"
+    (-> qa
+        (assoc :status :error :error-code "interrupted")
+        (dissoc :progress :activity :question :run-id))
 
     "error"
     (-> qa
         (assoc :status :error
                :error (:message msg)
                :error-code (:code msg))
-        (dissoc :progress :activity))
+        (dissoc :progress :activity :question))
 
     qa))
 
 (defn running?
   [qa]
   (= :running (:status qa)))
+
+(defn terminal-message?
+  "True for the last message of a run: done, request error or lost
+  connection."
+  [{:keys [type]}]
+  (contains? #{"workflow.done" "error" "interrupted"} type))
 
 (defn failing-board-ids
   "Board ids of the screens of a result that do not match yet."
@@ -123,7 +139,7 @@
              :rid rid
              :run-id nil
              :auto (= trigger "build"))
-      (dissoc :summary :error :error-code :progress :activity :skipped)))
+      (dissoc :summary :error :error-code :progress :activity :skipped :question)))
 
 ;; --- Events
 
@@ -198,7 +214,12 @@
           (if (and (= rid (:rid qa)) (running? qa))
             (rx/merge
              (rx/concat
-              (->> (chat/workflow-messages stream rid)
+              ;; a lost connection ends the run: its `workflow.done` never comes
+              (->> (rx/merge (chat/workflow-messages stream rid)
+                             (->> stream
+                                  (rx/filter (ptk/type? ::client/socket-closed))
+                                  (rx/map (constantly {:type "interrupted"}))))
+                   (rx/pipe (rxjs/takeWhile (complement terminal-message?) true))
                    (rx/map (partial run-message rid)))
               (if (:auto qa)
                 (rx/of (report-auto-run))
@@ -283,6 +304,22 @@
            (rx/of (run-side-workflow {:mode "accept" :run-name run-name}))
            (rx/empty))
          (rx/of (modal/hide)))))))
+
+(defn answer
+  "Answer the question of the running check (fix despite uncommitted
+  changes, or only check)."
+  [option-id]
+  (ptk/reify ::answer
+    ptk/WatchEvent
+    (watch [_ state _]
+      (let [{:keys [run-id question]} (get-qa state)]
+        (if (and run-id question)
+          (rx/of (chat/answer-question run-id (:question-id question) option-id)
+                 (ptk/reify ::question-answered
+                   ptk/UpdateEvent
+                   (update [_ state]
+                     (update-in state [:penforge :qa] dissoc :question))))
+          (rx/empty))))))
 
 (defn cancel
   "Stop the running check or fix."

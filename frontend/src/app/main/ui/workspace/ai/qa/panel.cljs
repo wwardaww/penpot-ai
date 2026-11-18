@@ -53,6 +53,7 @@
   (cond
     (= error "cancelled")                 (tr "penforge.qa.error.stopped")
     (= error-code "not-connected")        (tr "penforge.qa.error.not-connected")
+    (= error-code "interrupted")          (tr "penforge.qa.error.interrupted")
     (= error-code "not-built")            (tr "penforge.qa.error.not-built")
     (= error-code "other-file")           (tr "penforge.qa.error.other-file")
     (= error-code "no-screens")           (tr "penforge.qa.error.no-screens")
@@ -68,7 +69,34 @@
   (case reason
     "board-missing" (tr "penforge.qa.skipped.board-missing" name)
     "dynamic-route" (tr "penforge.qa.skipped.dynamic-route" name)
+    "bad-route"     (tr "penforge.qa.skipped.bad-route" name)
+    "bad-size"      (tr "penforge.qa.skipped.bad-size" name)
+    "limit"         (tr "penforge.qa.skipped.limit" name)
     name))
+
+(defn limit-text
+  "Translated note for a run that stopped at one of its limits."
+  [limit]
+  (case limit
+    "screens" (tr "penforge.qa.limit.screens")
+    "turns"   (tr "penforge.qa.limit.turns")
+    "time"    (tr "penforge.qa.limit.time")
+    nil))
+
+(mf/defc question-box*
+  {::mf/private true}
+  [{:keys [question on-answer]}]
+  (let [on-fix   (mf/use-fn (mf/deps on-answer) #(on-answer "fix"))
+        on-check (mf/use-fn (mf/deps on-answer) #(on-answer "check"))
+        known    (= #{"fix" "check"} (into #{} (map :id) (:options question)))]
+    [:div {:class (stl/css :question) :role "alert"}
+     [:p {:class (stl/css :question-text)}
+      (if known (tr "penforge.qa.question.dirty") (:text question))]
+     [:div {:class (stl/css :question-actions)}
+      [:> button* {:variant "secondary" :on-click on-check}
+       (tr "penforge.qa.question.only-check")]
+      [:> button* {:variant "primary" :on-click on-fix}
+       (tr "penforge.qa.question.fix-anyway")]]]))
 
 (mf/defc screen-card*
   {::mf/private true}
@@ -107,8 +135,8 @@
 
 (mf/defc qa-view*
   "Body of the panel for a QA state map (pure: no store access)."
-  [{:keys [qa persona on-auto-run-change]}]
-  (let [{:keys [status mode progress activity result settings]} qa
+  [{:keys [qa persona on-auto-run-change on-answer]}]
+  (let [{:keys [status mode progress activity result settings question]} qa
         running   (= status :running)
         developer (= persona :developer)
         [matching total] (qa/match-counts result)]
@@ -121,6 +149,9 @@
         (when (and developer activity)
           [:span {:class (stl/css :activity)} activity])])
 
+     (when (and running question)
+       [:> question-box* {:question question :on-answer on-answer}])
+
      (when (= status :error)
        [:> context-notification* {:level (if (= (:error qa) "cancelled") :info :error)}
         (error-text qa developer)])
@@ -131,6 +162,8 @@
          (if (:passed result)
            (tr "penforge.qa.all-match" total)
            (tr "penforge.qa.some-differ" matching total))]
+        (when-let [note (limit-text (:limit result))]
+          [:> context-notification* {:level :info} note])
         [:p {:class (stl/css :scope)}
          (tr "penforge.qa.threshold" (:threshold result))
          (when (and (= "fix" (:mode result)) (:commit result))
@@ -202,7 +235,8 @@
         on-fix         (mf/use-fn #(st/emit! (qa/fix)))
         on-keep-fixing (mf/use-fn #(st/emit! (qa/keep-fixing)))
         on-accept      (mf/use-fn #(st/emit! (qa/accept)))
-        on-auto-run    (mf/use-fn #(st/emit! (qa/set-auto-run %)))]
+        on-auto-run    (mf/use-fn #(st/emit! (qa/set-auto-run %)))
+        on-answer      (mf/use-fn #(st/emit! (qa/answer %)))]
 
     [:div {:class (stl/css :modal-overlay)}
      [:div {:class (stl/css :modal-container)
@@ -221,7 +255,8 @@
 
       [:> qa-view* {:qa state
                     :persona persona
-                    :on-auto-run-change on-auto-run}]
+                    :on-auto-run-change on-auto-run
+                    :on-answer on-answer}]
 
       [:> qa-footer* {:qa state
                       :on-stop on-stop

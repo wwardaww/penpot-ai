@@ -12224,3 +12224,43 @@ msgstr "The check could not finish."
 #: src/app/main/ui/workspace/ai/qa/panel.cljs
 msgid "penforge.qa.error.generic-detail"
 msgstr "The check could not finish: %s"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.error.interrupted"
+msgstr "The connection to Penforge was lost, so the check stopped. Try again when it is back."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.skipped.bad-route"
+msgstr "%s was not checked: its address is not a page of the app."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.skipped.bad-size"
+msgstr "%s was not checked: its board size cannot be opened."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.skipped.limit"
+msgstr "%s was not checked: the check reached its limit."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.limit.screens"
+msgstr "Only the first screens were checked: a check covers a limited number of screens."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.limit.turns"
+msgstr "The fixing stopped: a check uses a limited number of AI fixes."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.limit.time"
+msgstr "The check stopped: it reached its time limit."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.question.dirty"
+msgstr "The app's code has changes that are not saved yet. Penforge keeps them in a restore point and leaves them out of its own changes. Fix anyway?"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.question.only-check"
+msgstr "Only check"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.question.fix-anyway"
+msgstr "Fix anyway"

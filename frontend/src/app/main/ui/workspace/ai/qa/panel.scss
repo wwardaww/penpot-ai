@@ -161,6 +161,27 @@
   text-align: center;
 }
 
+.question {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  padding: var(--sp-m);
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+}
+
+.question-text {
+  @include t.use-typography("body-medium");
+
+  margin: 0;
+}
+
+.question-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-s);
+}
+
 .options {
   display: flex;
   align-items: center;

@@ -148,7 +148,7 @@
            (.render root
                     (mf/html
                      [:div
-                      [:> panel/qa-view* {:qa state :persona persona :on-auto-run-change noop}]
+                      [:> panel/qa-view* {:qa state :persona persona :on-auto-run-change noop :on-answer noop}]
                       [:> panel/qa-footer* {:qa state :on-stop noop :on-check noop :on-fix noop
                                             :on-keep-fixing noop :on-accept noop :on-close noop}]]))))
         (vreset! markup (.-innerHTML container))
@@ -201,3 +201,38 @@
         {:keys [markup errors]} (await (render {:status :done :mode :fix :result unfinished} :designer))]
     (t/is (empty? errors))
     (t/is (includes-all? markup ["penforge.qa.keep-fixing" "penforge.qa.accept"]))))
+
+(t/deftest lost-connections-end-the-run
+  (let [qa (reduce-messages {:status :running :mode :fix :run-id "run-3"
+                             :progress {:step "fix"}
+                             :question {:question-id "q1"}}
+                            [{:type "interrupted"}])]
+    (t/is (= :error (:status qa)))
+    (t/is (= "interrupted" (:error-code qa)))
+    (t/is (nil? (:run-id qa)))
+    (t/is (nil? (:question qa)))
+    (t/is (= "penforge.qa.error.interrupted" (panel/error-text qa false))))
+  (t/is (qa/terminal-message? {:type "interrupted"}))
+  (t/is (qa/terminal-message? {:type "workflow.done"}))
+  (t/is (not (qa/terminal-message? {:type "workflow.event"}))))
+
+(t/deftest questions-wait-in-the-panel
+  (let [question {:question-id "q1" :text "The app's code has 2 changed file(s)…"
+                  :options [{:id "fix" :label "Fix anyway"} {:id "check" :label "Only check"}]}
+        qa       (qa/apply-run-message {:status :running :mode :fix}
+                                       {:type "workflow.event" :kind "question" :payload question})]
+    (t/is (= question (:question qa)))))
+
+(t/deftest ^:async questions-and-limits-render
+  (let [question {:question-id "q1" :text "…"
+                  :options [{:id "fix" :label "Fix anyway"} {:id "check" :label "Only check"}]}
+        asking   (await (render {:status :running :mode :fix :question question} :designer))
+        limited  (await (render {:status :done :mode :fix
+                                 :result (assoc fix-result :limit "turns"
+                                                :skipped-screens [{:board-id "b-x" :name "Extra" :reason "limit"}])}
+                                :designer))]
+    (t/is (empty? (:errors asking)))
+    (t/is (empty? (:errors limited)))
+    (t/is (includes-all? (:markup asking) ["penforge.qa.question.dirty" "penforge.qa.question.fix-anyway"
+                                           "penforge.qa.question.only-check"]))
+    (t/is (includes-all? (:markup limited) ["penforge.qa.limit.turns" "penforge.qa.skipped.limit"]))))
