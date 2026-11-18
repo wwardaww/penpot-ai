@@ -9,6 +9,7 @@ import type {
     RunnerOptions,
     ToolPermissionHandler,
 } from "./ClaudeRunner";
+import { RunnerInputContent } from "./ClaudeRunner";
 import { ClaudeEnvironment } from "./ClaudeEnvironment";
 import { SdkMessageMapper } from "./SdkMessageMapper";
 
@@ -128,10 +129,7 @@ export class LocalCliRunner implements ClaudeRunner {
      * that permission requests can still be answered.
      */
     private static async *userMessages(input: RunnerInput, done: Promise<void>): AsyncIterable<SDKUserMessage> {
-        const content: any[] = [{ type: "text", text: input.text }];
-        for (const image of input.images ?? []) {
-            content.push({ type: "image", source: { type: "base64", media_type: image.mime, data: image.base64 } });
-        }
+        const content = RunnerInputContent.blocks(input) as any[];
         yield { type: "user", message: { role: "user", content }, parent_tool_use_id: null } as SDKUserMessage;
         await done;
     }

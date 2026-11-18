@@ -17,10 +17,43 @@ export interface RunnerImage {
     base64: string;
 }
 
+/** PDF document passed to Claude with the user's text. */
+export interface RunnerDocument {
+    mime: "application/pdf";
+    /** document bytes, base64 encoded */
+    base64: string;
+    /** title shown to Claude (the file name) */
+    title?: string;
+}
+
 /** User input of a Claude turn. */
 export interface RunnerInput {
     text: string;
     images?: RunnerImage[];
+    documents?: RunnerDocument[];
+}
+
+/**
+ * Converter of a {@link RunnerInput} into the content blocks of a Claude user message.
+ */
+export class RunnerInputContent {
+    /**
+     * Content blocks: the text, then the images, then the documents.
+     */
+    public static blocks(input: RunnerInput): unknown[] {
+        const content: unknown[] = [{ type: "text", text: input.text }];
+        for (const image of input.images ?? []) {
+            content.push({ type: "image", source: { type: "base64", media_type: image.mime, data: image.base64 } });
+        }
+        for (const document of input.documents ?? []) {
+            content.push({
+                type: "document",
+                source: { type: "base64", media_type: document.mime, data: document.base64 },
+                ...(document.title ? { title: document.title } : {}),
+            });
+        }
+        return content;
+    }
 }
 
 /** Tool use Claude asks permission for. */

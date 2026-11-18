@@ -52,7 +52,59 @@ export interface ImageAttachment {
     base64: string;
 }
 
-export type Attachment = NodeAttachment | CommentAttachment | ImageAttachment;
+/**
+ * File the user attached to a chat message (screenshot, image, PDF, text or Markdown file).
+ *
+ * The client sends the bytes in `base64`; the daemon checks type and size, stores the file in the
+ * project folder (`.penforge/uploads/`) and passes it to Claude (images and PDFs as content
+ * blocks, text inline). Stored history entries carry `path` instead of the bytes.
+ */
+export interface FileAttachment {
+    kind: "file";
+    /** original file name, as shown to the user */
+    name: string;
+    /** media type; one of {@link FILE_ATTACHMENT_LIMITS} `types` */
+    mime: string;
+    /** size of the file in bytes */
+    size: number;
+    /** file bytes, base64 encoded (no data URL prefix); client to daemon only */
+    base64?: string;
+    /** where the daemon stored the file, relative to the project folder; set by the daemon */
+    path?: string;
+}
+
+/** Group of accepted attachment files with its own size limit. */
+export type FileAttachmentGroup = "image" | "pdf" | "text";
+
+/**
+ * Limits of file attachments, shared by the daemon (which enforces them) and the client (which
+ * checks them first to give a quick answer). Sizes are in bytes, before base64 encoding.
+ */
+export const FILE_ATTACHMENT_LIMITS = {
+    /** accepted media types and their group */
+    types: {
+        "image/png": "image",
+        "image/jpeg": "image",
+        "image/gif": "image",
+        "image/webp": "image",
+        "application/pdf": "pdf",
+        "text/plain": "text",
+        "text/markdown": "text",
+        "text/csv": "text",
+        "application/json": "text",
+    } as Record<string, FileAttachmentGroup>,
+    /** largest file per group (Claude takes images up to 5 MB) */
+    maxBytes: { image: 5 * 1024 * 1024, pdf: 10 * 1024 * 1024, text: 1024 * 1024 } as Record<
+        FileAttachmentGroup,
+        number
+    >,
+    /** most files per message */
+    maxFiles: 10,
+    /** largest total size of the files of one message */
+    maxTotalBytes: 20 * 1024 * 1024,
+} as const;
+
+export type Attachment = NodeAttachment | CommentAttachment | ImageAttachment | FileAttachment;
 
 // ---------------------------------------------------------------------------------------------
 // client -> daemon

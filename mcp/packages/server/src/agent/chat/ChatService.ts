@@ -12,6 +12,7 @@ import { RunnerNotConfiguredError } from "../runner/ClaudeRunner";
 import { ConversationStore } from "./ConversationStore";
 import { ToolSummary } from "./toolSummary";
 import type { TurnRunner } from "./TurnRunner";
+import { UploadStore } from "./UploadStore";
 
 /** Running chat turn. */
 interface ActiveTurn {
@@ -95,13 +96,24 @@ export class ChatService {
         const { conversationId } = message;
         const persona = setup.context.persona;
         const store = new ConversationStore(setup.workspace);
+        let attachments: ChatSendMessage["attachments"];
+        try {
+            attachments = await new UploadStore(setup.workspace).saveAll(message.attachments);
+        } catch (error) {
+            // a refused file ends the turn before anything is stored
+            const code = error instanceof AgentError ? error.code : "internal";
+            const text = error instanceof Error ? error.message : String(error);
+            client.send({ type: "error", rid: message.rid, code, message: text });
+            client.send({ type: "chat.done", conversationId, messageId: randomUUID() });
+            return;
+        }
         const resumeSessionId = await store.lastSession(conversationId);
         await store.appendMessage(conversationId, {
             role: "user",
             messageId: randomUUID(),
             text: message.text,
             ts: new Date().toISOString(),
-            attachments: message.attachments,
+            attachments,
         });
 
         let messageId: string = randomUUID();
@@ -112,7 +124,7 @@ export class ChatService {
             const events = this.turns.run(
                 setup,
                 { id: conversationId, resumeSessionId },
-                { text: message.text, attachments: message.attachments, workflow: "chat" }
+                { text: message.text, attachments, workflow: "chat", noteMissingSelection: true }
             );
             for await (const event of events) {
                 switch (event.kind) {

@@ -16,6 +16,13 @@ const attachment = z.discriminatedUnion("kind", [
     }),
     z.looseObject({ kind: z.literal("comment"), threadId: id }),
     z.object({ kind: z.literal("image"), mime: z.string().max(64), base64 }),
+    z.object({
+        kind: z.literal("file"),
+        name: z.string().min(1).max(255),
+        mime: z.string().max(128),
+        size: z.number().int().nonnegative(),
+        base64: base64.optional(),
+    }),
 ]);
 
 /**
