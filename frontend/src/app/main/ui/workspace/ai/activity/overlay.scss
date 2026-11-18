@@ -1,0 +1,60 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/typography.scss" as t;
+
+.activity {
+  opacity: 1;
+  transition: opacity 0.6s ease-out;
+}
+
+.leaving {
+  opacity: 0;
+}
+
+.glow {
+  opacity: 0.7;
+}
+
+.shimmer {
+  opacity: 0.25;
+}
+
+.animated .glow {
+  animation: ai-activity-pulse 1.6s ease-in-out infinite;
+}
+
+.sparkle {
+  fill: var(--color-static-white);
+}
+
+.badge-text {
+  @include t.use-typography("body-small");
+
+  fill: var(--color-static-white);
+  font-weight: 600;
+}
+
+@keyframes ai-activity-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity {
+    transition: none;
+  }
+
+  .animated .glow {
+    animation: none;
+  }
+}

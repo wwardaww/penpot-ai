@@ -6,6 +6,7 @@
 
 (ns frontend-tests.data.ai-chat-test
   (:require
+   [app.common.uuid :as uuid]
    [app.main.data.ai.chat :as chat]
    [cljs.test :as t :include-macros true]))
 
@@ -140,3 +141,139 @@
     (t/is (empty? (:attachments sent)))
     (t/is (= :streaming (:status sent)))
     (t/is (= ["n1" "n2"] (mapv :node-id (:attachments (peek (:entries sent))))))))
+
+;; --- W25: working state, selection context, files
+
+(t/deftest working-follows-turns-and-shown-runs
+  (t/is (not (chat/working? base)))
+  (t/is (chat/working? (assoc base :status :streaming)))
+  (t/is (chat/working? (assoc-in base [:pending-runs "r"] {:name "x" :silent false})))
+  (t/is (not (chat/working? (assoc-in base [:runs "run"] {:status :running :silent true})))
+        "silent runs do not show as chat work")
+  (t/is (chat/busy? (assoc-in base [:runs "run"] {:status :running :silent true}))
+        "silent runs may still change the design"))
+
+(t/deftest waiting-means-an-open-question-while-busy
+  (let [asked (-> base
+                  (assoc :status :streaming)
+                  (chat/apply-message {:type "permission.request" :request-id "p1" :title "t"
+                                       :description "d" :risk "low"}))]
+    (t/is (chat/waiting? asked))
+    (t/is (= {:type :waiting} (chat/current-step asked)))
+    (t/is (not (chat/waiting? (chat/answer-entry asked "p1" :allowed))))
+    (t/is (not (chat/waiting? (assoc asked :status :idle))) "a finished turn waits for nothing")))
+
+(t/deftest current-step-names-what-runs-now
+  (let [sent (chat/add-user-message base "u1" "hi")]
+    (t/is (= {:type :thinking} (chat/current-step sent)))
+    (t/is (= {:type :tool :text "Reading the design"}
+             (chat/current-step
+              (chat/apply-message sent {:type "chat.tool" :conversation-id "c1" :tool-name "t"
+                                        :summary "Reading the design" :status "running"}))))
+    (t/is (= {:type :writing}
+             (chat/current-step
+              (chat/apply-message sent {:type "chat.delta" :conversation-id "c1"
+                                        :message-id "m1" :text "Hi"}))))
+    (t/is (= {:type :workflow :text "Building the board"}
+             (chat/current-step
+              (-> base
+                  (assoc-in [:pending-runs "rid1"] {:name "g" :silent false})
+                  (reduce-messages
+                   [{:type "workflow.started" :rid "rid1" :run-id "run1" :name "g"}
+                    {:type "workflow.event" :run-id "run1" :kind "progress"
+                     :payload {:step "board" :text "Building the board"}}])))))))
+
+(t/deftest activity-records-start-end-and-outcome
+  (let [sent  (chat/add-user-message base "u1" "hi")
+        start (chat/track-activity base sent 1000)
+        done  (chat/track-activity start
+                                   (chat/apply-message start {:type "chat.done" :conversation-id "c1"
+                                                              :message-id "m1"})
+                                   61000)]
+    (t/is (= {:started-at 1000 :from 0} (:activity start)))
+    (t/is (= {:started-at 1000 :from 0 :ended-at 61000 :outcome :done} (:activity done))))
+
+  (t/testing "an error while working ends as failed"
+    (let [start  (chat/track-activity base (chat/add-user-message base "u1" "hi") 0)
+          failed (chat/track-activity start
+                                      (chat/apply-message start {:type "error" :rid "u1"
+                                                                 :code "internal" :message "x"})
+                                      5)
+          ended  (chat/track-activity failed
+                                      (chat/apply-message failed {:type "chat.done" :conversation-id "c1"
+                                                                  :message-id "m"})
+                                      9)]
+      (t/is (:failed (:activity failed)))
+      (t/is (= :error (get-in ended [:activity :outcome])))))
+
+  (t/testing "a cancelled turn ends as stopped"
+    (let [start (-> (chat/track-activity base (chat/add-user-message base "u1" "hi") 0)
+                    (assoc-in [:activity :cancelled] true))
+          ended (chat/track-activity start (chat/end-turn start) 3)]
+      (t/is (= :cancelled (get-in ended [:activity :outcome])))))
+
+  (t/testing "silent runs leave the activity alone"
+    (let [silent (assoc-in base [:pending-runs "r"] {:name "x" :silent true})]
+      (t/is (nil? (:activity (chat/track-activity base silent 1)))))))
+
+(def ^:private objects
+  (let [a (uuid/next) b (uuid/next)]
+    {:ids [a b]
+     :objects {a {:id a :name "Button" :type :rect}
+               b {:id b :name "Card" :type :frame}}}))
+
+(t/deftest the-selection-is-the-default-context
+  (let [{:keys [ids objects]} objects
+        context (chat/selection-context base ids objects "f" "p")]
+    (t/is (= ["Button" "Card"] (mapv :name context)))
+    (t/is (= ["node" "node"] (mapv :kind context)))
+    (t/is (= [(str (first ids)) (str (second ids))] (mapv :node-id context)))
+    (t/is (= "p" (:page-id (first context))))
+    (t/is (nil? (chat/selection-context base [] objects "f" "p")) "nothing selected")
+    (t/is (nil? (chat/selection-context (assoc base :dismissed-selection (set ids)) ids objects "f" "p"))
+          "the user removed this selection")
+    (t/is (= 1 (count (chat/selection-context (assoc base :dismissed-selection (set ids))
+                                              [(first ids)] objects "f" "p")))
+          "a new selection comes back")
+    (t/is (nil? (chat/selection-context
+                 (chat/add-attachments base [{:kind "node" :node-id "n" :name "x"}])
+                 ids objects "f" "p"))
+          "layers attached by hand replace the selection")
+    (t/is (= 1 (count (chat/selection-context
+                       (chat/add-attachments base [{:kind "file" :id "f1" :name "a.png"}])
+                       [(first ids)] objects "f" "p")))
+          "files do not replace the selection")))
+
+(t/deftest selection-context-joins-the-message
+  (let [node    {:kind "node" :file-id "f" :page-id "p" :node-id "n1" :name "Button" :type "rect"}
+        sent    (chat/add-user-message base "u1" "make it blue" [node])
+        entry   (peek (:entries sent))]
+    (t/is (= [node] (:attachments entry)))
+    (t/is (= [node] (get-in sent [:outbox "u1"])))))
+
+(t/deftest files-go-out-with-bytes-and-stay-in-the-timeline-without
+  (let [file  {:kind "file" :id "local-1" :name "shot.png" :mime "image/png" :size 3 :base64 "AAAA"}
+        chat  (chat/add-attachments base [file (assoc file :id "local-2" :name "b.png")])
+        sent  (chat/add-user-message chat "u1" "build this")
+        entry (peek (:entries sent))]
+    (t/is (= 2 (count (:attachments chat))) "files are never deduplicated as nodes")
+    (t/is (= [{:kind "file" :name "shot.png" :mime "image/png" :size 3 :base64 "AAAA"}
+              {:kind "file" :name "b.png" :mime "image/png" :size 3 :base64 "AAAA"}]
+             (get-in sent [:outbox "u1"]))
+          "the daemon gets the bytes, not the local id")
+    (t/is (every? #(not (contains? % :base64)) (:attachments entry)))
+    (t/is (= ["local-1" "local-2"] (mapv chat/attachment-key (:attachments entry))))
+    (t/is (= {} (:outbox (chat/end-turn sent))) "a lost turn drops what did not go out")))
+
+(t/deftest failed-steps-count-only-the-last-activity
+  (let [old   (chat/apply-message base {:type "chat.tool" :conversation-id "c1" :tool-name "a"
+                                        :summary "s" :status "error"})
+        start (chat/track-activity old (chat/add-user-message old "u1" "hi") 0)
+        after (reduce chat/apply-message start
+                      [{:type "chat.tool" :conversation-id "c1" :tool-name "t" :summary "s" :status "running"}
+                       {:type "chat.tool" :conversation-id "c1" :tool-name "t" :summary "s" :status "error"}
+                       {:type "chat.tool" :conversation-id "c1" :tool-name "penforge_canvas_check"
+                        :summary "The screens overlap" :status "error"}
+                       {:type "chat.tool" :conversation-id "c1" :tool-name "u" :summary "s" :status "done"}])]
+    (t/is (= 1 (chat/failed-steps old)) "without an activity every step counts")
+    (t/is (= 2 (chat/failed-steps after)) "the step that failed before this work is left out")))

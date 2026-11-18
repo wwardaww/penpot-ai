@@ -16,6 +16,7 @@
    [app.common.types.shape :as cts]
    [app.common.types.shape-tree :as ctt]
    [app.common.types.shape.layout :as ctl]
+   [app.config :as cf]
    [app.main.data.workspace.modifiers :as dwm]
    [app.main.data.workspace.variants :as dwv]
    [app.main.features :as features]
@@ -26,6 +27,7 @@
    [app.main.ui.hooks :as ui-hooks]
    [app.main.ui.measurements :as msr]
    [app.main.ui.shapes.export :as use]
+   [app.main.ui.workspace.ai.activity.overlay :refer [ai-activity*]]
    [app.main.ui.workspace.shapes :as shapes]
    [app.main.ui.workspace.shapes.path.editor :refer [path-editor*]]
    [app.main.ui.workspace.shapes.text.editor :as editor-v1]
@@ -668,6 +670,8 @@
        (when show-presence?
          [:& presence/active-cursors
           {:page-id page-id}])
+
+       (when (contains? cf/flags :ai) [:> ai-activity* {:zoom zoom :page-id page-id}])
 
        (when-not hide-ui?
          [:> rulers/rulers*

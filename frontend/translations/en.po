@@ -10179,10 +10179,6 @@ msgstr "Open the pairing link the agent prints, or paste it here:"
 msgid "penforge.chat.help.start"
 msgstr "Open a terminal in the Penforge folder and run:"
 
-#: src/app/main/ui/workspace/ai/chat/panel.cljs:348
-msgid "penforge.chat.input.attach-selection"
-msgstr "Add selected layers"
-
 #: src/app/main/ui/workspace/ai/chat/panel.cljs:340
 msgid "penforge.chat.input.label"
 msgstr "Message to the AI"
@@ -11927,3 +11923,84 @@ msgstr "AI chat · %s"
 #: src/app/main/ui/workspace/ai/detached/window.cljs:41
 msgid "penforge.detached.window-title-empty"
 msgstr "AI chat"
+
+# penforge:W25
+#: src/app/main/ui/workspace/ai/activity/overlay.cljs
+msgid "penforge.activity.badge"
+msgstr "AI"
+
+#: src/app/main/ui/workspace/ai/chat/files.cljs
+msgid "penforge.chat.attach.error.count"
+msgstr "You can attach up to %s files to one message."
+
+#: src/app/main/ui/workspace/ai/chat/files.cljs
+msgid "penforge.chat.attach.error.read"
+msgstr "%s could not be read."
+
+#: src/app/main/ui/workspace/ai/chat/files.cljs
+msgid "penforge.chat.attach.error.size"
+msgstr "%s is too large (limit %s MB)."
+
+#: src/app/main/ui/workspace/ai/chat/files.cljs
+msgid "penforge.chat.attach.error.total"
+msgstr "The files are too large together (limit %s MB)."
+
+#: src/app/main/ui/workspace/ai/chat/files.cljs
+msgid "penforge.chat.attach.error.type"
+msgstr "%s: this kind of file is not supported. Attach images, PDFs or text files."
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.attach.drop"
+msgstr "Drop files to attach them"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.attach.files"
+msgstr "Attach images, PDFs or text files"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.selection.many"
+msgstr "%s layers"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.selection.remove"
+msgstr "Leave the selection out of this message"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.selection.title"
+msgstr "The selected layers go with your message"
+
+#: src/app/main/ui/workspace/ai/chat/status.cljs
+msgid "penforge.chat.status.cancelled"
+msgstr "Stopped"
+
+#: src/app/main/ui/workspace/ai/chat/status.cljs
+msgid "penforge.chat.status.done"
+msgstr "Done"
+
+#: src/app/main/ui/workspace/ai/chat/status.cljs
+msgid "penforge.chat.status.done-with-errors"
+msgstr "Done, but %s steps failed: see above"
+
+#: src/app/main/ui/workspace/ai/chat/status.cljs
+msgid "penforge.chat.status.elapsed"
+msgstr "Time spent"
+
+#: src/app/main/ui/workspace/ai/chat/status.cljs
+msgid "penforge.chat.status.failed"
+msgstr "Something went wrong"
+
+#: src/app/main/ui/workspace/ai/chat/status.cljs
+msgid "penforge.chat.status.thinking"
+msgstr "Thinking…"
+
+#: src/app/main/ui/workspace/ai/chat/status.cljs
+msgid "penforge.chat.status.waiting"
+msgstr "Waiting for you: answer above"
+
+#: src/app/main/ui/workspace/ai/chat/status.cljs
+msgid "penforge.chat.status.working"
+msgstr "Working…"
+
+#: src/app/main/ui/workspace/ai/chat/status.cljs
+msgid "penforge.chat.status.writing"
+msgstr "Writing the answer…"

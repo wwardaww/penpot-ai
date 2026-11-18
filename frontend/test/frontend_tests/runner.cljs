@@ -11,16 +11,16 @@
    [frontend-tests.config-test]
    [frontend-tests.copy-as-svg-test]
    [frontend-tests.data.ai-actions-test]
-   [frontend-tests.data.ai-ask-test]
-   [frontend-tests.data.ai-auto-name-test]
    [frontend-tests.data.ai-adapt-test]
+   [frontend-tests.data.ai-ask-test]
    [frontend-tests.data.ai-audit-test]
+   [frontend-tests.data.ai-auto-name-test]
    [frontend-tests.data.ai-chat-test]
    [frontend-tests.data.ai-checkpoints-test]
    [frontend-tests.data.ai-comments-test]
+   [frontend-tests.data.ai-detached-test]
    [frontend-tests.data.ai-generate-test]
    [frontend-tests.data.ai-preview-test]
-   [frontend-tests.data.ai-detached-test]
    [frontend-tests.data.ai-protocol-test]
    [frontend-tests.data.auth-test]
    [frontend-tests.data.comments-batches-test]
@@ -161,8 +161,9 @@
    [frontend-tests.tokens.tokenscript-test]
    [frontend-tests.tokens.typography-form-test]
    [frontend-tests.tokens.workspace-tokens-remap-test]
-   [frontend-tests.ui.ai-design-md-test]
    [frontend-tests.ui.ai-build-test]
+   [frontend-tests.ui.ai-chat-ux-test]
+   [frontend-tests.ui.ai-design-md-test]
    [frontend-tests.ui.ai-preview-pane-test]
    [frontend-tests.ui.check-updates-test]
    [frontend-tests.ui.color-token-position-test]
@@ -399,6 +400,7 @@
    'frontend-tests.ui.ai-design-md-test
    'frontend-tests.ui.ai-build-test
    'frontend-tests.ui.ai-preview-pane-test
+   'frontend-tests.ui.ai-chat-ux-test
    'frontend-tests.ui.check-updates-test
    'frontend-tests.ui.color-token-position-test
    'frontend-tests.ui.colorpicker-token-set-order-test

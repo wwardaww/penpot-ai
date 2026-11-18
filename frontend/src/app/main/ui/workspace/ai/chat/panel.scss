@@ -65,6 +65,7 @@
   margin: 0;
   padding: 0;
   overflow-y: auto;
+
   // The workspace turns text selection off; chat text must be copyable.
   user-select: text;
   list-style: none;
@@ -254,6 +255,10 @@
   margin: 0;
   padding: 0;
   list-style: none;
+
+  &:empty {
+    display: none;
+  }
 }
 
 .chip {
@@ -294,6 +299,43 @@
 .thumbnail-svg {
   inline-size: 100%;
   block-size: 100%;
+}
+
+.thumbnail-img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.chip-selection {
+  border: $b-1 dashed var(--color-accent-primary);
+  background-color: var(--color-background-tertiary);
+}
+
+.composer-dragging {
+  border-radius: $br-8;
+  outline: $b-2 dashed var(--color-accent-primary);
+  outline-offset: px2rem(2);
+}
+
+.file-input {
+  display: none;
+}
+
+.problems {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xxs);
+  padding: var(--sp-xs) var(--sp-s);
+  border-radius: $br-8;
+  background-color: var(--color-background-error);
+}
+
+.problem {
+  @include t.use-typography("body-small");
+
+  margin: 0;
+  color: var(--color-foreground-primary);
 }
 
 .composer {

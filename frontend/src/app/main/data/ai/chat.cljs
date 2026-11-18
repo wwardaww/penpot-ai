@@ -14,10 +14,19 @@
   - `:entries` the timeline; each entry has `:kind`:
     `:user` `:assistant` `:tool` `:error` `:permission` `:question`
     `:workflow`, and an `:id`
-  - `:attachments` pending attachments of the next message
+  - `:attachments` pending attachments of the next message (nodes, and
+    files with a local `:id`)
   - `:runs` workflow runs started from this tab, by run id
   - `:pending-runs` `workflow.run` requests waiting for `workflow.started`,
     by rid
+  - `:activity` the AI's current or last work as the chat shows it
+    (`:started-at`, `:ended-at`, `:outcome` `:done|:error|:cancelled`,
+    `:cancelled`, `:failed`, `:from` index of its first entry), kept by
+    `track-activity`
+  - `:dismissed-selection` ids of the canvas selection the user removed
+    from the next message's context (W25)
+  - `:outbox` attachments of sent messages until they go out, by message
+    id (file bytes are kept out of the timeline)
 
   `apply-message` is the pure reducer of daemon messages; every event
   of this namespace goes through it or through small pure helpers."
@@ -72,6 +81,34 @@
 (defn- active-conversation?
   [chat msg]
   (= (:conversation-id chat) (:conversation-id msg)))
+
+(defn attachment-key
+  "Key of an attachment in a list: node id, local file id, thread id or
+  stored file path."
+  [attachment]
+  (or (:node-id attachment)
+      (:id attachment)
+      (:thread-id attachment)
+      (:path attachment)
+      (:name attachment)))
+
+(defn- node-attachment?
+  [attachment]
+  (= "node" (:kind attachment)))
+
+(defn- entry-attachment
+  "An attachment as the timeline keeps it: files without their bytes."
+  [attachment]
+  (if (= "file" (:kind attachment))
+    (dissoc attachment :base64)
+    attachment))
+
+(defn- wire-attachment
+  "An attachment as the daemon receives it: no client-only keys."
+  [attachment]
+  (if (= "file" (:kind attachment))
+    (dissoc attachment :id)
+    attachment))
 
 (defn- history->entry
   [{:keys [role message-id text ts attachments]}]
@@ -231,18 +268,25 @@
     chat))
 
 (defn add-user-message
-  "Append the user message (with the pending attachments) and start a
-  turn."
-  [chat id text]
-  (-> chat
-      (append-entry (d/without-nils
-                     {:kind :user
-                      :id id
-                      :text text
-                      :ts (now-str)
-                      :attachments (not-empty (:attachments chat))}))
-      (assoc :attachments [])
-      (assoc :status :streaming)))
+  "Append the user message with the pending attachments, plus the
+  `context` attachments (the canvas selection), and start a turn. The
+  attachments to send wait in `:outbox` under the message id; the
+  timeline keeps them without file bytes."
+  ([chat id text]
+   (add-user-message chat id text nil))
+  ([chat id text context]
+   (let [attachments (into (vec (:attachments chat)) context)]
+     (-> chat
+         (append-entry (d/without-nils
+                        {:kind :user
+                         :id id
+                         :text text
+                         :ts (now-str)
+                         :attachments (not-empty (mapv entry-attachment attachments))}))
+         (cond-> (seq attachments)
+           (assoc-in [:outbox id] (mapv wire-attachment attachments)))
+         (assoc :attachments [])
+         (assoc :status :streaming)))))
 
 (defn add-attachments
   "Add attachments to the pending list, skipping nodes already there."
@@ -250,12 +294,168 @@
   (update chat :attachments
           (fn [current]
             (first
-             (reduce (fn [[result ids :as acc] {:keys [node-id] :as attachment}]
-                       (if (contains? ids node-id)
-                         acc
-                         [(conj result attachment) (conj ids node-id)]))
-                     [(vec current) (into #{} (map :node-id) current)]
+             (reduce (fn [[result ids :as acc] attachment]
+                       (let [node-id (when (node-attachment? attachment)
+                                       (:node-id attachment))]
+                         (if (and (some? node-id) (contains? ids node-id))
+                           acc
+                           [(conj result attachment) (cond-> ids node-id (conj node-id))])))
+                     [(vec current) (into #{} (comp (filter node-attachment?) (map :node-id)) current)]
                      attachments)))))
+
+;; --- Working state (W25)
+
+(defn working?
+  "True while the AI works for this chat: a turn streams, or a workflow
+  run shown in the timeline is starting or running."
+  [chat]
+  (boolean
+   (or (= :streaming (:status chat))
+       (some (fn [[_ run]] (not (:silent run))) (:pending-runs chat))
+       (some (fn [[_ run]] (and (= :running (:status run)) (not (:silent run))))
+             (:runs chat)))))
+
+(defn busy?
+  "True while the AI may change the design: like `working?`, but silent
+  runs (started by dialogs and panels) count too."
+  [chat]
+  (boolean
+   (or (= :streaming (:status chat))
+       (seq (:pending-runs chat))
+       (some (fn [[_ run]] (= :running (:status run))) (:runs chat)))))
+
+(defn waiting?
+  "True while the AI waits for the user: a permission request or a
+  question is open."
+  [chat]
+  (and (busy? chat)
+       (boolean
+        (some #(and (contains? #{:permission :question} (:kind %))
+                    (nil? (:answer %)))
+              (:entries chat)))))
+
+(defn- progress-text
+  [progress]
+  (or (when (string? progress) progress)
+      (when (string? (:text progress)) (:text progress))))
+
+(defn current-step
+  "What the AI is doing now, from the newest entries: `{:type :waiting}`,
+  `{:type :tool :text summary}`, `{:type :workflow :text progress}`,
+  `{:type :writing}` or `{:type :thinking}`."
+  [chat]
+  (or (when (waiting? chat)
+        {:type :waiting})
+      (loop [index (dec (count (:entries chat)))]
+        (when (>= index 0)
+          (let [{:keys [kind status summary progress streaming]} (nth (:entries chat) index)]
+            (cond
+              (and (= :tool kind) (= :running status))
+              {:type :tool :text summary}
+
+              (and (= :workflow kind) (= :running status))
+              {:type :workflow :text (progress-text progress)}
+
+              (and (= :assistant kind) streaming)
+              {:type :writing}
+
+              (= :user kind)
+              nil
+
+              :else
+              (recur (dec index))))))
+      (some (fn [[_ run]]
+              (when (and (= :running (:status run)) (not (:silent run)))
+                {:type :workflow :text (progress-text (:progress run))}))
+            (:runs chat))
+      {:type :thinking}))
+
+(defn- failure?
+  "True when `after` adds an error to the timeline or ends a shown run with
+  an error."
+  [before after]
+  (let [entry (peek (:entries after))]
+    (boolean
+     (or (and (= :error (:kind entry))
+              (not= entry (peek (:entries before))))
+         (some (fn [[run-id run]]
+                 (and (= :error (:status run))
+                      (not (:silent run))
+                      (not= :error (get-in before [:runs run-id :status]))))
+               (:runs after))))))
+
+(defn track-activity
+  "Keep `:activity` in step after the chat changed from `before` to `after`
+  at `now` (ms): starts it when the AI starts working, notes failures
+  while it works, and records the end time and outcome when it stops."
+  [before after now]
+  (let [was (working? before)
+        is  (working? after)]
+    (cond
+      (and is (not was))
+      (assoc after :activity {:started-at now :from (count (:entries before))})
+
+      (not (or is was))
+      after
+
+      :else
+      (let [after (cond-> after
+                    (failure? before after)
+                    (assoc-in [:activity :failed] true))]
+        (if (and was (not is))
+          (let [{:keys [cancelled failed]} (:activity after)]
+            (update after :activity assoc
+                    :ended-at now
+                    :outcome (cond cancelled :cancelled
+                                   failed :error
+                                   :else :done)))
+          after)))))
+
+(defn failed-steps
+  "Number of steps (tool calls, canvas checks) that failed during the
+  current or last activity."
+  [chat]
+  (let [entries (:entries chat)
+        from    (min (count entries) (get-in chat [:activity :from] 0))]
+    (count (filter #(and (= :tool (:kind %)) (= :error (:status %)))
+                   (subvec entries from)))))
+
+(defn- update-chat
+  "Update the chat state with `f` and track the AI's activity."
+  [state f & args]
+  (let [before (get-in state [:penforge :chat] empty-chat)
+        after  (apply f before args)]
+    (assoc-in state [:penforge :chat] (track-activity before after (js/Date.now)))))
+
+;; --- Selection as context (W25)
+
+(def max-selection-attachments
+  "Most selected shapes the chat attaches by itself to one message."
+  10)
+
+(defn selection-context
+  "Node attachments the next message takes from the canvas selection
+  `selected` (shape ids in selection order): at most
+  `max-selection-attachments`, none when a node is attached by hand or
+  the user removed this selection from the message."
+  [chat selected objects file-id page-id]
+  (when (and (seq selected)
+             (not (some node-attachment? (:attachments chat)))
+             (not= (set selected) (:dismissed-selection chat)))
+    (not-empty
+     (into []
+           (comp (keep #(get objects %))
+                 (take max-selection-attachments)
+                 (map #(proto/node-attachment file-id page-id %)))
+           selected))))
+
+(defn- state-selection-context
+  [state]
+  (selection-context (get-in state [:penforge :chat] empty-chat)
+                     (dsh/get-selected-ids state)
+                     (dsh/lookup-page-objects state)
+                     (:current-file-id state)
+                     (:current-page-id state)))
 
 (defn end-turn
   "Close a running turn whose `chat.done` will never come (lost
@@ -263,6 +463,7 @@
   [chat]
   (-> chat
       (assoc :status :idle)
+      (assoc :outbox {})
       (update :entries (fn [entries]
                          (mapv (fn [entry]
                                  (cond
@@ -304,7 +505,7 @@
   (ptk/reify ::receive
     ptk/UpdateEvent
     (update [_ state]
-      (update-in state [:penforge :chat] (fnil apply-message empty-chat) msg))))
+      (update-chat state apply-message msg))))
 
 (defn- request-history
   []
@@ -362,7 +563,7 @@
                    (rx/map (fn [_] (ptk/reify ::connection-lost
                                      ptk/UpdateEvent
                                      (update [_ state]
-                                       (update-in state [:penforge :chat] end-turn))))))
+                                       (update-chat state end-turn))))))
 
               (rx/of (request-history)))
              (rx/take-until stopper-s))))
@@ -398,8 +599,16 @@
         (when file-id
           (store-conversation-id file-id conversation-id))))))
 
+(defn- clear-outbox
+  [id]
+  (ptk/reify ::clear-outbox
+    ptk/UpdateEvent
+    (update [_ state]
+      (update-in state [:penforge :chat :outbox] dissoc id))))
+
 (defn send-message
-  "Send a chat message with the pending attachments."
+  "Send a chat message with the pending attachments and, when no node is
+  attached by hand, the canvas selection (W25)."
   [text]
   (let [id   (str (uuid/next))
         text (some-> text str .trim)]
@@ -419,23 +628,35 @@
             state
 
             :else
-            (update-in state [:penforge :chat] add-user-message id text))))
+            (update-chat state add-user-message id text (state-selection-context state)))))
 
       ptk/WatchEvent
       (watch [_ state _]
-        (let [{:keys [conversation-id entries]} (get-chat state)
+        (let [{:keys [conversation-id entries outbox]} (get-chat state)
               entry (peek entries)]
           (if (and (= id (:id entry)) (= :user (:kind entry)))
             (rx/of (client/send (proto/chat-send {:rid id
                                                   :conversation-id conversation-id
                                                   :text text
-                                                  :attachments (:attachments entry)})))
+                                                  :attachments (get outbox id)}))
+                   (clear-outbox id))
             (rx/empty)))))))
+
+(defn- mark-cancelled
+  [chat]
+  (cond-> chat
+    (working? chat) (assoc-in [:activity :cancelled] true)))
 
 (defn cancel
   "Stop the running turn."
   []
   (ptk/reify ::cancel
+    ptk/UpdateEvent
+    (update [_ state]
+      (if (= :streaming (get-in state [:penforge :chat :status]))
+        (update-in state [:penforge :chat] mark-cancelled)
+        state))
+
     ptk/EffectEvent
     (effect [_ state _]
       (let [{:keys [conversation-id status]} (get-chat state)]
@@ -457,13 +678,35 @@
                    (map #(proto/node-attachment file-id page-id %) shapes))))))
 
 (defn remove-attachment
-  [node-id]
+  "Remove a pending attachment by its `attachment-key` (node id or local
+  file id)."
+  [key]
   (ptk/reify ::remove-attachment
     ptk/UpdateEvent
     (update [_ state]
       (update-in state [:penforge :chat :attachments]
                  (fn [attachments]
-                   (into [] (remove #(= node-id (:node-id %))) attachments))))))
+                   (into [] (remove #(= key (attachment-key %))) attachments))))))
+
+(defn add-files
+  "Add file attachments (`proto/file-attachment` maps) to the next
+  message; each gets a local `:id`."
+  [files]
+  (ptk/reify ::add-files
+    ptk/UpdateEvent
+    (update [_ state]
+      (update-in state [:penforge :chat]
+                 (fnil add-attachments empty-chat)
+                 (map #(assoc % :id (str (uuid/next))) files)))))
+
+(defn dismiss-selection
+  "Leave the current canvas selection out of the next message."
+  [selected]
+  (ptk/reify ::dismiss-selection
+    ptk/UpdateEvent
+    (update [_ state]
+      (update-in state [:penforge :chat] (fnil assoc empty-chat)
+                 :dismissed-selection (set selected)))))
 
 (defn respond-permission
   "Answer a permission request of the daemon."
@@ -509,10 +752,9 @@
        ptk/UpdateEvent
        (update [_ state]
          (if (connected? state)
-           (update-in state [:penforge :chat]
-                      (fnil assoc-in empty-chat)
-                      [:pending-runs (:rid message)]
-                      {:name name :silent (boolean silent)})
+           (update-chat state assoc-in
+                        [:pending-runs (:rid message)]
+                        {:name name :silent (boolean silent)})
            (update-in state [:penforge :chat] (fnil append-entry empty-chat)
                       {:kind :error :id (str (uuid/next)) :code "not-connected"})))
 
@@ -546,6 +788,13 @@
 (defn cancel-workflow
   [run-id]
   (ptk/reify ::cancel-workflow
+    ptk/UpdateEvent
+    (update [_ state]
+      (let [run (get-in state [:penforge :chat :runs run-id])]
+        (if (and (= :running (:status run)) (not (:silent run)))
+          (update-in state [:penforge :chat] mark-cancelled)
+          state)))
+
     ptk/EffectEvent
     (effect [_ _ _]
       (client/send! (proto/workflow-cancel run-id)))))
