@@ -17,6 +17,7 @@
    [frontend-tests.data.ai-auto-name-test]
    [frontend-tests.data.ai-chat-test]
    [frontend-tests.data.ai-checkpoints-test]
+   [frontend-tests.data.ai-cleanup-test]
    [frontend-tests.data.ai-comments-test]
    [frontend-tests.data.ai-detached-test]
    [frontend-tests.data.ai-generate-test]
@@ -248,6 +249,7 @@
    'frontend-tests.data.ai-audit-test
    'frontend-tests.data.ai-chat-test
    'frontend-tests.data.ai-checkpoints-test
+   'frontend-tests.data.ai-cleanup-test
    'frontend-tests.data.ai-comments-test
    'frontend-tests.data.ai-generate-test
    'frontend-tests.data.ai-preview-test

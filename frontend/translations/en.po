@@ -12014,3 +12014,90 @@ msgstr "Working…"
 #: src/app/main/ui/workspace/ai/chat/status.cljs
 msgid "penforge.chat.status.writing"
 msgstr "Writing the answer…"
+
+# penforge:W17
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.actions.tidy-up"
+msgstr "Tidy up layers"
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.progress.scan"
+msgstr "Reading the layers…"
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.progress.checkpoint"
+msgstr "Saving a checkpoint so you can go back…"
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.progress.review"
+msgstr "Checking the changes…"
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.progress.junk"
+msgstr "Removing unused layers in “%s”…"
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.progress.layout"
+msgstr "Adding layouts in “%s”…"
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.progress.components"
+msgstr "Making the component “%s”…"
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.progress.names"
+msgstr "Naming the layers…"
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.summary.title"
+msgstr "Tidied up “%s”."
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.summary.nothing"
+msgstr "Nothing to tidy up: the layers are already in order."
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.summary.junk"
+msgid_plural "penforge.cleanup.summary.junk"
+msgstr[0] "Removed 1 unused layer."
+msgstr[1] "Removed %s unused layers."
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.summary.layouts"
+msgid_plural "penforge.cleanup.summary.layouts"
+msgstr[0] "Turned 1 group of layers into a flex or grid layout."
+msgstr[1] "Turned %s groups of layers into flex or grid layouts."
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.summary.components"
+msgid_plural "penforge.cleanup.summary.components"
+msgstr[0] "Made 1 component from look-alike items."
+msgstr[1] "Made %s components from look-alike items."
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.summary.renamed"
+msgid_plural "penforge.cleanup.summary.renamed"
+msgstr[0] "Named 1 layer."
+msgstr[1] "Named %s layers."
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.summary.reverted"
+msgid_plural "penforge.cleanup.summary.reverted"
+msgstr[0] "Took 1 change back because it changed the look."
+msgstr[1] "Took %s changes back because they changed the look."
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.summary.checkpoint"
+msgstr "Checkpoint #%s holds the design from before: open AI history to go back."
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.error.no-selection"
+msgstr "Select the layers to tidy up, or run it with nothing selected to tidy up the whole page."
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.error.no-page"
+msgstr "Could not find the page to tidy up."
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.error.read-failed"
+msgstr "Could not read the layers of the page. Try again."
