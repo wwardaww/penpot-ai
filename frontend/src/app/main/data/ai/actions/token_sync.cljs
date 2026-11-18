@@ -44,8 +44,10 @@
 (def workflow-name "token-sync")
 
 (def watch-debounce-ms
-  "Quiet time after the last token change before the watcher syncs."
-  1500)
+  "Quiet time after the last token change before the watcher syncs.
+  Edits in a row (typing a value, several tokens) make one sync, and
+  so one type check of the app."
+  3000)
 
 (defn- connected?
   [state]
@@ -81,13 +83,16 @@
 
 (defn- extra-texts
   "Notes on tokens kept or left out and on files left uncommitted."
-  [{:keys [deprecated refused uncommitted]}]
+  [{:keys [deprecated refused uncommitted preexisting-errors]}]
   (cond-> []
     (seq deprecated)
     (conj (tr "penforge.token-sync.summary.deprecated" (count deprecated)))
 
     (seq refused)
     (conj (tr "penforge.token-sync.summary.refused" (count refused)))
+
+    (pos? (or preexisting-errors 0))
+    (conj (tr "penforge.token-sync.summary.preexisting-errors" preexisting-errors))
 
     (seq uncommitted)
     (conj (tr "penforge.token-sync.summary.uncommitted" (str/join ", " uncommitted)))))

@@ -102,9 +102,14 @@ class FakeClaude {
 class FakeExecutor implements CommandExecutor {
     public readonly calls: string[] = [];
     public failures = 0;
+    /** answers every check when set (the app folder decides the outcome) */
+    public script: ((cwd: string) => CommandOutcome) | null = null;
 
-    public async execute(argv: string[], _options: CommandOptions): Promise<CommandOutcome> {
+    public async execute(argv: string[], options: CommandOptions): Promise<CommandOutcome> {
         this.calls.push(argv.join(" "));
+        if (this.script) {
+            return this.script(options.cwd);
+        }
         if (this.failures > 0) {
             this.failures--;
             return { code: 2, output: "src/theme.ts(3,1): error TS2451: Cannot redeclare", timedOut: false };
@@ -699,6 +704,62 @@ test("sync: a theme change that fails the type check is put back", async () => {
     const summary = await new TokenSync(context(), { preBuild: true }, { executor }).run();
     assert.match(summary?.summary ?? "", /Token sync skipped/, "a build goes on");
     assert.equal(read("src/theme.ts"), EXPO_THEME);
+});
+
+test("sync: type errors the app already had do not stop the theme; new ones do", async () => {
+    await expoApp();
+    tokens();
+    mkdirSync(join(workspace.appSrcDir, "node_modules"));
+    const old = "src/screens/Home.tsx(12,3): error TS2322: Type 'string' is not assignable to type 'number'.";
+    executor.script = (cwd) => {
+        const theme = readFileSync(join(cwd, "src/theme.ts"), "utf8");
+        // the block moves lines, so the same error shows at another position
+        const lines = [ThemeBlock.has(theme) ? old.replace("(12,3)", "(40,3)") : old];
+        if (theme.includes('"#ff0000"')) {
+            lines.push("src/theme.ts(9,5): error TS2451: Cannot redeclare block-scoped variable 'x'.");
+        }
+        return { code: 2, output: lines.join("\n"), timedOut: false };
+    };
+    const result = await sync();
+    assert.equal(result?.outcome, "updated");
+    assert.equal(result?.preexistingErrors, 1);
+    assert.ok(read("src/theme.ts").includes('primary: "#6c5ce7",'));
+    assert.match(TokenSync.summary(result!), /already had 1 type error/);
+
+    penpot.token("color.primary").resolvedValue = "#ff0000";
+    const before = read("src/theme.ts");
+    await assert.rejects(sync({ trigger: "watch" }));
+    assert.equal(events.find((e) => e.kind === "failed")?.payload.code, "theme-check-failed");
+    assert.equal(read("src/theme.ts"), before, "a new error puts the theme back");
+});
+
+test("sync: no type check when the block does not change", async () => {
+    await expoApp();
+    tokens();
+    mkdirSync(join(workspace.appSrcDir, "node_modules"));
+    await sync();
+    const checks = executor.calls.length;
+    assert.equal((await sync({ trigger: "watch" }))?.outcome, "unchanged");
+    assert.equal(executor.calls.length, checks);
+});
+
+test("sync: a block no recorded sync wrote is replaced only after asking", async () => {
+    await expoApp();
+    tokens();
+    await sync();
+    rmSync(join(workspace.metaDir, TokenManifest.FILE));
+    assert.equal((await sync({ trigger: "watch" }))?.outcome, "unchanged", "the same block needs no question");
+
+    write("src/theme.ts", read("src/theme.ts").replace("md: 16,", "md: 20,"));
+    commitAll("older block");
+    assert.equal((await sync({ trigger: "watch" }))?.outcome, "block-edited");
+    assert.match(read("src/theme.ts"), /md: 20,/);
+    answers = ["keep"];
+    assert.equal((await sync())?.outcome, "block-edited");
+    answers = ["replace"];
+    assert.equal((await sync())?.outcome, "updated");
+    assert.match(read("src/theme.ts"), /md: 16,/);
+    assert.equal(questions.length, 2);
 });
 
 test("sync: before the scaffold nothing is written to the app or pinned", async () => {

@@ -84,9 +84,11 @@
       (t/is (= (str "penforge.token-sync.summary.unchanged 2 "
                     "penforge.token-sync.summary.deprecated 1 "
                     "penforge.token-sync.summary.refused 2 "
+                    "penforge.token-sync.summary.preexisting-errors 3 "
                     "penforge.token-sync.summary.uncommitted src/theme.ts")
                (ts/summary-text {:outcome "unchanged" :token-count 2 :deprecated ["a"]
-                                 :refused ["b" "c"] :uncommitted ["src/theme.ts"]})))
+                                 :refused ["b" "c"] :preexisting-errors 3
+                                 :uncommitted ["src/theme.ts"]})))
       (t/is (= "penforge.token-sync.failed.broken-block" (ts/failed-text "broken-block")))
       (t/is (= "penforge.token-sync.failed.theme-check-failed" (ts/failed-text "theme-check-failed")))
       (t/is (nil? (ts/failed-text "other"))))))

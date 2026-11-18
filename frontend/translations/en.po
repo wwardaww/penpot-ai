@@ -12113,5 +12113,9 @@ msgid "penforge.token-sync.summary.refused"
 msgstr "%s token(s) were left out: their name or value cannot go into code."
 
 #: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.preexisting-errors"
+msgstr "The app already had %s type error(s); the update added none."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
 msgid "penforge.token-sync.summary.uncommitted"
 msgstr "Not saved to the app history because they had other unsaved changes: %s."

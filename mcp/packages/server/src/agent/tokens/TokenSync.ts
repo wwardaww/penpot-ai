@@ -70,6 +70,8 @@ export interface TokenSyncResult {
     unused: number;
     /** files the sync changed but did not commit because they held other uncommitted edits */
     uncommitted: string[];
+    /** type errors the app already had before the sync (the sync added none) */
+    preexistingErrors: number;
     /** active sets now, and the sets the app follows (differ for `selection-changed`) */
     activeSets: string[];
     followedSets: string[];
@@ -203,10 +205,6 @@ export class TokenSync {
         }
         result.themeFile = target.file;
         result.format = target.format;
-        if (!(await this.blockMayChange(target, manifest))) {
-            result.outcome = "block-edited";
-            return this.finish(result);
-        }
 
         this.progress("theme", "running", "Updating the app theme");
         const generator = ThemeGenerator.create(target.format, target.module, target.objectName);
@@ -219,20 +217,21 @@ export class TokenSync {
         const text = ThemeBlock.write(target.text, body, generator.comment, TokenSync.prologue(target));
         result.deprecated = kept.map((entry) => entry.token.name);
         result.themeChanged = text !== target.text;
+        if (result.themeChanged && !(await this.blockMayChange(target, manifest))) {
+            result.themeChanged = false;
+            result.outcome = "block-edited";
+            return this.finish(result);
+        }
 
         const commit = new PathCommit(workspace.appSrcDir);
         const dirtyBefore = await commit.dirty([target.file]);
+        // type errors the app has without the sync's change; null until checked
+        let baseline: Set<string> | null = null;
         if (result.themeChanged) {
             await this.writeAppFile(target.file, text);
-            const failure = TokenSync.isJs(target) ? await this.typecheck() : null;
-            if (failure !== null) {
-                // put the file back as it was: the sync's own change broke the app
-                await this.writeAppFile(target.file, target.text);
-                this.log("typecheck-failed", `Type check failed after the token update:\n${failure}`);
-                throw new TokenSyncError(
-                    "theme-check-failed",
-                    `The app did not type-check with the new tokens in ${target.file}, so the theme was left as it was.`
-                );
+            if (TokenSync.isJs(target)) {
+                baseline = await this.checkTheme(target, text);
+                result.preexistingErrors = baseline.size;
             }
         }
         if (dirtyBefore.has(target.file)) {
@@ -254,7 +253,7 @@ export class TokenSync {
             generator
         );
         if (this.shouldLink(hadBlock, unused, model, changes)) {
-            const linked = await this.link(target, generator, body, unused);
+            const linked = await this.link(target, generator, body, unused, baseline);
             result.link = linked.outcome;
             result.linkedFiles = linked.files;
             result.uncommitted.push(...linked.uncommitted);
@@ -276,18 +275,19 @@ export class TokenSync {
     // steps -----------------------------------------------------------------------------------
 
     /**
-     * Tells whether the block may be rewritten: yes when it is as the last sync wrote it (or
-     * new); after hand edits only when the user says so in a manual run.
+     * Tells whether an existing block may be rewritten: yes when it is as the last sync wrote it
+     * (or there is none yet); a block edited by hand, or one no recorded sync wrote, only when the
+     * user says so in a manual run.
      */
     private async blockMayChange(target: ThemeTarget, manifest: TokenManifestData | null): Promise<boolean> {
         const block = ThemeBlock.extract(target.text);
-        const edited =
-            block !== null &&
-            manifest !== null &&
-            manifest.file === target.file &&
-            manifest.blockHash.length > 0 &&
-            TokenManifest.hash(block) !== manifest.blockHash;
-        if (!edited) {
+        const ours =
+            block === null ||
+            (manifest !== null &&
+                manifest.file === target.file &&
+                manifest.blockHash.length > 0 &&
+                TokenManifest.hash(block) === manifest.blockHash);
+        if (ours) {
             return true;
         }
         if (this.unattended) {
@@ -394,9 +394,12 @@ export class TokenSync {
         target: ThemeTarget,
         generator: ThemeGenerator,
         body: string[],
-        unused: ThemeEntry[]
+        unused: ThemeEntry[],
+        knownBaseline: Set<string> | null
     ): Promise<{ outcome: LinkOutcome; files: string[]; commit: string | null; uncommitted: string[] }> {
         await ensureCheckpoint(this.ctx, "Before using the design tokens in the code", TokenSync.WORKFLOW);
+        // errors the app has before Claude's change, so only new ones count against it
+        const baseline = knownBaseline ?? TokenSync.errors(await this.typecheck());
         this.progress("link", "running", "Using the tokens in the code");
         const repo = new PathCommit(this.ctx.workspace.appSrcDir);
         const dirtyBefore = await repo.dirty(["."]);
@@ -422,13 +425,13 @@ export class TokenSync {
             return { outcome: "none", files: [], commit: null, uncommitted: [] };
         }
 
-        const failure = await this.typecheck();
+        const failure = TokenSync.newErrors(await this.typecheck(), baseline);
         if (failure !== null) {
             this.log("typecheck-failed", `Type check failed after using the tokens:\n${failure}`);
             await turn(TokenSync.fixPrompt(failure));
             await this.restoreBlock(target, generator, body, git, before);
             changed = await git.changedFiles(before, await git.snapshot());
-            const again = await this.typecheck();
+            const again = TokenSync.newErrors(await this.typecheck(), baseline);
             if (again !== null) {
                 await git.restore(before, changed);
                 this.log("link-reverted", "The code changes still failed the type check and were undone.");
@@ -481,9 +484,77 @@ export class TokenSync {
     }
 
     /**
+     * Type-checks a written theme change. A failure counts only when the change brought new
+     * errors: then the file is put back and the run fails; errors the app already had are kept
+     * as the baseline and reported as a note.
+     *
+     * @returns the type errors of the app with the change (empty when it passes)
+     * @throws TokenSyncError `theme-check-failed` when the change brought new errors
+     */
+    private async checkTheme(target: ThemeTarget, text: string): Promise<Set<string>> {
+        const after = await this.typecheck();
+        if (after === null) {
+            return new Set();
+        }
+        await this.writeAppFile(target.file, target.text);
+        const before = await this.typecheck();
+        const added = TokenSync.newErrors(after, TokenSync.errors(before));
+        if (added !== null) {
+            // the file stays as it was: the sync's own change broke the app
+            this.log("typecheck-failed", `Type check failed after the token update:\n${added}`);
+            throw new TokenSyncError(
+                "theme-check-failed",
+                `The app did not type-check with the new tokens in ${target.file}, so the theme was left as it was.`
+            );
+        }
+        await this.writeAppFile(target.file, text);
+        this.log("typecheck-preexisting", "The app already had type errors; the token update added none.");
+        return TokenSync.errors(after);
+    }
+
+    /**
+     * Errors of a type check output, without positions (the block moves lines), one per line that
+     * reports an error.
+     */
+    public static errors(output: string | null): Set<string> {
+        if (output === null) {
+            return new Set();
+        }
+        return new Set(
+            output
+                .split(/\r?\n/)
+                .filter((line) => /\berror\b/i.test(line))
+                .map((line) =>
+                    line
+                        .replace(/\(\d+,\d+\)/g, "")
+                        .replace(/:\d+(?::\d+)?/g, "")
+                        .trim()
+                )
+        );
+    }
+
+    /**
+     * Errors of a check output that are not in the baseline.
+     *
+     * @returns the end of the output when there are new errors (or failed without error lines and
+     *   the baseline is clean), else null
+     */
+    private static newErrors(output: string | null, baseline: Set<string>): string | null {
+        if (output === null) {
+            return null;
+        }
+        const errors = TokenSync.errors(output);
+        const added = [...errors].filter((error) => !baseline.has(error));
+        if (added.length > 0 || (errors.size === 0 && baseline.size === 0)) {
+            return BuildText.tail(output, TokenSync.MAX_OUTPUT_CHARS);
+        }
+        return null;
+    }
+
+    /**
      * Runs the stack's type check (`commands.typecheck`) when dependencies are installed.
      *
-     * @returns the end of the output on failure, null when it passed or could not run
+     * @returns the output on failure, null when it passed or could not run
      */
     private async typecheck(): Promise<string | null> {
         const stack = await new BuildFiles(this.ctx.workspace).readStack();
@@ -498,7 +569,7 @@ export class TokenSync {
             timeoutMs: TokenSync.CHECK_TIMEOUT_MS,
         });
         this.progress("check", "done", "Checking the app");
-        return outcome.code === 0 ? null : BuildText.tail(outcome.output, TokenSync.MAX_OUTPUT_CHARS);
+        return outcome.code === 0 ? null : outcome.output;
     }
 
     // prompts ---------------------------------------------------------------------------------
@@ -599,6 +670,7 @@ export class TokenSync {
             linkedFiles: [],
             unused: 0,
             uncommitted: [],
+            preexistingErrors: 0,
             activeSets: [],
             followedSets: [],
             commits: { design: null, appSrc: null },
@@ -669,6 +741,9 @@ export class TokenSync {
         }
         if (result.refused.length > 0) {
             parts.push(`${result.refused.length} token(s) were left out: their name or value cannot go into code.`);
+        }
+        if (result.preexistingErrors > 0) {
+            parts.push(`The app already had ${result.preexistingErrors} type error(s); the update added none.`);
         }
         if (result.uncommitted.length > 0) {
             parts.push(`Not committed (they had other unsaved changes): ${result.uncommitted.join(", ")}.`);
