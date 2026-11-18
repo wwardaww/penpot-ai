@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'">
+  <title>Welcome to Penforge</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Welcome to Penforge</h1>
+  <p class="lead">Three quick questions, then the app opens.</p>
+
+  <section>
+    <h2>Your name</h2>
+    <input type="text" id="fullname" placeholder="Shown on your comments" maxlength="120">
+  </section>
+
+  <section>
+    <h2>How do you work?</h2>
+    <div class="choices">
+      <label><input type="radio" name="persona" value="designer" checked> Designer
+        <small>Plain words, no code or logs unless you ask.</small></label>
+      <label><input type="radio" name="persona" value="developer"> Developer
+        <small>Code, diffs, logs and stack settings.</small></label>
+    </div>
+  </section>
+
+  <section>
+    <h2>Projects folder</h2>
+    <div class="row">
+      <input type="text" id="projects" readonly>
+      <button id="choose">Change…</button>
+    </div>
+    <small class="status">The AI keeps each project's design notes and app code here.</small>
+  </section>
+
+  <section>
+    <h2>Claude Code (for the AI features)</h2>
+    <p class="status" id="claude-status">Looking for the claude command…</p>
+    <div class="row">
+      <button id="claude-check">Check again</button>
+      <button id="claude-login" hidden>Log in to Claude</button>
+      <button id="claude-install" hidden>How to install</button>
+    </div>
+  </section>
+
+  <footer>
+    <button class="primary" id="finish">Open Penforge</button>
+  </footer>
+  <script src="wizard.js"></script>
+</body>
+</html>

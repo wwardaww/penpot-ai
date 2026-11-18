@@ -29,6 +29,16 @@
 
 ;; --- BACKEND INIT
 
+(defn normalize-path
+  "Like `fs/normalize`, but keeps an absolute path as it is. `fs/normalize`
+  tests absoluteness with a leading `/`, so on Windows it prepends the working
+  directory to `C:/...` (drive letter) paths."
+  ^Path [path]
+  (let [^Path path (fs/path path)]
+    (if (.isAbsolute path)
+      (.normalize path)
+      (fs/normalize path))))
+
 (defmethod ig/assert-key ::backend
   [_ params]
   ;; FIXME:  path (?)
@@ -39,11 +49,11 @@
   ;; Return a valid backend data structure only if all optional
   ;; parameters are provided.
   (when (string? (::directory cfg))
-    (let [dir (fs/normalize (::directory cfg))]
+    (let [dir (normalize-path (::directory cfg))]
       (assoc cfg
              ::sto/type :fs
              ::directory (str dir)
-             ::uri (u/uri (str "file://" dir))))))
+             ::uri (u/uri (str (.toUri dir)))))))
 
 (def ^:private schema:backend
   [:map {:title "fs-backend"}
@@ -63,11 +73,11 @@
   (assert (valid-backend? backend) "expected a valid backend instance")
   (let [base (fs/path (::directory backend))
         path (fs/path (impl/id->path id))
-        full (fs/normalize (fs/join base path))
+        full (normalize-path (fs/join base path))
         parent-dir (fs/parent full)]
 
     (when-not (fs/exists? parent-dir)
-      (fs/create-dir parent-dir))
+      (tmp/create-dir! parent-dir))
 
     ;; Create temp file in the same directory (same filesystem → atomic
     ;; move preserved) and register with cleanup queue (crashed-JVM files
@@ -103,7 +113,7 @@
   (assert (valid-backend? backend) "expected a valid backend instance")
   (let [^Path base (fs/path (::directory backend))
         ^Path path (fs/path (impl/id->path id))
-        ^Path full (fs/normalize (fs/join base path))]
+        ^Path full (normalize-path (fs/join base path))]
     (fs/exists? full)))
 
 (defmethod impl/get-object-data :fs
@@ -111,7 +121,7 @@
   (assert (valid-backend? backend) "expected a valid backend instance")
   (let [^Path base (fs/path (::directory backend))
         ^Path path (fs/path (impl/id->path id))
-        ^Path full (fs/normalize (fs/join base path))]
+        ^Path full (normalize-path (fs/join base path))]
     (when-not (fs/exists? full)
       (ex/raise :type :internal
                 :code :filesystem-object-does-not-exists
@@ -145,7 +155,7 @@
   (assert (valid-backend? backend) "expected a valid backend instance")
   (let [base (fs/path (::directory backend))]
     (reduce (fn [fail-ids id]
-              (let [path (fs/normalize (fs/join base (fs/path (impl/id->path id))))]
+              (let [path (normalize-path (fs/join base (fs/path (impl/id->path id))))]
                 (try
                   (Files/deleteIfExists ^Path path)
                   fail-ids

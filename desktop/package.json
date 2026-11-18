@@ -1,0 +1,30 @@
+{
+  "name": "penforge-desktop",
+  "productName": "Penforge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Penforge desktop app: Penpot + the Penforge AI daemon without Docker",
+  "license": "MPL-2.0",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "fetch-runtime": "node scripts/fetch-runtime.mjs",
+    "stage": "node scripts/stage.mjs",
+    "start": "pnpm run build && electron .",
+    "dist:win": "pnpm run build && electron-builder --win --config electron-builder.yml",
+    "dist:mac": "pnpm run build && electron-builder --mac --config electron-builder.yml",
+    "dist:dir": "pnpm run build && electron-builder --dir --config electron-builder.yml"
+  },
+  "packageManager": "pnpm@12.21.0+sha512.66fd8278ee28935ce951792d34367ff3af5c432a2756445823029533835b8da529bbe0be5130afd56ed0713fb8789e47bad82d93bd5ae2fe54b15562d6276ef0",
+  "devDependencies": {
+    "@electron/notarize": "2.5.0",
+    "@types/node": "^24.10.1",
+    "electron": "45.3.4",
+    "electron-builder": "26.18.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3"
+  }
+}

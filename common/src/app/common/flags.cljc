@@ -207,7 +207,11 @@
 
     ;; Penforge: enables the AI studio features (AI chat, comment
     ;; fixing, build app). Disabled by default.
-    :ai})
+    :ai
+
+    ;; Penforge: single-user desktop mode (automatic login of the one
+    ;; local profile, see app.penforge.embedded.local-login).
+    :penforge-local})
 
 (def all-flags
   (set/union email login varia))

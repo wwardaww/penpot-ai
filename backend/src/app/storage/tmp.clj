@@ -14,6 +14,7 @@
    [app.common.schema :as sm]
    [app.common.time :as ct]
    [app.common.uuid :as uuid]
+   [app.config :as cf]
    [app.worker :as wrk]
    [datoteka.fs :as fs]
    [datoteka.io :as io]
@@ -23,9 +24,30 @@
   (:import
    java.io.InputStream
    java.io.OutputStream
-   java.nio.file.Files))
+   java.nio.file.FileSystems
+   java.nio.file.Files
+   java.nio.file.attribute.FileAttribute))
 
-(def default-tmp-dir "/tmp/penpot")
+(def default-tmp-dir
+  "Folder of the temporary files; `PENPOT_TMP_DIRECTORY` overrides it
+  (the desktop app points it at its own data folder)."
+  (or (cf/get :tmp-directory) "/tmp/penpot"))
+
+(def ^:private posix?
+  "False on filesystems without POSIX permissions (Windows), where
+  creating a file or folder with them raises."
+  (contains? (.supportedFileAttributeViews (FileSystems/getDefault)) "posix"))
+
+(def ^:private no-attributes
+  (make-array FileAttribute 0))
+
+(defn create-dir!
+  "Create a folder with its parents; POSIX permissions only where the
+  filesystem has them."
+  [path]
+  (if posix?
+    (fs/create-dir path)
+    (Files/createDirectories (fs/path path) no-attributes)))
 
 (declare ^:private remove-temp-file)
 (declare ^:private io-loop)
@@ -42,7 +64,7 @@
 
 (defmethod ig/init-key ::cleaner
   [_ cfg]
-  (fs/create-dir default-tmp-dir)
+  (create-dir! default-tmp-dir)
   (px/fn->thread (partial io-loop cfg)
                  {:name "penpot/storage/tmp-cleaner"}))
 
@@ -84,9 +106,10 @@
       :or {prefix "penpot."
            suffix ".tmp"
            dir default-tmp-dir}}]
-  (let [attrs (fs/make-permissions "rw-r--r--")
-        path  (fs/join dir (str prefix (uuid/next) suffix))]
-    (Files/createFile path attrs)))
+  (let [path (fs/join dir (str prefix (uuid/next) suffix))]
+    (if posix?
+      (Files/createFile path (fs/make-permissions "rw-r--r--"))
+      (Files/createFile path no-attributes))))
 
 (defn tempfile
   [& {:keys [min-age] :as opts}]
@@ -105,7 +128,7 @@
       :or {prefix "penpot."
            suffix ".tmp"
            dir    default-tmp-dir}}]
-  (fs/create-dir dir)
+  (create-dir! dir)
   (loop [path (fs/join dir (str prefix (uuid/next) suffix))]
     (if (fs/exists? path)
       (recur (fs/join dir (str prefix (uuid/next) suffix)))

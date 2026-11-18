@@ -1,0 +1,17 @@
+Penforge desktop
+
+Penforge is a fork of Penpot (https://penpot.app). Penpot is licensed under the
+Mozilla Public License 2.0. The source code of this build, including every
+modified file, is available at https://github.com/wwardaww/penpot-ai.
+
+This installer also contains third-party software under their own licenses
+(their texts are installed in resources/runtime/licenses):
+- Electron and Chromium (MIT, BSD and others; LICENSES.chromium.html)
+- Azul Zulu JRE 26 (GPLv2 with the Classpath Exception)
+- PostgreSQL 17 (PostgreSQL License)
+- sharp (Apache-2.0) and libvips (LGPL-3.0-or-later, dynamically linked)
+- Node packages of the Penforge daemon and media-processor (MIT, Apache-2.0,
+  ISC and others), including the Claude Agent SDK (Anthropic terms)
+
+The AI features use the Claude Code CLI ("claude"), which is not part of this
+installer and is installed and logged in by the user.
