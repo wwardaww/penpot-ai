@@ -29,6 +29,12 @@ function dataRoot(): string {
     return process.env.PENFORGE_DESKTOP_DATA || app.getPath("userData");
 }
 
+/** JVM heap of the backend in MiB (`PENFORGE_BACKEND_HEAP_MB`, default 1024). */
+function backendHeapMb(): number | undefined {
+    const value = Number.parseInt(process.env.PENFORGE_BACKEND_HEAP_MB ?? "", 10);
+    return Number.isFinite(value) && value >= 256 ? value : undefined;
+}
+
 function rendererFile(name: string): string {
     return join(app.getAppPath(), "renderer", name);
 }
@@ -311,6 +317,7 @@ async function runSmoke(): Promise<void> {
             nodeEnv: { ELECTRON_RUN_AS_NODE: "1" },
             baseEnv: await childBaseEnv(),
             appVersion: app.getVersion(),
+            backendHeapMb: backendHeapMb(),
         });
         const bootMs = Date.now() - started;
         const checks = await smokeChecks(running);
@@ -381,6 +388,7 @@ async function main(): Promise<void> {
             nodeEnv: { ELECTRON_RUN_AS_NODE: "1" },
             baseEnv: env,
             appVersion: app.getVersion(),
+            backendHeapMb: backendHeapMb(),
             claudePath: claude.path,
             onStatus: (statuses) => sendStatus(splash, statuses),
         });

@@ -20,6 +20,8 @@ extraResources:
       - "**/*"
 asar: true
 compression: maximum
+# Chromium's own UI strings only (Penpot has its own translations)
+electronLanguages: [en-US]
 afterSign: scripts/notarize.cjs
 
 win:

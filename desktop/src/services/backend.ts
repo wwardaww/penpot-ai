@@ -51,6 +51,7 @@ export function backendArgs(ctx: ServiceContext): string[] {
     return [
         `-Xmx${ctx.backendHeapMb}m`,
         "-XX:+UseSerialGC",
+        "-XX:ReservedCodeCacheSize=128m",
         "-XX:-OmitStackTraceInFastThrow",
         // `environ` lower-cases env names with the default locale: under a Turkish locale
         // `PENPOT_DATABASE_URI` becomes `:penpot-database-urı` and the setting is lost
