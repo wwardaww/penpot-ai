@@ -18,7 +18,21 @@
    [app.main.ui.ds.foundations.typography.text :refer [text*]]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
+   [cuerdas.core :as str]
    [rumext.v2 :as mf]))
+
+(defn came-from-penpot?
+  "True when a Penpot page of this origin linked to the pair route, so
+  going back returns to it. A typed or pasted link, or one opened from
+  the daemon console, has no referrer: going back there would leave
+  Penpot (another site, or a blank page)."
+  [referrer origin history-length]
+  (boolean
+   (and (string? referrer)
+        (string? origin)
+        (> history-length 1)
+        (or (= referrer origin)
+            (str/starts-with? referrer (str origin "/"))))))
 
 (mf/defc pair-page*
   [{:keys [token]}]
@@ -32,9 +46,11 @@
         (st/emit! (client/save-token token))
         ;; keep the token out of the history entry
         (dom/replace-history-state! (str (.-pathname js/location)))
-        ;; back to the page this tab came from, if any
-        (when (> (.-length js/history) 1)
-          (st/emit! (rt/nav-back-local)))))
+        ;; back to the Penpot page this tab came from, if any
+        (when (came-from-penpot? (.-referrer js/document)
+                                 (.-origin js/location)
+                                 (.-length js/history))
+          (st/emit! (rt/nav-back)))))
 
     [:main {:class (stl/css :pair-page)}
      [:section {:class (stl/css :pair-card)}

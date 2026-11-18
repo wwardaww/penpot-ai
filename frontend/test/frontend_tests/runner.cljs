@@ -167,6 +167,7 @@
    [frontend-tests.tokens.workspace-tokens-remap-test]
    [frontend-tests.ui.ai-build-test]
    [frontend-tests.ui.ai-chat-ux-test]
+   [frontend-tests.ui.ai-pair-test]
    [frontend-tests.ui.ai-design-md-test]
    [frontend-tests.ui.ai-preview-pane-test]
    [frontend-tests.ui.ai-visual-qa-test]
@@ -410,6 +411,7 @@
    'frontend-tests.ui.ai-build-test
    'frontend-tests.ui.ai-preview-pane-test
    'frontend-tests.ui.ai-chat-ux-test
+   'frontend-tests.ui.ai-pair-test
    'frontend-tests.ui.ai-visual-qa-test
    'frontend-tests.ui.check-updates-test
    'frontend-tests.ui.color-token-position-test
