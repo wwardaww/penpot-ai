@@ -92,7 +92,8 @@ export class QaFixer {
                 text: `A change to ${screen.name} did not help (${next.score} vs ${best.score}); undone.`,
             });
             await this.git.restore(before, changed);
-            await Promise.all([writeFile(best.paths.app, best.app), writeFile(best.paths.diff, best.diff)]);
+            // the files of the undone attempt show the best state again
+            await Promise.all([writeFile(next.paths.app, best.app), writeFile(next.paths.diff, best.diff)]);
             break;
         }
         return { before: first, after: best, attempts, changedFiles: [...kept].sort() };

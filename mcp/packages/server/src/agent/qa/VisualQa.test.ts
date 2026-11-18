@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { BrowserLocator, ChromeScreenshotter } from "./ChromeScreenshotter";
 import { PixelCompare, type RgbaImage } from "./PixelCompare";
@@ -13,6 +14,9 @@ import type { VisualQaServices } from "./QaRun";
 import { QaSessionTools } from "./QaSessionTools";
 import { QaToolFilter } from "./QaToolFilter";
 import { FakeBrowser, FakePenpot, FakePreviews, renderScreen, SCREENS, screenCss } from "./testing/fakes";
+import { CommandPolicy } from "../process/CommandPolicy";
+import { DevServerManager } from "../process/DevServerManager";
+import { PortPool } from "../process/PortPool";
 import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 
 /** Solid image of one colour. */
@@ -325,6 +329,44 @@ describe("ChromeScreenshotter", () => {
             } finally {
                 await browser.close();
                 server.close();
+            }
+        }
+    );
+});
+
+describe("dev server and browser together", () => {
+    const browserPath = BrowserLocator.find();
+    const fakeServer = join(dirname(fileURLToPath(import.meta.url)), "..", "process", "testing", "fakeDevServer.mjs")
+        .split("\\")
+        .join("/");
+
+    test(
+        "starts the project's dev server and screenshots it at the board size",
+        { skip: browserPath ? false : "no Chrome/Edge on this machine" },
+        async () => {
+            const projectsDir = mkdtempSync(join(tmpdir(), "penforge-qa-dev-"));
+            const workspace = new ProjectWorkspace(projectsDir, "project-dev");
+            await workspace.ensure();
+            await workspace.writeJson("stack.json", { commands: { dev: ["node", fakeServer, "serve"] } });
+            const manager = new DevServerManager({
+                ports: new PortPool(47380, 47389),
+                probeIntervalMs: 50,
+                commandPolicy: new CommandPolicy(["node"]),
+            });
+            const lease = await new DevServerPreviewAccess(manager, { get: async () => workspace }).acquire(
+                "project-dev"
+            );
+            const browser = await ChromeScreenshotter.launch(browserPath!);
+            try {
+                assert.match(lease.url, /^http:\/\/(127\.0\.0\.1|localhost):4738\d\/$/);
+                const png = await browser.capture({ url: lease.url, width: 320, height: 240, settleMs: 0 });
+                const image = await PngImages.decode(png);
+                assert.deepEqual([image.width, image.height], [320, 240]);
+            } finally {
+                await browser.close();
+                lease.release();
+                await manager.stopAll();
+                rmSync(projectsDir, { recursive: true, force: true });
             }
         }
     );

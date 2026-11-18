@@ -95,7 +95,8 @@ type EventListener = (params: any) => void;
  */
 export class ChromeScreenshotter implements AppScreenshotter {
     private static readonly logger = createLogger("ChromeScreenshotter");
-    private static readonly LOAD_TIMEOUT_MS = 30_000;
+    /** first loads of a dev server can wait for a whole bundle (Metro, webpack) */
+    private static readonly LOAD_TIMEOUT_MS = 120_000;
     private static readonly COMMAND_TIMEOUT_MS = 30_000;
     private static readonly LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
     /** stops animations and the text caret, so two shots of the same page are equal */
