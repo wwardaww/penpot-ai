@@ -27,6 +27,9 @@ If the layer already looks the way the comment asks, change nothing.
      delete boards or pages;
    - keep everything the comment does not mention as it is.
 4. Check the result with `capture_node_screenshot`. If it is not right, correct it once.
+   Change only the commented layer: when the same layer is on other screens, Penforge asks the
+   designer afterwards whether to change those too, so leave them as they are. If the layer is a
+   component instance, change the instance and never detach it.
 5. Do not call `resolve_canvas_comment` and do not reply to the thread: Penforge does both from
    your verdict.
 

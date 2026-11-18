@@ -11988,6 +11988,10 @@ msgid "penforge.chat.status.interrupted"
 msgstr "Connection lost: the AI stopped"
 
 #: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.check.style-differs"
+msgstr "“%s” looks like a version of “%s”, but these layers have other colors: %s. Ask me to match them if they should look the same."
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
 msgid "penforge.chat.check.boards-overlap"
 msgstr "The screens “%s” and “%s” overlap on the canvas, so one hides the other. Move one of them or ask me to fix it."
 

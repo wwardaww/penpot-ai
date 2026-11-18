@@ -31,9 +31,11 @@ echo "[start-tmux.sh] Installing node dependencies"
 pushd ~/penpot/frontend/
 ./scripts/setup;
 popd
-pushd ~/penpot/exporter/
-./scripts/setup;
-popd
+if [ "${PENFORGE_EXPORTER:-0}" = "1" ]; then
+    pushd ~/penpot/exporter/
+    ./scripts/setup;
+    popd
+fi
 
 tmux rename-window -t "$PENPOT_TMUX_SESSION:0" 'frontend watch'
 tmux select-window -t "$PENPOT_TMUX_SESSION:0"
@@ -49,15 +51,20 @@ if [ "${PENFORGE_STORYBOOK:-0}" = "1" ]; then
     tmux send-keys -t "$PENPOT_TMUX_SESSION" './scripts/watch storybook' enter
 fi
 
-tmux new-window -t "$PENPOT_TMUX_SESSION:2" -n 'exporter'
-tmux select-window -t "$PENPOT_TMUX_SESSION:2"
-tmux send-keys -t "$PENPOT_TMUX_SESSION" 'cd penpot/exporter' enter C-l
-tmux send-keys -t "$PENPOT_TMUX_SESSION" 'rm -f target/app.js*' enter C-l
-tmux send-keys -t "$PENPOT_TMUX_SESSION" './scripts/penforge-watch' enter
+# Penforge: the exporter (server-side PDF/PNG export, ~2 GB of memory) is
+# off unless PENFORGE_EXPORTER=1. With the render-wasm feature on, exports
+# and the AI's screenshots render in the browser and do not need it.
+if [ "${PENFORGE_EXPORTER:-0}" = "1" ]; then
+    tmux new-window -t "$PENPOT_TMUX_SESSION:2" -n 'exporter'
+    tmux select-window -t "$PENPOT_TMUX_SESSION:2"
+    tmux send-keys -t "$PENPOT_TMUX_SESSION" 'cd penpot/exporter' enter C-l
+    tmux send-keys -t "$PENPOT_TMUX_SESSION" 'rm -f target/app.js*' enter C-l
+    tmux send-keys -t "$PENPOT_TMUX_SESSION" './scripts/penforge-watch' enter
 
-tmux split-window -v -t "$PENPOT_TMUX_SESSION"
-tmux send-keys -t "$PENPOT_TMUX_SESSION" 'cd penpot/exporter' enter C-l
-tmux send-keys -t "$PENPOT_TMUX_SESSION" './scripts/wait-and-start.sh' enter
+    tmux split-window -v -t "$PENPOT_TMUX_SESSION"
+    tmux send-keys -t "$PENPOT_TMUX_SESSION" 'cd penpot/exporter' enter C-l
+    tmux send-keys -t "$PENPOT_TMUX_SESSION" './scripts/wait-and-start.sh' enter
+fi
 
 tmux new-window -t "$PENPOT_TMUX_SESSION:3" -n 'backend'
 tmux select-window -t "$PENPOT_TMUX_SESSION:3"

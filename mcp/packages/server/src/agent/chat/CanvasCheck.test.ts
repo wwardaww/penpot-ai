@@ -9,6 +9,7 @@ import { PromptRegistry } from "../prompts/promptRegistry";
 import { FakeRunner } from "../runner/FakeRunner";
 import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import { type BoardBox, CanvasCheck } from "./CanvasCheck";
+import type { DesignNode } from "./DesignTree";
 import { ChatService } from "./ChatService";
 import { TurnRunner } from "./TurnRunner";
 
@@ -45,6 +46,41 @@ test("touching boards, boards on other pages and rounding are no overlap", () =>
     assert.deepEqual(CanvasCheck.overlaps([IPHONE, hairline]), []);
 });
 
+function node(id: string, name: string, fills: unknown, children: DesignNode[] = []): DesignNode {
+    return { id, name, type: "board", style: { fills }, children };
+}
+
+const ORANGE = [{ gradient: { stops: [{ color: "#ff9a3d" }] } }];
+const PURPLE = [{ gradient: { stops: [{ color: "#7b61ff" }] } }];
+const WHITE = [{ color: "#ffffff", opacity: 1 }];
+
+function homeScreen(id: string, card: unknown): DesignNode {
+    return node(id, "Home", WHITE, [
+        node(`${id}-header`, "Header", WHITE),
+        node(`${id}-card`, "Progress Card", card, [node(`${id}-title`, "Title", [])]),
+        node(`${id}-list`, "Task List", WHITE),
+        node(`${id}-bar`, "Tab Bar", WHITE),
+    ]);
+}
+
+test("a new screen whose shared layers have other colors than its source is mentioned", () => {
+    const problem = CanvasCheck.compare(CLONE, homeScreen("clone", PURPLE), [
+        [IPHONE, homeScreen("ios", ORANGE)],
+        [{ ...SEEDED, name: "Settings" }, node("s", "Settings", WHITE, [node("s1", "Header", WHITE)])],
+    ]);
+    assert.ok(problem);
+    assert.equal(problem.code, "style-differs");
+    assert.equal(problem.severity, "info");
+    assert.deepEqual(problem.params, { board: "Android", source: "iPhone", layers: ["Progress Card"] });
+    assert.match(problem.text, /looks like a version of "iPhone"/);
+});
+
+test("matching colors or no clear source give no note", () => {
+    assert.equal(CanvasCheck.compare(CLONE, homeScreen("clone", ORANGE), [[IPHONE, homeScreen("ios", ORANGE)]]), null);
+    const unrelated = node("x", "Login", WHITE, [node("x1", "Email", WHITE), node("x2", "Password", WHITE)]);
+    assert.equal(CanvasCheck.compare(CLONE, unrelated, [[IPHONE, homeScreen("ios", ORANGE)]]), null);
+});
+
 test("only design-changing tools trigger the check", () => {
     assert.equal(CanvasCheck.changesDesign("mcp__penpot__execute_code"), true);
     assert.equal(CanvasCheck.changesDesign("mcp__penpot__update_design_node"), true);
@@ -65,6 +101,9 @@ class QueuedBoards implements WorkflowToolsApi {
     public async call(toolName: string, args?: Record<string, unknown>): Promise<WorkflowToolResult> {
         this.calls.push(toolName);
         this.args.push(args);
+        if (toolName !== "list_boards") {
+            return { isError: true, content: [], text: "Tool execution failed: Error: not in this test" };
+        }
         const answer = this.answers.shift() ?? [];
         if (answer === "fail") {
             return { isError: true, content: [], text: "Tool execution failed: Error: no session" };
@@ -131,7 +170,11 @@ test("a turn that hides a board under another says so in the chat", async () => 
     assert.equal((failed[0] as { toolName: string }).toolName, ChatService.CANVAS_CHECK);
     assert.equal((failed[0] as { code?: string }).code, "boards-overlap");
     assert.deepEqual((failed[0] as { params?: unknown }).params, { names: ["Android", "Android"] });
-    assert.deepEqual(tools.args, [{ pageId: "p1" }, { pageId: "p1" }], "only the tab's page is listed");
+    assert.deepEqual(
+        tools.args.filter((_, index) => tools.calls[index] === "list_boards"),
+        [{ pageId: "p1" }, { pageId: "p1" }],
+        "only the tab's page is listed"
+    );
     assert.equal(sent[sent.length - 1].type, "chat.done");
 });
 

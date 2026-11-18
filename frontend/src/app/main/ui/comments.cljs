@@ -632,6 +632,32 @@
                                 :is-toggled @display-mentions*)
       :icon i/at}]))
 
+(def ^:private penforge-avatar-url
+  "Avatar of the Penforge bot: a white spark on a violet disc."
+  (dm/str "data:image/svg+xml;charset=utf-8,"
+          (js/encodeURIComponent
+           (dm/str "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>"
+                   "<rect width='32' height='32' fill='#7238ff'/>"
+                   "<path fill='#ffffff' d='M16 6l2.6 7.4L26 16l-7.4 2.6L16 26"
+                   "l-2.6-7.4L6 16l7.4-2.6z'/></svg>"))))
+
+(defn- owner-photo-url
+  "Photo of a comment owner; the Penforge bot has its own avatar."
+  [owner]
+  (if (dcm/penforge-bot? owner)
+    penforge-avatar-url
+    (cfg/resolve-profile-photo-url owner)))
+
+(defn- can-change?
+  "Whether `profile` may edit or delete a thread or comment of `owner`:
+  its own, or a Penforge bot one when the profile can edit the file
+  (`:ai` flag on; the backend checks the same)."
+  [profile owner permissions]
+  (or (= (:id profile) (:id owner))
+      (and (contains? cfg/flags :ai)
+           (dcm/penforge-bot? owner)
+           (true? (:can-edit permissions)))))
+
 (def ^:private schema:comment-avatar
   [:map
    [:class {:optional true} :string]
@@ -662,7 +688,7 @@
   [{:keys [item profile]}]
   [:*
    [:div {:class (stl/css :author)}
-    [:> comment-avatar* {:image (cfg/resolve-profile-photo-url profile)
+    [:> comment-avatar* {:image (owner-photo-url profile)
                          :class (stl/css :avatar-lg)
                          :variant (cond (:is-resolved item) "solved"
                                         (pos? (:count-unread-comments item)) "unread"
@@ -907,6 +933,7 @@
   [{:keys [thread origin]}]
   (let [owner    (dcm/get-owner thread)
         profile  (mf/deref refs/profile)
+        perms    (mf/deref refs/permissions)
         options  (mf/deref ref:comments-local-options)
 
         toggle-resolved
@@ -959,7 +986,7 @@
         [:> checkbox* {:class (stl/css :checkbox-wrapper)
                        :checked (:is-resolved thread)
                        :on-change toggle-resolved}])
-      (when (= (:id profile) (:id owner))
+      (when (can-change? profile owner perms)
         [:> icon-button* {:variant "ghost"
                           :aria-label (tr "labels.options")
                           :on-click on-toggle-options
@@ -976,6 +1003,7 @@
   [{:keys [comment thread]}]
   (let [owner    (dcm/get-owner comment)
         profile  (mf/deref refs/profile)
+        perms    (mf/deref refs/permissions)
         options  (mf/deref ref:comments-local-options)
         edition? (mf/use-state false)
 
@@ -1018,13 +1046,13 @@
     [:div {:class (stl/css :floating-thread-item-wrapper)}
      [:div {:class (stl/css :floating-thread-item)}
       [:div {:class (stl/css :author)}
-       [:> comment-avatar* {:image (cfg/resolve-profile-photo-url owner)}]
+       [:> comment-avatar* {:image (owner-photo-url owner)}]
        [:div {:class (stl/css :author-identity)}
         [:div {:class (stl/css :author-fullname)} (:fullname owner)]
         [:div {:class (stl/css :author-timeago)}
          (ct/timeago (:modified-at comment))]]
 
-       (when (= (:id profile) (:id owner))
+       (when (can-change? profile owner perms)
          [:> icon-button* {:variant "ghost"
                            :aria-label (tr "labels.options")
                            :on-click on-toggle-options
@@ -1421,7 +1449,7 @@
                                  :cursor-pointer (false? (:is-grabbing @state))
                                  :cursor-grabbing (true? (:is-grabbing @state)))}
       [:> comment-avatar*
-       {:image (cfg/resolve-profile-photo-url owner)
+       {:image (owner-photo-url owner)
         :class (stl/css :avatar-lg)
         :data-testid (dm/str "floating-thread-bubble-" (:seqn thread))
         :variant (cond
