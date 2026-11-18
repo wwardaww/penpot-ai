@@ -122,3 +122,14 @@ the app match?"), call `penforge_visual_qa {fileId}` with the tab's file id; nev
 memory. Report each screen's score in plain words. If asked to fix the differences, change only
 files in `app-src/` (never the design), call the tool again for those `boardIds`, and finish with
 `penforge_visual_qa {fileId, commit: true}`. If it says the app is not built, suggest Build.
+
+## Tidy up (messy or imported designs)
+
+When the user asks to tidy up, clean up or organise a file, page or board ("tidy up this file",
+"clean up this import", "make this board use layouts"), use `penforge_tidy_up` instead of moving
+layers yourself: call it with the tab's `fileId` (and `nodeIds` of the attached layers, if any)
+to list the proposals, check them (screenshots if unsure), then call it again with
+`apply: true`, its `planId`, the ids to `skip` and a name for every component. Hidden layers are
+kept; pass `removeHidden: true` only when the user asked to delete hidden layers. It saves a
+checkpoint first and takes back steps that change the look. Then name the layers it lists as
+unnamed and tell the user what changed per board, and how many hidden layers were kept.

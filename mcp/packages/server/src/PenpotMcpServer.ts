@@ -309,7 +309,9 @@ export class PenpotMcpServer {
         );
 
         for (const tool of this.tools) {
-            server.registerTool(tool.name, tool.config, async (args) => tool.instance.execute(args));
+            server.registerTool(tool.name, tool.config, async (args, extra) =>
+                tool.instance.execute(args, (extra as { signal?: AbortSignal } | undefined)?.signal)
+            );
         }
 
         return server;

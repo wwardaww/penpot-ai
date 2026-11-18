@@ -11,6 +11,7 @@ import { PenforgeOverviewTool } from "./PenforgeOverviewTool";
 import { ResolveCanvasCommentTool } from "./ResolveCanvasCommentTool";
 import { UpdateDesignNodeTool } from "./UpdateDesignNodeTool";
 import { VisualQaTool } from "../../agent/qa/VisualQaTool";
+import { TidyUpTool } from "../../agent/cleanup/TidyUpTool";
 
 /**
  * Factory of the Penforge typed MCP tools (architecture §6).
@@ -50,6 +51,8 @@ export class PenforgeTools {
             new OpenPublishTool(mcpServer),
             // W18: visual QA for the AI chat; answers only while the Penforge daemon runs
             new VisualQaTool(mcpServer),
+            // W17: tidy-up for the AI chat
+            new TidyUpTool(mcpServer),
         ];
     }
 }

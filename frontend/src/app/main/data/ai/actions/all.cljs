@@ -15,6 +15,7 @@
    [app.main.data.ai.actions.auto-name]
    [app.main.data.ai.actions.build]
    [app.main.data.ai.actions.chat]
+   [app.main.data.ai.actions.cleanup]
    [app.main.data.ai.actions.comments]
    [app.main.data.ai.actions.design-md]
    [app.main.data.ai.actions.detached]
