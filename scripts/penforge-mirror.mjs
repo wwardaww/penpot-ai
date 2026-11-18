@@ -17,7 +17,8 @@
 //
 // What is mirrored: the files `git ls-files --cached --others
 // --exclude-standard` lists (tracked + untracked-not-ignored), plus a few
-// ignored files people edit by hand (EXTRA_FILES). Ignored files in the
+// ignored paths the container needs from Windows (EXTRA_FILES, EXTRA_DIRS).
+// Other ignored files in the
 // mirror (build output, caches, generated wasm artifacts) are never touched,
 // and only files this script copied are ever deleted from the mirror.
 //
@@ -30,7 +31,11 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+// Ignored paths the container still needs from the Windows side: a config
+// people edit by hand, and the MCP plugin the Windows daemon builds (nginx
+// serves it at /plugins/mcp/).
 const EXTRA_FILES = ["frontend/resources/public/js/config.js"];
+const EXTRA_DIRS = ["mcp/packages/plugin/dist/"];
 const SKIP_PREFIXES = [".git/", ".claude/", "wiki/"];
 const MARKER = ".penforge-mirror-id";
 const RECONCILE_MS = 30_000;
@@ -81,6 +86,23 @@ function stateKey(dst) {
 
 const toPosix = (p) => p.split(path.sep).join("/");
 const skipped = (rel) => SKIP_PREFIXES.some((p) => rel === p.slice(0, -1) || rel.startsWith(p));
+const isExtra = (rel) => EXTRA_FILES.includes(rel) || EXTRA_DIRS.some((d) => rel.startsWith(d));
+
+function extraDirFiles(src) {
+    const out = [];
+    for (const dir of EXTRA_DIRS) {
+        let entries = [];
+        try {
+            entries = fs.readdirSync(path.join(src, dir), { recursive: true, withFileTypes: true });
+        } catch {
+            continue; // not built yet
+        }
+        for (const e of entries) {
+            if (e.isFile()) out.push(toPosix(path.relative(src, path.join(e.parentPath ?? e.path, e.name))));
+        }
+    }
+    return out;
+}
 
 function gitFileList(src) {
     const res = spawnSync("git", ["-C", src, "ls-files", "-z", "--cached", "--others", "--exclude-standard"], {
@@ -88,7 +110,7 @@ function gitFileList(src) {
     });
     if (res.status !== 0) throw new Error(`git ls-files failed: ${res.stderr?.toString()}`);
     const files = res.stdout.toString("utf8").split("\0").filter(Boolean);
-    return [...new Set([...files, ...EXTRA_FILES])].filter((f) => !skipped(f));
+    return [...new Set([...files, ...EXTRA_FILES, ...extraDirFiles(src)])].filter((f) => !skipped(f));
 }
 
 function gitIgnored(src, rels) {
@@ -205,8 +227,7 @@ class Mirror {
     async syncPaths(rels) {
         const candidates = [...new Set(rels)].filter((rel) => rel && !skipped(rel));
         const ignored = gitIgnored(this.src, candidates);
-        const extra = new Set(EXTRA_FILES);
-        const todo = candidates.filter((rel) => extra.has(rel) || !ignored.has(rel));
+        const todo = candidates.filter((rel) => isExtra(rel) || !ignored.has(rel));
         const changed = await this.runPool(todo, (rel) => this.copy(rel));
         await this.saveState();
         if (changed) log(`${changed} change(s): ${todo.slice(0, 3).join(", ")}${todo.length > 3 ? ", ..." : ""}`);
