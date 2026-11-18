@@ -335,14 +335,17 @@
         cache   (::cache state)
         client  (::client state)
         timeout (or (some-> (:timeout options) ct/duration)
-                    (::timeout state))
+                    (::timeout state))]
 
-        conn    (.connect ^RedisClient client
-                          ^RedisCodec default-codec)
-        cmd     (.sync ^StatefulRedisConnection conn)]
-
-    (.setTimeout ^StatefulRedisConnection conn ^Duration timeout)
-    (->Connection conn cmd timeout cache (::mtx/metrics cfg))))
+    ;; Penforge: single-user mode keeps the data in process
+    ;; (app.penforge.embedded.redis)
+    (if-let [embedded (::embedded state)]
+      ((:connect embedded) timeout)
+      (let [conn (.connect ^RedisClient client
+                           ^RedisCodec default-codec)
+            cmd  (.sync ^StatefulRedisConnection conn)]
+        (.setTimeout ^StatefulRedisConnection conn ^Duration timeout)
+        (->Connection conn cmd timeout cache (::mtx/metrics cfg))))))
 
 (defn connect-pubsub
   [cfg & {:as options}]
@@ -350,15 +353,16 @@
         client  (::client state)
 
         timeout (or (some-> (:timeout options) ct/duration)
-                    (::timeout state))
-        conn    (.connectPubSub ^RedisClient client
-                                ^RedisCodec default-codec)
-        cmd     (.sync ^StatefulRedisPubSubConnection conn)]
+                    (::timeout state))]
 
-
-    (.setTimeout ^StatefulRedisPubSubConnection conn
-                 ^Duration timeout)
-    (->SubscriptionConnection conn cmd timeout)))
+    (if-let [embedded (::embedded state)]
+      ((:connect-pubsub embedded) timeout)
+      (let [conn (.connectPubSub ^RedisClient client
+                                 ^RedisCodec default-codec)
+            cmd  (.sync ^StatefulRedisPubSubConnection conn)]
+        (.setTimeout ^StatefulRedisPubSubConnection conn
+                     ^Duration timeout)
+        (->SubscriptionConnection conn cmd timeout)))))
 
 (defn get
   [conn key]
@@ -558,11 +562,21 @@
          (assoc ::timeout (ct/duration "10s")))})
 
 (def ^:private schema:client
-  [:map {:title "RedisClient"}
-   [::timer [:fn #(instance? HashedWheelTimer %)]]
-   [::cache ::sm/atom]
-   [::timeout ::ct/duration]
-   [::resources [:fn #(instance? DefaultClientResources %)]]])
+  [:or {:title "RedisClient"}
+   [:map
+    [::timer [:fn #(instance? HashedWheelTimer %)]]
+    [::cache ::sm/atom]
+    [::timeout ::ct/duration]
+    [::resources [:fn #(instance? DefaultClientResources %)]]]
+   ;; Penforge single-user mode (app.penforge.embedded.redis)
+   [:map
+    [::embedded :map]
+    [::cache ::sm/atom]
+    [::timeout ::ct/duration]]])
+
+(defn- embedded-uri?
+  [uri]
+  (str/starts-with? (str uri) "mem:"))
 
 (def check-client
   (sm/check-fn schema:client))
@@ -585,11 +599,19 @@
   [_ params]
   (check-client-params params))
 
+(declare ^:private init-lettuce-client)
+
 (defmethod ig/init-key ::client
-  [_ {:keys [::uri ::wrk/netty-io-executor] :as params}]
+  [_ {:keys [::uri] :as params}]
 
   (l/inf :hint "initialize redis client" :uri (str uri))
 
+  (if (embedded-uri? uri)
+    ((requiring-resolve 'app.penforge.embedded.redis/create-client) params)
+    (init-lettuce-client params)))
+
+(defn- init-lettuce-client
+  [{:keys [::uri ::wrk/netty-io-executor]}]
   (let [timer     (HashedWheelTimer.)
         cache     (atom {})
 
@@ -624,10 +646,11 @@
      ::resources resources}))
 
 (defmethod ig/halt-key! ::client
-  [_ {:keys [::client ::timer ::resources]}]
-  (ex/ignoring (.shutdown ^RedisClient client))
-  (ex/ignoring (.shutdown ^ClientResources resources))
-  (ex/ignoring (.stop ^Timer timer)))
+  [_ {:keys [::client ::timer ::resources ::embedded]}]
+  (when-not embedded
+    (ex/ignoring (.shutdown ^RedisClient client))
+    (ex/ignoring (.shutdown ^ClientResources resources))
+    (ex/ignoring (.stop ^Timer timer))))
 
 (defmethod ig/assert-key ::pool
   [_ {:keys [::client]}]
