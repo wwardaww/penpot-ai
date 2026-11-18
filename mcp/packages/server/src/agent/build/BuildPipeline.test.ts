@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
@@ -372,24 +372,29 @@ test("giving up: designers get a plain message, developers the error", async () 
     assert.ok(events.some((e) => e.kind === "log" && /TS2307/.test(e.payload.text)));
 });
 
-test("pre-build workflows run before the screens", async () => {
+test("pre-build workflows run before the screens, after the scaffold of a full build", async () => {
     const payload = await plan();
     const files = new BuildFiles(workspace);
     const stack = (await files.readStack())!;
+    assert.deepEqual(stack.preBuild, ["token-sync"], "a first plan syncs the design tokens (W21)");
     const saved = (await files.readPlan())!;
     await files.writePlan({ ...saved, stack: { ...stack, preBuild: ["token-sync", "missing"] } }, "plan");
     const ran: string[] = [];
+    let scaffolded = false;
     await build(
         "developer",
         { planId: payload.planId },
         {
             run: async (id) => {
                 ran.push(id);
+                scaffolded = existsSync(join(workspace.appSrcDir, "package.json"));
                 return id === "token-sync";
             },
         }
     );
     assert.deepEqual(ran, ["token-sync", "missing"]);
+    assert.ok(scaffolded, "the app exists when pre-build workflows run");
+    assert.ok(!claude.prompts.find((p) => p.startsWith("## Step: build the screen"))?.includes("penforge:tokens"));
     assert.ok(events.some((e) => e.kind === "log" && /"missing" is not installed/.test(e.payload.text)));
 });
 

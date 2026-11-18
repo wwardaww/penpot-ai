@@ -45,6 +45,10 @@ export const StackSchema = z.object({
         .default("/"),
     /** workflow ids run before each build (W21 adds "token-sync") */
     preBuild: z.array(z.string().regex(/^[a-z0-9][a-z0-9-]*$/)).default([]),
+    /** theme file holding the generated design token block, relative to `app-src/` (W21) */
+    themeFile: z.string().max(200).optional(),
+    /** format of that block: `react-native`, `js-web`, `css` or `tailwind` (W21) */
+    themeFormat: z.string().max(40).optional(),
 });
 
 export type Stack = z.infer<typeof StackSchema>;

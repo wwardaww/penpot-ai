@@ -12772,3 +12772,104 @@ msgstr[1] "Kept %s hidden layers."
 #: src/app/main/data/ai/actions/cleanup.cljs
 msgid "penforge.cleanup.summary.stopped"
 msgstr "Stopped early to stay within the time limit: run it again for the rest."
+
+# penforge:W21
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.actions.token-sync"
+msgstr "Sync design tokens to code"
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.step.read-tokens"
+msgstr "Reading the design tokens"
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.step.export"
+msgstr "Saving the tokens"
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.step.theme"
+msgstr "Updating the app theme"
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.step.link"
+msgstr "Using the tokens in the code"
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.step.check"
+msgstr "Checking the app"
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.updated"
+msgstr "Updated %s from %s design tokens."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.unchanged"
+msgstr "The app theme already matches the %s design tokens."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.no-tokens"
+msgstr "This file has no design tokens yet. Add some in the Tokens panel, or ask the AI, then sync again."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.no-app"
+msgstr "Saved %s design tokens. The app uses them once you build it."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.no-app-empty"
+msgstr "There is no app yet. Build it first."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.busy"
+msgstr "A build is running; it syncs the tokens itself."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.linked"
+msgstr "The code now uses them in %s file(s)."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.reverted"
+msgstr "Using them in the code broke the app check, so that change was undone."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.failed.penpot-unreachable"
+msgstr "Could not read the tokens from this file. Check that the AI is connected and try again."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.failed.broken-block"
+msgstr "The token part of the app's theme file is damaged: one of its penforge:tokens comments is missing."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.failed.unsafe-theme-path"
+msgstr "The theme file set for this project is outside the app folder or is a link."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.failed.theme-check-failed"
+msgstr "The app stopped compiling with the new design tokens, so its theme was left as it was."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.no-theme"
+msgstr "The app has no theme file to put the tokens in yet."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.selection-changed"
+msgstr "Other token sets are active than the ones the app uses, so the app theme was left as it is. Sync design tokens to code to switch."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.block-edited"
+msgstr "The token part of %s was edited by hand, so it was left as it is. Sync design tokens to code to replace it."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.deprecated"
+msgstr "%s token(s) no longer in this file stay because the code still uses them."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.refused"
+msgstr "%s token(s) were left out: their name or value cannot go into code."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.preexisting-errors"
+msgstr "The app already had %s type error(s); the update added none."
+
+#: src/app/main/data/ai/actions/token_sync.cljs
+msgid "penforge.token-sync.summary.uncommitted"
+msgstr "Not saved to the app history because they had other unsaved changes: %s."

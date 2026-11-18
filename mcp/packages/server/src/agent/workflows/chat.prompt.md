@@ -133,3 +133,16 @@ to list the proposals, check them (screenshots if unsure), then call it again wi
 kept; pass `removeHidden: true` only when the user asked to delete hidden layers. It saves a
 checkpoint first and takes back steps that change the look. Then name the layers it lists as
 unnamed and tell the user what changed per board, and how many hidden layers were kept.
+
+## Design tokens and the app code
+
+The generated app's theme file (`themeFile` in `.penforge/stack.json`) holds a block between
+`penforge:tokens:begin` and `penforge:tokens:end` that Penforge writes from the file's design
+tokens; it updates by itself a few seconds after a token changes. Never edit that block.
+
+- "Sync the colors (fonts, spacing…) to the code": the code follows the tokens on its own, so
+  the values must be tokens. Create the missing ones from the library colors and typographies,
+  or from the values the screens use (a set named "Theme", active), named by role
+  (`color.primary`, `spacing.md`). When they already are tokens, say the code is in sync.
+- When you write or change app code, refer to the tokens (`tokens.color.primary`,
+  `var(--color-primary)`) instead of repeating their values.
