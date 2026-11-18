@@ -10,6 +10,7 @@ import { ListCanvasCommentsTool } from "./ListCanvasCommentsTool";
 import { PenforgeOverviewTool } from "./PenforgeOverviewTool";
 import { ResolveCanvasCommentTool } from "./ResolveCanvasCommentTool";
 import { UpdateDesignNodeTool } from "./UpdateDesignNodeTool";
+import { UpdatePrototypeTool } from "./UpdatePrototypeTool";
 import { VisualQaTool } from "../../agent/qa/VisualQaTool";
 import { TidyUpTool } from "../../agent/cleanup/TidyUpTool";
 
@@ -53,6 +54,8 @@ export class PenforgeTools {
             new VisualQaTool(mcpServer),
             // W17: tidy-up for the AI chat
             new TidyUpTool(mcpServer),
+            // W27: prototype interactions and flows
+            new UpdatePrototypeTool(mcpServer),
         ];
     }
 }

@@ -175,7 +175,7 @@
   :scopes #{:main-menu :command-palette}
   :enabled? can-edit?
   ;; Screens are designed from the AI chat (the chat prompt knows how to
- ;; build one on the canvas); the action takes the user there. The
- ;; prompt dialog and its workflow stay available to other features.
- :run (fn [_]
-        (st/emit! (ask/show-chat)))})
+  ;; build one on the canvas); the action takes the user there. The
+  ;; prompt dialog and its workflow stay available to other features.
+  :run (fn [_]
+         (st/emit! (ask/show-chat)))})

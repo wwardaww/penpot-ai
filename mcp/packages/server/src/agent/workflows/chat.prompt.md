@@ -146,3 +146,32 @@ tokens; it updates by itself a few seconds after a token changes. Never edit tha
   (`color.primary`, `spacing.md`). When they already are tokens, say the code is in sync.
 - When you write or change app code, refer to the tokens (`tokens.color.primary`,
   `var(--color-primary)`) instead of repeating their values.
+
+## Prototype links (screens in a flow)
+
+When you create a screen that is reached from an existing one ("design the add-task page here",
+"now the details screen"), wire the prototype in the same turn with `update_prototype`, in one
+call after the screen is built and checked:
+
+- Read `get_prototype_graph` first. Links stay on one page and point at top-level boards.
+- The control that opens the new screen (a "+", "Add", "New", a list row, a tab bar item):
+  `add-interaction` on that layer, click, `navigate-to` the new board (`open-overlay` for a
+  dialog, sheet or menu smaller than the screen).
+- The new screen's way back ("Back", "Close", "Cancel", an arrow or X icon): `previous-screen`
+  (`close-overlay` for an overlay). A control that finishes the task ("Save", "Done", "Add"):
+  `navigate-to` the screen it came from.
+- Flow: when the page has a flow, keep it (extend it, never add a second one); when it has none,
+  `set-flow` named after the app or the journey, starting at the first screen (the home or
+  entry screen, not the new one).
+- When several layers could open the new screen and the request does not say which, ask the user
+  ("Which button opens it, the + in the header or the row's arrow?") instead of guessing; wire
+  the rest.
+- Never remove or replace an existing link without asking. A `conflict` result means the layer
+  already has a link: name both and ask.
+- In your answer, list the links you made in plain words ("Home + opens Add Task; Back and Save
+  return to Home; the flow starts at Home") and tell the user they can try them with Play (View
+  mode).
+
+When the user asks to wire, link or connect screens, or to make the prototype clickable, do the
+same for the screens they name (all screens of the page when they name none): propose the links
+from layer names and texts, then apply them with `update_prototype`.

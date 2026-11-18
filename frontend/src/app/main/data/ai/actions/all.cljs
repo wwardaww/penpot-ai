@@ -20,6 +20,7 @@
    [app.main.data.ai.actions.design-md]
    [app.main.data.ai.actions.detached]
    [app.main.data.ai.actions.generate]
+   [app.main.data.ai.actions.prototype]
    [app.main.data.ai.actions.publish]
    [app.main.data.ai.actions.token-sync]
    ;; W15: registers the audit results modal

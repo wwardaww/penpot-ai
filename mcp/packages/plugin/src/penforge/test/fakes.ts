@@ -66,6 +66,22 @@ export function fakeShape(overrides: Record<string, any> = {}): any {
         applyToken(token: any, properties: string[]) {
             this.appliedTokens.push([token.name, properties]);
         },
+        addInteraction(trigger: string, action: any, delay?: number) {
+            const owner = this;
+            const interaction: any = {
+                trigger,
+                action,
+                delay,
+                remove() {
+                    owner.interactions = owner.interactions.filter((i: any) => i !== interaction);
+                },
+            };
+            this.interactions = [...this.interactions, interaction];
+            return interaction;
+        },
+        removeInteraction(interaction: any) {
+            this.interactions = this.interactions.filter((i: any) => i !== interaction);
+        },
         ...overrides,
     };
     if (Array.isArray(shape.children)) {
@@ -204,6 +220,17 @@ export function fakePage(name: string, children: any[], overrides: Record<string
                 return null;
             };
             return walk(root);
+        },
+        createFlow(flowName: string, board: any) {
+            const flow: any = { name: flowName, startingBoard: board, page };
+            flow.remove = () => {
+                page.flows = page.flows.filter((f: any) => f !== flow);
+            };
+            page.flows = [...page.flows, flow];
+            return flow;
+        },
+        removeFlow(flow: any) {
+            page.flows = page.flows.filter((f: any) => f !== flow);
         },
         async findCommentThreads(criteria: { showResolved: boolean }) {
             return this.threads.filter((t: any) => criteria.showResolved || !t.resolved);
