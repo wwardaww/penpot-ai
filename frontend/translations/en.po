@@ -11979,7 +11979,17 @@ msgstr "Done"
 
 #: src/app/main/ui/workspace/ai/chat/status.cljs
 msgid "penforge.chat.status.done-with-errors"
-msgstr "Done, but %s steps failed: see above"
+msgid_plural "penforge.chat.status.done-with-errors"
+msgstr[0] "Done, but 1 step failed: see above"
+msgstr[1] "Done, but %s steps failed: see above"
+
+#: src/app/main/ui/workspace/ai/chat/status.cljs
+msgid "penforge.chat.status.interrupted"
+msgstr "Connection lost: the AI stopped"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.check.boards-overlap"
+msgstr "The screens “%s” and “%s” overlap on the canvas, so one hides the other. Move one of them or ask me to fix it."
 
 #: src/app/main/ui/workspace/ai/chat/status.cljs
 msgid "penforge.chat.status.elapsed"

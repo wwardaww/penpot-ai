@@ -62,13 +62,23 @@
                   :size "s"}]])))
 
 (mf/defc file-thumbnail*
-  {::mf/private true}
+  {::mf/private true
+   ::mf/memo true}
   [{:keys [mime base64]}]
-  (let [group (files/group mime)]
-    (if (and (= :image group) (some? base64))
+  (let [group (files/group mime)
+        ;; one object URL per file, not a data URL rebuilt on every render
+        url   (mf/with-memo [mime base64]
+                (when (and (= :image group) (some? base64))
+                  (files/object-url mime base64)))]
+
+    (mf/with-effect [url]
+      (when url
+        #(js/URL.revokeObjectURL url)))
+
+    (if (some? url)
       [:span {:class (stl/css :thumbnail)}
        [:img {:class (stl/css :thumbnail-img)
-              :src (str "data:" mime ";base64," base64)
+              :src url
               :alt ""}]]
       [:span {:class (stl/css :thumbnail)}
        [:> icon* {:icon-id (cond
@@ -78,7 +88,8 @@
                   :size "s"}]])))
 
 (mf/defc attachment-chip*
-  {::mf/private true}
+  {::mf/private true
+   ::mf/memo true}
   [{:keys [attachment on-remove]}]
   (let [{:keys [kind node-id name type mime base64]} attachment
         key (chat/attachment-key attachment)
@@ -134,10 +145,22 @@
     :error [:> icon* {:icon-id i/status-wrong :size "s" :class (stl/css :tool-error)}]
     [:span {:class (stl/css :spinner) :aria-hidden true}]))
 
+(defn- tool-summary
+  "Text of a step line: the daemon's summary, or the translation of its
+  check code (W25)."
+  [{:keys [code params summary]}]
+  (case code
+    "boards-overlap"
+    (let [[a b] (:names params)]
+      (tr "penforge.chat.check.boards-overlap" a b))
+
+    summary))
+
 (mf/defc tool-entry*
   {::mf/private true}
   [{:keys [entry persona]}]
-  (let [{:keys [status summary tool-name detail]} entry
+  (let [{:keys [status tool-name detail]} entry
+        summary     (tool-summary entry)
         status-icon (mf/html [:> status-icon* {:status status}])]
     [:li {:class (stl/css :entry :entry-tool)}
      (if (and (= persona :developer) (or detail tool-name))
@@ -152,14 +175,21 @@
         [:span {:class (stl/css :tool-summary)} summary]])]))
 
 (defn- get-error-text
-  [{:keys [code message]}]
-  (case code
-    "not-connected" (tr "penforge.chat.error.not-connected")
-    "busy" (tr "penforge.chat.error.busy")
-    "no-context" (tr "penforge.chat.error.no-context")
-    "not-configured" (tr "penforge.chat.error.not-configured")
-    "not-implemented" (tr "penforge.chat.error.not-implemented")
-    (or message (tr "penforge.chat.error.generic"))))
+  [{:keys [code message reason params]}]
+  (let [{:keys [name limit limit-mb]} params]
+    (case reason
+      "file-type" (tr "penforge.chat.attach.error.type" name)
+      "file-size" (tr "penforge.chat.attach.error.size" name limit-mb)
+      "file-count" (tr "penforge.chat.attach.error.count" limit)
+      "files-total" (tr "penforge.chat.attach.error.total" limit-mb)
+      ("file-read" "file-incomplete") (tr "penforge.chat.attach.error.read" name)
+      (case code
+        "not-connected" (tr "penforge.chat.error.not-connected")
+        "busy" (tr "penforge.chat.error.busy")
+        "no-context" (tr "penforge.chat.error.no-context")
+        "not-configured" (tr "penforge.chat.error.not-configured")
+        "not-implemented" (tr "penforge.chat.error.not-implemented")
+        (or message (tr "penforge.chat.error.generic"))))))
 
 (mf/defc error-entry*
   {::mf/private true}
@@ -321,7 +351,14 @@
         on-remove
         (mf/use-fn
          (mf/deps selected)
-         #(st/emit! (chat/dismiss-selection selected)))]
+         #(st/emit! (chat/dismiss-selection selected)))
+
+        dismissed (:dismissed-selection chat)]
+
+    ;; a removed selection is forgotten once the selection changes
+    (mf/with-effect [selected dismissed]
+      (when (and (some? dismissed) (not= (set selected) dismissed))
+        (st/emit! (chat/dismiss-selection nil))))
 
     (when (seq context)
       [:li {:class (stl/css :chip :chip-selection)
@@ -343,16 +380,17 @@
 (mf/defc composer*
   {::mf/private true}
   [{:keys [chat status connected]}]
-  (let [text*       (mf/use-state "")
-        text        (deref text*)
-        problems*   (mf/use-state nil)
-        problems    (deref problems*)
-        dragging*   (mf/use-state false)
-        dragging    (deref dragging*)
-        input-ref   (mf/use-ref nil)
-        attachments (:attachments chat)
+  (let [text*        (mf/use-state "")
+        text         (deref text*)
+        problems*    (mf/use-state nil)
+        problems     (deref problems*)
+        dragging*    (mf/use-state false)
+        dragging     (deref dragging*)
+        input-ref    (mf/use-ref nil)
+        reserved-ref (mf/use-ref [])
+        attachments  (:attachments chat)
         ;; one turn at a time; workflow runs do not block the chat
-        busy        (= status :streaming)
+        busy         (= status :streaming)
 
         ;; read by callbacks; a closure would see the attachments of the
         ;; render that made it
@@ -393,11 +431,24 @@
         (mf/use-fn
          (fn [js-files]
            (when (pos? (.-length js-files))
-             (->> (files/prepare (mf/ref-val pending-ref) js-files)
-                  (p/fmap (fn [{added :attachments refused :problems}]
-                            (when (seq added)
-                              (st/emit! (chat/add-files added)))
-                            (reset! problems* (not-empty refused))))))))
+             ;; files still being read hold their room, so two quick drops
+             ;; cannot both pass the limits
+             (let [reserved (mf/ref-val reserved-ref)
+                   {:keys [accepted problems]}
+                   (files/check-browser-files (into (vec (mf/ref-val pending-ref)) reserved) js-files)
+                   slots    (mapv (fn [{:keys [size]}]
+                                    {:kind "file" :size size :slot (str (uuid/next))})
+                                  accepted)]
+               (mf/set-ref-val! reserved-ref (into reserved slots))
+               (reset! problems* (not-empty problems))
+               (->> (files/read-files accepted)
+                    (p/fmap (fn [{added :attachments refused :problems}]
+                              (mf/set-ref-val! reserved-ref
+                                               (into [] (remove (set slots)) (mf/ref-val reserved-ref)))
+                              (when (seq added)
+                                (st/emit! (chat/add-files added)))
+                              (when (seq refused)
+                                (swap! problems* #(into (vec %) refused))))))))))
 
         on-pick
         (mf/use-fn #(some-> (mf/ref-val input-ref) dom/click))
@@ -415,8 +466,12 @@
         (mf/use-fn
          (mf/deps add-files)
          (fn [event]
-           (let [pasted (files/files-of (.-clipboardData ^js event))]
-             (when (pos? (.-length pasted))
+           (let [clipboard (.-clipboardData ^js event)
+                 pasted    (files/files-of clipboard)
+                 ;; Office apps put a picture of copied text on the
+                 ;; clipboard too: text wins
+                 text      (some-> clipboard (.getData "text/plain"))]
+             (when (and (pos? (.-length pasted)) (empty? text))
                (dom/prevent-default event)
                (dom/stop-propagation event)
                (add-files pasted)))))

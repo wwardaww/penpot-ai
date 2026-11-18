@@ -93,8 +93,8 @@ export const FILE_ATTACHMENT_LIMITS = {
         "text/csv": "text",
         "application/json": "text",
     } as Record<string, FileAttachmentGroup>,
-    /** largest file per group (Claude takes images up to 5 MB) */
-    maxBytes: { image: 5 * 1024 * 1024, pdf: 10 * 1024 * 1024, text: 1024 * 1024 } as Record<
+    /** largest file per group; Claude takes images up to 5 MB of base64, about 3.75 MB raw */
+    maxBytes: { image: 3.75 * 1024 * 1024, pdf: 10 * 1024 * 1024, text: 1024 * 1024 } as Record<
         FileAttachmentGroup,
         number
     >,
@@ -136,6 +136,8 @@ export interface ChatSendMessage {
     conversationId: string;
     text: string;
     attachments?: Attachment[];
+    /** true when layers are selected but the user removed them from this message's context */
+    selectionDismissed?: boolean;
 }
 
 export interface ChatCancelMessage {
@@ -231,6 +233,10 @@ export interface ChatToolMessage {
     status: ToolCallStatus;
     /** technical detail (input, error text); only shown to the developer persona */
     detail?: string;
+    /** stable code of a daemon check (e.g. `boards-overlap`), for clients that word it themselves */
+    code?: string;
+    /** parameters of `code` */
+    params?: Record<string, unknown>;
 }
 
 /** Token usage of one assistant turn. */
@@ -359,7 +365,13 @@ export interface ErrorMessage {
     type: "error";
     rid?: string;
     code: AgentErrorCode | (string & {});
+    /** English text; clients prefer translating `reason` when they know it */
     message: string;
+    /** finer reason of a `bad-request`, e.g. a refused file: `file-type`, `file-size`, `file-count`,
+     * `files-total`, `file-read`, `file-incomplete` */
+    reason?: string;
+    /** parameters of `reason` (e.g. `{name, limitMb}`) */
+    params?: Record<string, unknown>;
 }
 
 export type DaemonMessage =

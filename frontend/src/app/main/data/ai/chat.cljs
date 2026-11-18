@@ -132,7 +132,7 @@
     chat))
 
 (defn- apply-chat-tool
-  [chat {:keys [tool-name summary status detail] :as msg}]
+  [chat {:keys [tool-name summary status detail code params] :as msg}]
   (if (active-conversation? chat msg)
     (let [status (keyword status)
           index  (find-entry-index (:entries chat)
@@ -150,7 +150,9 @@
                              :tool-name tool-name
                              :summary summary
                              :status status
-                             :detail detail}))))
+                             :detail detail
+                             :code code
+                             :params params}))))
     chat))
 
 (defn- apply-chat-done
@@ -232,7 +234,7 @@
     chat))
 
 (defn- apply-error
-  [chat {:keys [rid code message]}]
+  [chat {:keys [rid code message reason params]}]
   (cond
     ;; A failed history request only means there is nothing to restore.
     (and (some? rid) (= rid (:history-rid chat)))
@@ -246,7 +248,8 @@
             (append-entry {:kind :error :id (str (uuid/next)) :code code :message message}))))
 
     :else
-    (append-entry chat {:kind :error :id (str (uuid/next)) :code code :message message})))
+    (append-entry chat (d/without-nils {:kind :error :id (str (uuid/next)) :code code :message message
+                                        :reason reason :params params}))))
 
 (defn apply-message
   "Reduce a daemon message into the chat state."
@@ -403,22 +406,30 @@
                     (failure? before after)
                     (assoc-in [:activity :failed] true))]
         (if (and was (not is))
-          (let [{:keys [cancelled failed]} (:activity after)]
+          (let [{:keys [cancelled interrupted failed]} (:activity after)]
             (update after :activity assoc
                     :ended-at now
+                    ;; the user's Stop wins over a connection lost afterwards
                     :outcome (cond cancelled :cancelled
+                                   interrupted :interrupted
                                    failed :error
                                    :else :done)))
           after)))))
 
 (defn failed-steps
-  "Number of steps (tool calls, canvas checks) that failed during the
-  current or last activity."
+  "Number of steps (tool calls, canvas checks) of the current or last
+  activity that failed and were not retried successfully: a failed call
+  followed by a later successful call of the same tool does not count."
   [chat]
   (let [entries (:entries chat)
-        from    (min (count entries) (get-in chat [:activity :from] 0))]
-    (count (filter #(and (= :tool (:kind %)) (= :error (:status %)))
-                   (subvec entries from)))))
+        from    (min (count entries) (get-in chat [:activity :from] 0))
+        tools   (filterv #(= :tool (:kind %)) (subvec entries from))]
+    (->> (map-indexed vector tools)
+         (filter (fn [[index {:keys [status tool-name]}]]
+                   (and (= :error status)
+                        (not (some #(and (= tool-name (:tool-name %)) (= :done (:status %)))
+                                   (subvec tools (inc index)))))))
+         (count))))
 
 (defn- update-chat
   "Update the chat state with `f` and track the AI's activity."
@@ -449,6 +460,14 @@
                  (map #(proto/node-attachment file-id page-id %)))
            selected))))
 
+(defn- state-selection-dismissed?
+  "True when layers are selected but the user removed them from the
+  next message."
+  [state]
+  (let [selected (dsh/get-selected-ids state)]
+    (and (seq selected)
+         (= (set selected) (get-in state [:penforge :chat :dismissed-selection])))))
+
 (defn- state-selection-context
   [state]
   (selection-context (get-in state [:penforge :chat] empty-chat)
@@ -458,12 +477,19 @@
                      (:current-page-id state)))
 
 (defn end-turn
-  "Close a running turn whose `chat.done` will never come (lost
-  connection)."
+  "Close everything a lost connection leaves open: the running turn, whose
+  `chat.done` will never come, and the workflow runs, whose
+  `workflow.done` will never come either (they are marked
+  `:interrupted`). The activity ends as interrupted."
   [chat]
   (-> chat
+      (cond-> (working? chat) (assoc-in [:activity :interrupted] true))
       (assoc :status :idle)
       (assoc :outbox {})
+      (assoc :pending-runs {})
+      (update :runs (fn [runs]
+                      (update-vals runs #(cond-> %
+                                           (= :running (:status %)) (assoc :status :interrupted)))))
       (update :entries (fn [entries]
                          (mapv (fn [entry]
                                  (cond
@@ -638,7 +664,8 @@
             (rx/of (client/send (proto/chat-send {:rid id
                                                   :conversation-id conversation-id
                                                   :text text
-                                                  :attachments (get outbox id)}))
+                                                  :attachments (get outbox id)
+                                                  :selection-dismissed (state-selection-dismissed? state)}))
                    (clear-outbox id))
             (rx/empty)))))))
 
@@ -700,13 +727,16 @@
                  (map #(assoc % :id (str (uuid/next))) files)))))
 
 (defn dismiss-selection
-  "Leave the current canvas selection out of the next message."
+  "Leave the current canvas selection out of the next message. With nil,
+  forget the removed selection (the selection changed)."
   [selected]
   (ptk/reify ::dismiss-selection
     ptk/UpdateEvent
     (update [_ state]
-      (update-in state [:penforge :chat] (fnil assoc empty-chat)
-                 :dismissed-selection (set selected)))))
+      (if (some? selected)
+        (update-in state [:penforge :chat] (fnil assoc empty-chat)
+                   :dismissed-selection (set selected))
+        (update-in state [:penforge :chat] dissoc :dismissed-selection)))))
 
 (defn respond-permission
   "Answer a permission request of the daemon."

@@ -29,6 +29,7 @@ test("boards on top of each other are reported once they overlap", () => {
     assert.equal(problems.length, 1);
     assert.equal(problems[0].code, "boards-overlap");
     assert.deepEqual(problems[0].boardIds, ["clone", "seeded"]);
+    assert.deepEqual(problems[0].params, { names: ["Android", "Android"] });
     assert.match(problems[0].text, /"Android" and "Android" overlap on the canvas/);
 });
 
@@ -47,6 +48,7 @@ test("touching boards, boards on other pages and rounding are no overlap", () =>
 test("only design-changing tools trigger the check", () => {
     assert.equal(CanvasCheck.changesDesign("mcp__penpot__execute_code"), true);
     assert.equal(CanvasCheck.changesDesign("mcp__penpot__update_design_node"), true);
+    assert.equal(CanvasCheck.changesDesign("mcp__penpot__import_penpot_file"), true);
     assert.equal(CanvasCheck.changesDesign("mcp__penpot__list_boards"), false);
     assert.equal(CanvasCheck.changesDesign("Read"), false);
 });
@@ -56,11 +58,13 @@ test("only design-changing tools trigger the check", () => {
 /** Penpot tools whose `list_boards` answers come from a queue. */
 class QueuedBoards implements WorkflowToolsApi {
     public readonly calls: string[] = [];
+    public readonly args: unknown[] = [];
 
     constructor(private readonly answers: (BoardBox[] | "fail")[]) {}
 
-    public async call(toolName: string): Promise<WorkflowToolResult> {
+    public async call(toolName: string, args?: Record<string, unknown>): Promise<WorkflowToolResult> {
         this.calls.push(toolName);
+        this.args.push(args);
         const answer = this.answers.shift() ?? [];
         if (answer === "fail") {
             return { isError: true, content: [], text: "Tool execution failed: Error: no session" };
@@ -116,22 +120,18 @@ async function chatTurn(text: string, tools: WorkflowToolsApi): Promise<DaemonMe
 }
 
 test("a turn that hides a board under another says so in the chat", async () => {
-    const sent = await chatTurn(
-        "/tool make an Android version",
-        new QueuedBoards([
-            [IPHONE, SEEDED],
-            [IPHONE, CLONE, SEEDED],
-        ])
-    );
+    const tools = new QueuedBoards([
+        [IPHONE, SEEDED],
+        [IPHONE, CLONE, SEEDED],
+    ]);
+    const sent = await chatTurn("/tool make an Android version", tools);
 
     const failed = sent.filter((message) => message.type === "chat.tool" && message.status === "error");
     assert.equal(failed.length, 1);
     assert.equal((failed[0] as { toolName: string }).toolName, ChatService.CANVAS_CHECK);
-    const answer = sent
-        .filter((message) => message.type === "chat.delta")
-        .map((message) => (message as { text: string }).text)
-        .join("");
-    assert.match(answer, /\*\*Check:\*\* The screens "Android" and "Android" overlap/);
+    assert.equal((failed[0] as { code?: string }).code, "boards-overlap");
+    assert.deepEqual((failed[0] as { params?: unknown }).params, { names: ["Android", "Android"] });
+    assert.deepEqual(tools.args, [{ pageId: "p1" }, { pageId: "p1" }], "only the tab's page is listed");
     assert.equal(sent[sent.length - 1].type, "chat.done");
 });
 
@@ -145,8 +145,19 @@ test("turns that only read the design are not checked after", async () => {
     assert.equal(sent.filter((message) => message.type === "chat.tool").length, 0);
 });
 
-test("a failing board listing never fails the turn", async () => {
-    const sent = await chatTurn("/tool change it", new QueuedBoards(["fail", "fail"]));
+test("without a listing from before the turn nothing is reported", async () => {
+    const tools = new QueuedBoards(["fail", [IPHONE, CLONE, SEEDED]]);
+    const sent = await chatTurn("/tool change it", tools);
+    assert.deepEqual(tools.calls, ["list_boards"], "no listing after when the one before failed");
     assert.equal(sent.filter((message) => message.type === "chat.tool" && message.status === "error").length, 0);
     assert.equal(sent[sent.length - 1].type, "chat.done");
+});
+
+test("a design script that failed is checked too", async () => {
+    const tools = new QueuedBoards([
+        [IPHONE, SEEDED],
+        [IPHONE, CLONE, SEEDED],
+    ]);
+    const sent = await chatTurn("/fail-tool make an Android version", tools);
+    assert.ok(sent.some((message) => message.type === "chat.tool" && message.status === "error" && message.code));
 });

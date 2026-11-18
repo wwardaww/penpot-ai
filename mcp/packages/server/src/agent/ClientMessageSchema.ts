@@ -51,6 +51,7 @@ export class ClientMessageSchema {
             conversationId: id,
             text: z.string().max(200_000),
             attachments: z.array(attachment).max(50).optional(),
+            selectionDismissed: z.boolean().optional(),
         }),
         z.object({ type: z.literal("chat.cancel"), conversationId: id }),
         z.object({ type: z.literal("chat.history"), rid: id, conversationId: id }),

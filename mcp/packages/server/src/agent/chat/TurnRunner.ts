@@ -23,6 +23,8 @@ export interface TurnRequest {
     systemPromptAppend?: string;
     /** tells Claude when the message has no layer attached (chat turns) */
     noteMissingSelection?: boolean;
+    /** the user removed the selected layers from the message (with `noteMissingSelection`) */
+    selectionDismissed?: boolean;
 }
 
 /**
@@ -71,9 +73,13 @@ export class TurnRunner {
     /** Note for Claude when a chat message has no layer attached (the chat attaches the selection). */
     private static selectionNote(request: TurnRequest): string | undefined {
         const attached = (request.attachments ?? []).some((attachment) => attachment.kind === "node");
-        return request.noteMissingSelection && !attached
-            ? "## Canvas selection\nNo layer is selected on the canvas and none is attached to this message."
-            : undefined;
+        if (!request.noteMissingSelection || attached) {
+            return undefined;
+        }
+        return request.selectionDismissed
+            ? "## Canvas selection\nThe user has layers selected but chose not to attach them to this " +
+                  "message; do not assume the request is about them."
+            : "## Canvas selection\nNo layer is selected on the canvas and none is attached to this message.";
     }
 
     private static tabContext(context: AgentContext): string {

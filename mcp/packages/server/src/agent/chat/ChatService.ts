@@ -13,7 +13,7 @@ import { CanvasCheck } from "./CanvasCheck";
 import { ConversationStore } from "./ConversationStore";
 import { ToolSummary } from "./toolSummary";
 import type { TurnRunner } from "./TurnRunner";
-import { UploadStore } from "./UploadStore";
+import { UploadRefusedError, UploadStore } from "./UploadStore";
 
 /** Running chat turn. */
 interface ActiveTurn {
@@ -106,7 +106,8 @@ export class ChatService {
             // a refused file ends the turn before anything is stored
             const code = error instanceof AgentError ? error.code : "internal";
             const text = error instanceof Error ? error.message : String(error);
-            client.send({ type: "error", rid: message.rid, code, message: text });
+            const details = error instanceof UploadRefusedError ? { reason: error.reason, params: error.params } : {};
+            client.send({ type: "error", rid: message.rid, code, message: text, ...details });
             client.send({ type: "chat.done", conversationId, messageId: randomUUID() });
             return;
         }
@@ -120,7 +121,8 @@ export class ChatService {
         });
 
         const check = new CanvasCheck(setup.tools);
-        const boardsBefore = await check.boards();
+        // read in parallel with the turn: Claude's first design change comes seconds later
+        const boardsBefore = check.boards(setup.context.pageId);
         let changedDesign = false;
         let messageId: string = randomUUID();
         let text = "";
@@ -130,7 +132,13 @@ export class ChatService {
             const events = this.turns.run(
                 setup,
                 { id: conversationId, resumeSessionId },
-                { text: message.text, attachments, workflow: "chat", noteMissingSelection: true }
+                {
+                    text: message.text,
+                    attachments,
+                    workflow: "chat",
+                    noteMissingSelection: true,
+                    selectionDismissed: message.selectionDismissed,
+                }
             );
             for await (const event of events) {
                 switch (event.kind) {
@@ -145,7 +153,8 @@ export class ChatService {
                         client.send({ type: "chat.delta", conversationId, messageId, text: event.text });
                         break;
                     case "tool":
-                        changedDesign ||= event.status === "done" && CanvasCheck.changesDesign(event.toolName);
+                        // a script that changed the design and then failed counts too
+                        changedDesign ||= CanvasCheck.changesDesign(event.toolName);
                         client.send({
                             type: "chat.tool",
                             conversationId,
@@ -178,7 +187,7 @@ export class ChatService {
         }
 
         if (changedDesign && !signal.aborted) {
-            text += await this.reportCanvasProblems(client, conversationId, messageId, check, boardsBefore);
+            await this.reportCanvasProblems(client, conversationId, setup.context.pageId, check, await boardsBefore);
         }
         if (failure !== undefined && !signal.aborted) {
             this.logger.warn("Chat turn of %s failed: %s", conversationId, failure);
@@ -202,38 +211,31 @@ export class ChatService {
 
     /**
      * Checks the canvas after a turn that changed the design and tells the user about problems
-     * Claude's own checks missed: a failed step line per problem, and a note at the end of the
-     * answer (kept in the history).
-     *
-     * @returns the note appended to the answer ("" when the canvas looks right)
+     * Claude's own checks missed, as failed step lines with a code the client translates. Without
+     * a board listing from before the turn nothing is reported.
      */
     private async reportCanvasProblems(
         client: AgentClient,
         conversationId: string,
-        messageId: string,
+        pageId: string,
         check: CanvasCheck,
         before: Awaited<ReturnType<CanvasCheck["boards"]>>
-    ): Promise<string> {
-        const after = await check.boards();
-        if (!after) {
-            return "";
+    ): Promise<void> {
+        const after = before ? await check.boards(pageId) : null;
+        if (!before || !after) {
+            return;
         }
-        const problems = CanvasCheck.problems(before, after);
-        if (problems.length === 0) {
-            return "";
-        }
-        for (const problem of problems) {
+        for (const problem of CanvasCheck.problems(before, after)) {
             client.send({
                 type: "chat.tool",
                 conversationId,
                 toolName: ChatService.CANVAS_CHECK,
                 summary: problem.text,
                 status: "error",
+                code: problem.code,
+                params: problem.params,
             });
         }
-        const note = `\n\n**Check:** ${problems.map((problem) => problem.text).join(" ")}`;
-        client.send({ type: "chat.delta", conversationId, messageId, text: note });
-        return note;
     }
 
     private static failureText(persona: Persona, failure: string): string {

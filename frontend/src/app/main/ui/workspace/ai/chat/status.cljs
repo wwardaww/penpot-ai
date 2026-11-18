@@ -15,7 +15,7 @@
    [app.main.store :as st]
    [app.main.ui.ds.buttons.button :refer [button*]]
    [app.main.ui.ds.foundations.assets.icon :refer [icon*] :as i]
-   [app.util.i18n :refer [tr]]
+   [app.util.i18n :as i18n :refer [tr]]
    [rumext.v2 :as mf]))
 
 (defn format-elapsed
@@ -107,11 +107,12 @@
         [:div {:class (stl/css-case :status true
                                     :status-ended true
                                     :status-partly partly
-                                    :status-failed (= outcome :error))
+                                    :status-failed (contains? #{:error :interrupted} outcome))
                :role "status"
                :data-testid "ai-chat-status"}
          [:> icon* {:icon-id (cond
                                (= outcome :error) i/status-wrong
+                               (= outcome :interrupted) i/status-alert
                                (= outcome :cancelled) i/close-small
                                partly i/status-alert
                                :else i/status-tick)
@@ -120,8 +121,9 @@
          [:span {:class (stl/css :status-text)}
           (cond
             (= outcome :error) (tr "penforge.chat.status.failed")
+            (= outcome :interrupted) (tr "penforge.chat.status.interrupted")
             (= outcome :cancelled) (tr "penforge.chat.status.cancelled")
-            partly (tr "penforge.chat.status.done-with-errors" failed)
+            partly (tr "penforge.chat.status.done-with-errors" (i18n/c failed))
             :else (tr "penforge.chat.status.done"))]
          (when (and started-at ended-at)
            [:span {:class (stl/css :status-time)}

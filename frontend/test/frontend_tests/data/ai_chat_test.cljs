@@ -265,6 +265,22 @@
     (t/is (= ["local-1" "local-2"] (mapv chat/attachment-key (:attachments entry))))
     (t/is (= {} (:outbox (chat/end-turn sent))) "a lost turn drops what did not go out")))
 
+(t/deftest a-lost-connection-interrupts-every-run
+  (let [chat  (-> base
+                  (assoc-in [:pending-runs "r0"] {:name "x" :silent true})
+                  (assoc-in [:pending-runs "r1"] {:name "generate-screen" :silent false})
+                  (reduce-messages [{:type "workflow.started" :rid "r1" :run-id "run1" :name "generate-screen"}])
+                  (assoc-in [:runs "run2"] {:run-id "run2" :status :running :silent true}))
+        start (chat/track-activity base chat 0)
+        lost  (chat/track-activity start (chat/end-turn start) 5)]
+    (t/is (chat/busy? start))
+    (t/is (not (chat/busy? lost)) "nothing keeps the canvas glow or the status bar alive")
+    (t/is (not (chat/working? lost)))
+    (t/is (empty? (:pending-runs lost)))
+    (t/is (= #{:interrupted} (set (map :status (vals (:runs lost))))))
+    (t/is (= :error (:status (first (filter #(= :workflow (:kind %)) (:entries lost))))))
+    (t/is (= :interrupted (get-in lost [:activity :outcome])))))
+
 (t/deftest failed-steps-count-only-the-last-activity
   (let [old   (chat/apply-message base {:type "chat.tool" :conversation-id "c1" :tool-name "a"
                                         :summary "s" :status "error"})
@@ -277,3 +293,22 @@
                        {:type "chat.tool" :conversation-id "c1" :tool-name "u" :summary "s" :status "done"}])]
     (t/is (= 1 (chat/failed-steps old)) "without an activity every step counts")
     (t/is (= 2 (chat/failed-steps after)) "the step that failed before this work is left out")))
+
+(t/deftest retried-steps-do-not-count-as-failed
+  (let [start (chat/track-activity base (chat/add-user-message base "u1" "hi") 0)
+        after (reduce chat/apply-message start
+                      [{:type "chat.tool" :conversation-id "c1" :tool-name "x" :summary "s" :status "running"}
+                       {:type "chat.tool" :conversation-id "c1" :tool-name "x" :summary "s" :status "error"}
+                       {:type "chat.tool" :conversation-id "c1" :tool-name "x" :summary "s" :status "running"}
+                       {:type "chat.tool" :conversation-id "c1" :tool-name "x" :summary "s" :status "done"}])]
+    (t/is (= 0 (chat/failed-steps after)))))
+
+(t/deftest check-codes-and-refusal-reasons-are-kept
+  (let [chat (reduce chat/apply-message base
+                     [{:type "chat.tool" :conversation-id "c1" :tool-name "penforge_canvas_check"
+                       :summary "s" :status "error" :code "boards-overlap" :params {:names ["A" "B"]}}
+                      {:type "error" :rid "u1" :code "bad-request" :message "m"
+                       :reason "file-type" :params {:name "a.exe"}}])
+        [tool error] (:entries chat)]
+    (t/is (= ["boards-overlap" {:names ["A" "B"]}] ((juxt :code :params) tool)))
+    (t/is (= ["file-type" {:name "a.exe"}] ((juxt :reason :params) error)))))

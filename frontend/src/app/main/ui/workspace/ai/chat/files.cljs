@@ -49,8 +49,9 @@
   (get-in proto/file-limits [:types mime]))
 
 (defn- megabytes
+  "Megabytes of a byte count, with up to two decimals (3.75, 20)."
   [bytes]
-  (js/Math.round (/ bytes (* 1024 1024))))
+  (/ (js/Math.round (* 100 (/ bytes (* 1024 1024)))) 100))
 
 (defn check-files
   "Split `files` (maps with `:name`, `:mime` as reported by the browser
@@ -117,23 +118,37 @@
    :size (.-size file)
    :file file})
 
-(defn prepare
-  "Check the browser `File`s (a FileList or array) against the `pending`
-  attachments and read the accepted ones. Promise of `{:attachments
-  [proto/file-attachment] :problems [...]}`; a file that cannot be read
-  becomes a `:read` problem."
+(defn check-browser-files
+  "`check-files` for browser `File`s (a FileList or array). Synchronous, so
+  a caller can reserve the accepted files' room before reading them."
   [pending js-files]
-  (let [{:keys [accepted problems]} (check-files pending (map file-info (js/Array.from js-files)))]
-    (p/let [results (p/all (map (fn [{:keys [file] :as info}]
-                                  (-> (read-base64 file)
-                                      (p/then (fn [base64]
-                                                {:attachment (proto/file-attachment
-                                                              (assoc info :base64 base64))}))
-                                      (p/catch (fn [_]
-                                                 {:problem {:code :read :name (:name info)}}))))
-                                accepted))]
-      {:attachments (into [] (keep :attachment) results)
-       :problems (into problems (keep :problem) results)})))
+  (check-files pending (map file-info (js/Array.from js-files))))
+
+(defn read-files
+  "Read the files `check-browser-files` accepted. Promise of
+  `{:attachments [proto/file-attachment] :problems [...]}`; a file that
+  cannot be read becomes a `:read` problem. Never rejects."
+  [accepted]
+  (p/let [results (p/all (map (fn [{:keys [file] :as info}]
+                                (-> (read-base64 file)
+                                    (p/then (fn [base64]
+                                              {:attachment (proto/file-attachment
+                                                            (assoc info :base64 base64))}))
+                                    (p/catch (fn [_]
+                                               {:problem {:code :read :name (:name info)}}))))
+                              accepted))]
+    {:attachments (into [] (keep :attachment) results)
+     :problems (into [] (keep :problem) results)}))
+
+(defn object-url
+  "Object URL of base64 content of type `mime`; revoke it with
+  `js/URL.revokeObjectURL` when done."
+  [mime base64]
+  (let [binary (js/atob base64)
+        bytes  (js/Uint8Array. (.-length binary))]
+    (dotimes [index (.-length binary)]
+      (aset bytes index (.charCodeAt binary index)))
+    (js/URL.createObjectURL (js/Blob. #js [bytes] #js {:type mime}))))
 
 (defn files-of
   "Browser `File`s of a clipboard or drag `DataTransfer`, as an array

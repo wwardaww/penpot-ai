@@ -10,13 +10,38 @@ import {
 import { AgentError } from "../AgentClient";
 import type { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 
+/** Reason of a refused file, sent in the `error` message for clients to translate. */
+export type UploadRefusal = "file-type" | "file-size" | "file-count" | "files-total" | "file-read" | "file-incomplete";
+
+/**
+ * Refusal of the files of a chat message: a `bad-request` with a reason code and its parameters.
+ */
+export class UploadRefusedError extends AgentError {
+    constructor(
+        public readonly reason: UploadRefusal,
+        public readonly params: Record<string, unknown>,
+        message: string
+    ) {
+        super("bad-request", message);
+        this.name = "UploadRefusedError";
+    }
+}
+
+/** A checked file: its bytes and its real media type. */
+interface CheckedFile {
+    bytes: Buffer;
+    mime: string;
+}
+
 /**
  * Store of the files users attach to chat messages (`.penforge/uploads/` of the project).
  *
  * Checks every file attachment before anything is written: accepted media type, size limits per
- * file and per message, declared size, base64 encoding, and that the bytes match the type (image
- * and PDF signatures, UTF-8 text). A message with one bad file is refused as a whole. Files are
- * written under fresh, sanitized names, never outside the project folder.
+ * file and per message, declared size and base64 encoding. The bytes decide the type: an image or
+ * PDF whose bytes show another accepted type (a JPEG named `.png`) gets the real type, UTF-16 text
+ * is converted to UTF-8, and anything else that does not match is refused. A message with one bad
+ * file is refused as a whole. Files are written under fresh, sanitized names, never outside the
+ * project folder.
  */
 export class UploadStore {
     /** Folder of the uploads, relative to the project's metadata folder. */
@@ -30,47 +55,55 @@ export class UploadStore {
      * Checks and saves the file attachments of a message.
      *
      * @param attachments - the message's attachments (other kinds pass through unchanged)
-     * @returns the attachments, file attachments with their `path` set (bytes kept for Claude)
-     * @throws AgentError `bad-request` when a file is refused; nothing is written then
+     * @returns the attachments, file attachments with their real type, size and `path` (bytes kept
+     *   for Claude)
+     * @throws UploadRefusedError when a file is refused; nothing is written then
      */
     public async saveAll(attachments: Attachment[] | undefined): Promise<Attachment[] | undefined> {
         if (!attachments) {
             return attachments;
         }
         const files = attachments.filter((attachment): attachment is FileAttachment => attachment.kind === "file");
-        const decoded = UploadStore.check(files);
-        const saved = new Map<FileAttachment, string>();
+        const checked = UploadStore.check(files);
+        const saved = new Map<FileAttachment, FileAttachment>();
         for (const file of files) {
-            saved.set(file, await this.write(file.name, decoded.get(file)!));
+            const { bytes, mime } = checked.get(file)!;
+            const path = await this.write(file.name, bytes);
+            saved.set(file, { ...file, mime, size: bytes.length, base64: bytes.toString("base64"), path });
         }
-        return attachments.map((attachment) =>
-            attachment.kind === "file" ? { ...attachment, path: saved.get(attachment) } : attachment
-        );
+        return attachments.map((attachment) => (attachment.kind === "file" ? saved.get(attachment)! : attachment));
     }
 
     /**
      * Checks file attachments without saving them.
      *
-     * @returns the decoded bytes of every file
-     * @throws AgentError `bad-request` naming the first problem
+     * @returns the bytes and real type of every file
+     * @throws UploadRefusedError naming the first problem
      */
-    public static check(files: FileAttachment[]): Map<FileAttachment, Buffer> {
+    public static check(files: FileAttachment[]): Map<FileAttachment, CheckedFile> {
         if (files.length > FILE_ATTACHMENT_LIMITS.maxFiles) {
-            throw UploadStore.refuse(`At most ${FILE_ATTACHMENT_LIMITS.maxFiles} files can be attached to one message`);
-        }
-        const decoded = new Map<FileAttachment, Buffer>();
-        let total = 0;
-        for (const file of files) {
-            const bytes = UploadStore.checkFile(file);
-            total += bytes.length;
-            decoded.set(file, bytes);
-        }
-        if (total > FILE_ATTACHMENT_LIMITS.maxTotalBytes) {
-            throw UploadStore.refuse(
-                `The attached files are too large together (limit ${UploadStore.megabytes(FILE_ATTACHMENT_LIMITS.maxTotalBytes)})`
+            throw new UploadRefusedError(
+                "file-count",
+                { limit: FILE_ATTACHMENT_LIMITS.maxFiles },
+                `At most ${FILE_ATTACHMENT_LIMITS.maxFiles} files can be attached to one message`
             );
         }
-        return decoded;
+        const checked = new Map<FileAttachment, CheckedFile>();
+        let total = 0;
+        for (const file of files) {
+            const result = UploadStore.checkFile(file);
+            total += result.bytes.length;
+            checked.set(file, result);
+        }
+        if (total > FILE_ATTACHMENT_LIMITS.maxTotalBytes) {
+            const limitMb = UploadStore.megabytes(FILE_ATTACHMENT_LIMITS.maxTotalBytes);
+            throw new UploadRefusedError(
+                "files-total",
+                { limitMb },
+                `The attached files are too large together (limit ${limitMb} MB)`
+            );
+        }
+        return checked;
     }
 
     /**
@@ -100,10 +133,41 @@ export class UploadStore {
         return safe.length > 0 ? safe : "file";
     }
 
-    private static checkFile(file: FileAttachment): Buffer {
-        const group = UploadStore.group(file.mime);
-        if (!group) {
-            throw UploadStore.refuse(
+    /**
+     * Media type of binary content from its first bytes (accepted images and PDF), or undefined.
+     */
+    public static sniff(bytes: Buffer): string | undefined {
+        const startsWith = (signature: number[] | string, offset = 0) => {
+            const expected = typeof signature === "string" ? Buffer.from(signature, "latin1") : Buffer.from(signature);
+            return (
+                bytes.length >= offset + expected.length &&
+                bytes.subarray(offset, offset + expected.length).equals(expected)
+            );
+        };
+        if (startsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
+            return "image/png";
+        }
+        if (startsWith([0xff, 0xd8, 0xff])) {
+            return "image/jpeg";
+        }
+        if (startsWith("GIF87a") || startsWith("GIF89a")) {
+            return "image/gif";
+        }
+        if (startsWith("RIFF") && startsWith("WEBP", 8)) {
+            return "image/webp";
+        }
+        if (startsWith("%PDF-")) {
+            return "application/pdf";
+        }
+        return undefined;
+    }
+
+    private static checkFile(file: FileAttachment): CheckedFile {
+        const declared = UploadStore.group(file.mime);
+        if (!declared) {
+            throw new UploadRefusedError(
+                "file-type",
+                { name: file.name },
                 `"${file.name}" is not a supported file type; attach images (PNG, JPEG, GIF, WebP), PDFs or text files`
             );
         }
@@ -112,60 +176,62 @@ export class UploadStore {
             file.base64.length % 4 !== 0 ||
             !UploadStore.BASE64_PATTERN.test(file.base64)
         ) {
-            throw UploadStore.refuse(`"${file.name}" could not be read`);
+            throw new UploadRefusedError("file-read", { name: file.name }, `"${file.name}" could not be read`);
         }
-        const bytes = Buffer.from(file.base64, "base64");
-        const limit = FILE_ATTACHMENT_LIMITS.maxBytes[group];
-        if (bytes.length > limit) {
-            throw UploadStore.refuse(`"${file.name}" is too large (limit ${UploadStore.megabytes(limit)})`);
+        const raw = Buffer.from(file.base64, "base64");
+        if (raw.length !== file.size) {
+            throw new UploadRefusedError("file-incomplete", { name: file.name }, `"${file.name}" arrived incomplete`);
         }
-        if (bytes.length !== file.size) {
-            throw UploadStore.refuse(`"${file.name}" arrived incomplete`);
-        }
-        if (!UploadStore.matchesType(bytes, file.mime, group)) {
-            throw UploadStore.refuse(`"${file.name}" does not contain what its type says (${file.mime})`);
-        }
-        return bytes;
-    }
-
-    private static matchesType(bytes: Buffer, mime: string, group: FileAttachmentGroup): boolean {
-        const startsWith = (signature: number[] | string, offset = 0) => {
-            const expected = typeof signature === "string" ? Buffer.from(signature, "latin1") : Buffer.from(signature);
-            return (
-                bytes.length >= offset + expected.length &&
-                bytes.subarray(offset, offset + expected.length).equals(expected)
+        const checked = UploadStore.realContent(raw, file.mime, declared);
+        if (!checked) {
+            throw new UploadRefusedError(
+                "file-type",
+                { name: file.name },
+                `"${file.name}" does not contain an image, a PDF or UTF-8/UTF-16 text`
             );
-        };
-        switch (group) {
-            case "image":
-                switch (mime) {
-                    case "image/png":
-                        return startsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-                    case "image/jpeg":
-                        return startsWith([0xff, 0xd8, 0xff]);
-                    case "image/gif":
-                        return startsWith("GIF87a") || startsWith("GIF89a");
-                    case "image/webp":
-                        return startsWith("RIFF") && startsWith("WEBP", 8);
-                    default:
-                        return false;
-                }
-            case "pdf":
-                return startsWith("%PDF-");
-            case "text":
-                return UploadStore.isUtf8Text(bytes);
         }
+        const limit = FILE_ATTACHMENT_LIMITS.maxBytes[UploadStore.group(checked.mime)!];
+        if (checked.bytes.length > limit) {
+            const limitMb = UploadStore.megabytes(limit);
+            throw new UploadRefusedError(
+                "file-size",
+                { name: file.name, limitMb },
+                `"${file.name}" is too large (limit ${limitMb} MB)`
+            );
+        }
+        return checked;
     }
 
-    private static isUtf8Text(bytes: Buffer): boolean {
-        if (bytes.includes(0)) {
-            return false;
+    /**
+     * The bytes and real type of a file: binary content is recognised by its signature whatever
+     * the declared type; text must be UTF-8 or UTF-16 with a byte order mark (converted to UTF-8).
+     */
+    private static realContent(bytes: Buffer, mime: string, declared: FileAttachmentGroup): CheckedFile | null {
+        const sniffed = UploadStore.sniff(bytes);
+        if (sniffed) {
+            return { bytes, mime: sniffed };
         }
+        if (declared !== "text") {
+            return null;
+        }
+        const text = UploadStore.decodeText(bytes);
+        return text === null ? null : { bytes: Buffer.from(text, "utf8"), mime };
+    }
+
+    private static decodeText(bytes: Buffer): string | null {
         try {
-            new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-            return true;
+            if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+                return new TextDecoder("utf-16le", { fatal: true }).decode(bytes.subarray(2));
+            }
+            if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+                return new TextDecoder("utf-16be", { fatal: true }).decode(bytes.subarray(2));
+            }
+            if (bytes.includes(0)) {
+                return null;
+            }
+            return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
         } catch {
-            return false;
+            return null;
         }
     }
 
@@ -178,11 +244,8 @@ export class UploadStore {
         return relative(this.workspace.root, file).split(sep).join("/");
     }
 
-    private static megabytes(bytes: number): string {
-        return `${Math.round(bytes / (1024 * 1024))} MB`;
-    }
-
-    private static refuse(message: string): AgentError {
-        return new AgentError("bad-request", message);
+    /** Megabytes of a byte count, with up to two decimals ("3.75", "20"). */
+    public static megabytes(bytes: number): string {
+        return String(Math.round((bytes / (1024 * 1024)) * 100) / 100);
     }
 }

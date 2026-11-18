@@ -9,8 +9,8 @@
 
   While the AI may change the design (a chat turn streams or a workflow
   runs, see `app.main.data.ai.chat/busy?`), the shapes changed by local
-  commits on the current page are collected, plus the layers attached
-  to the message that started the work. Their area shows a soft,
+  commits on the current page are collected, plus, for a chat turn, the
+  layers attached to the message that started it. Their area shows a soft,
   animated glow with an \"AI\" badge, one region per top-level board
   (or root shape), computed from the current shapes so it grows with
   them. It fades out when the work ends.
@@ -193,7 +193,12 @@
                    (rx/filter seq)
                    (rx/subs! #(swap! ids* into %)))]
           (reset! leaving* false)
-          (reset! ids* (attached-ids (get-in @st/state [:penforge :chat]) page-id))
+          ;; the attached layers glow only for work the chat message started
+          ;; (not for a dialog's or menu's workflow run)
+          (reset! ids* (let [chat (get-in @st/state [:penforge :chat])]
+                         (if (= :streaming (:status chat))
+                           (attached-ids chat page-id)
+                           #{})))
           #(rx/dispose! subscription))
         (let [timer (js/setTimeout #(reset! ids* #{}) fade-out-ms)]
           (reset! leaving* true)

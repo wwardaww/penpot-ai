@@ -18,6 +18,8 @@ export interface CanvasProblem {
     code: "boards-overlap";
     /** the boards involved */
     boardIds: string[];
+    /** parameters for the client's wording */
+    params: { names: string[] };
     /** English text for the user (designer wording) */
     text: string;
 }
@@ -27,17 +29,18 @@ export interface CanvasProblem {
  *
  * Claude verifies its work with node screenshots, which render a node on its own: a new board placed
  * under another board (for instance on top of an empty board the file started with) looks right
- * there while the user sees the board on top. The check compares the top-level boards before and
- * after the turn and reports pairs of boards on the same page that overlap now but did not before.
- * Failures of the board listing are ignored: the check is a safety net, never a reason to fail a
- * turn.
+ * there while the user sees the board on top. The check compares the top-level boards of the
+ * tab's page before and after the turn and reports pairs of boards that overlap now but did not
+ * before. Failures of the board listing are ignored, and without a listing from before the turn
+ * nothing is reported: the check is a safety net, never a reason to fail a turn.
  */
 export class CanvasCheck {
     private static readonly LIST_TOOL = "list_boards";
     /** Overlaps thinner than this (in px) are rounding, not boards on top of each other. */
     private static readonly MIN_OVERLAP = 1;
     /** Tools whose use means the turn may have changed the design. */
-    private static readonly DESIGN_TOOLS = /^mcp__penpot__(execute_code|update_design_node|import_image)$/;
+    private static readonly DESIGN_TOOLS =
+        /^mcp__penpot__(execute_code|update_design_node|import_image|import_penpot_file)$/;
     private readonly logger = createLogger("CanvasCheck");
 
     /**
@@ -59,14 +62,16 @@ export class CanvasCheck {
     }
 
     /**
-     * Lists the top-level boards of every page, or null when they cannot be read.
+     * Lists the top-level boards of a page, or null when they cannot be read.
+     *
+     * @param pageId - the page
      */
-    public async boards(): Promise<BoardBox[] | null> {
+    public async boards(pageId: string): Promise<BoardBox[] | null> {
         if (!this.tools) {
             return null;
         }
         try {
-            const result = await this.withTimeout(this.tools.call(CanvasCheck.LIST_TOOL, {}));
+            const result = await this.withTimeout(this.tools.call(CanvasCheck.LIST_TOOL, { pageId }));
             if (result.isError) {
                 return null;
             }
@@ -80,16 +85,17 @@ export class CanvasCheck {
     /**
      * Problems of the canvas after a turn.
      *
-     * @param before - the boards before the turn (null when unknown: every overlap is reported)
+     * @param before - the boards before the turn
      * @param after - the boards after the turn
      */
-    public static problems(before: BoardBox[] | null, after: BoardBox[]): CanvasProblem[] {
-        const known = new Set((before ? CanvasCheck.overlaps(before) : []).map(([a, b]) => CanvasCheck.key(a, b)));
+    public static problems(before: BoardBox[], after: BoardBox[]): CanvasProblem[] {
+        const known = new Set(CanvasCheck.overlaps(before).map(([a, b]) => CanvasCheck.key(a, b)));
         return CanvasCheck.overlaps(after)
             .filter(([a, b]) => !known.has(CanvasCheck.key(a, b)))
             .map(([a, b]) => ({
                 code: "boards-overlap",
                 boardIds: [a.id, b.id],
+                params: { names: [a.name, b.name] },
                 text:
                     `The screens "${a.name}" and "${b.name}" overlap on the canvas, so one hides the other. ` +
                     "Move one of them, or ask me to fix it.",

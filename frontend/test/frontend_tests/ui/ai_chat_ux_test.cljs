@@ -114,7 +114,7 @@
     (t/is (= ["a.png" "small.pdf" "DESIGN.md"] (mapv :name accepted)))
     (t/is (= ["text/markdown"] (mapv :mime (filter #(= "DESIGN.md" (:name %)) accepted)))
           "the extension fixes the browser's empty type")
-    (t/is (= [[:type "tool.exe"] [:size "big.png" 5] [:total "spec.pdf" 20]]
+    (t/is (= [[:type "tool.exe"] [:size "big.png" 3.75] [:total "spec.pdf" 20]]
              (mapv #(vec (remove nil? ((juxt :code :name :limit) %))) problems))))
   (let [pending (vec (repeat 10 {:kind "file" :size 1}))]
     (t/is (= [:count] (mapv :code (:problems (files/check-files pending [{:name "a.txt" :mime "text/plain" :size 1}])))))))
@@ -157,10 +157,12 @@
   (t/is (str/includes? (render-status {:activity {:started-at 0 :ended-at 1 :outcome :done :from 0}
                                        :entries [{:kind :user :id "u"}
                                                  {:kind :tool :id "t" :status :error :summary "x"}]})
-                       "penforge.chat.status.done-with-errors 1")
+                       "penforge.chat.status.done-with-errors")
         "a finished run with failed steps says so")
   (t/is (str/includes? (render-status {:activity {:started-at 0 :ended-at 1 :outcome :cancelled}})
-                       "penforge.chat.status.cancelled")))
+                       "penforge.chat.status.cancelled"))
+  (t/is (str/includes? (render-status {:activity {:started-at 0 :ended-at 1 :outcome :interrupted}})
+                       "penforge.chat.status.interrupted")))
 
 ;; --- Panel
 
@@ -177,11 +179,19 @@
                                 :size 3 :base64 "AAAA"}]
                  :entries [{:kind :user :id "u1" :text "build this"
                             :attachments [{:kind "file" :name "spec.pdf" :mime "application/pdf"
-                                           :size 9 :path ".penforge/uploads/x-spec.pdf"}]}]})
+                                           :size 9 :path ".penforge/uploads/x-spec.pdf"}]}
+                           {:kind :tool :id "t1" :tool-name "penforge_canvas_check" :status :error
+                            :summary "English" :code "boards-overlap" :params {:names ["Android" "Android"]}}
+                           {:kind :error :id "e1" :code "bad-request" :message "English"
+                            :reason "file-size" :params {:name "big.png" :limit-mb 3.75}}]})
         markup (with-state state #(render-static (mf/element panel/chat-panel* #js {})))]
     (t/is (str/includes? markup "data-testid=\"ai-chat-selection\""))
     (t/is (str/includes? markup "Title"))
-    (t/is (str/includes? markup "src=\"data:image/png;base64,AAAA\""))
+    (t/is (str/includes? markup "src=\"blob:") "image chips show an object URL")
+    (t/is (str/includes? markup "penforge.chat.check.boards-overlap Android Android")
+          "the canvas check is worded by the client")
+    (t/is (str/includes? markup "penforge.chat.attach.error.size big.png 3.75")
+          "a refused file is worded by the client")
     (t/is (str/includes? markup "DESIGN.md"))
     (t/is (str/includes? markup "spec.pdf") "history entries show their files")
     (t/is (str/includes? markup "data-testid=\"ai-chat-status\""))

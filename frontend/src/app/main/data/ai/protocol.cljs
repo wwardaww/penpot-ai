@@ -80,7 +80,7 @@
            "text/markdown" :text
            "text/csv" :text
            "application/json" :text}
-   :max-bytes {:image (* 5 1024 1024)
+   :max-bytes {:image (* 3.75 1024 1024)
                :pdf (* 10 1024 1024)
                :text (* 1024 1024)}
    :max-files 10
@@ -112,7 +112,8 @@
      [:rid :string]
      [:conversation-id :string]
      [:text :string]
-     [:attachments {:optional true} [:vector schema:attachment]]]]
+     [:attachments {:optional true} [:vector schema:attachment]]
+     [:selection-dismissed {:optional true} :boolean]]]
 
    ["chat.cancel"
     [:map [:type :string] [:conversation-id :string]]]
@@ -167,7 +168,10 @@
      [:tool-name :string]
      [:summary :string]
      [:status [:enum "running" "done" "error"]]
-     [:detail {:optional true} :string]]]
+     [:detail {:optional true} :string]
+     ;; daemon checks (W25): stable code + params the client words itself
+     [:code {:optional true} :string]
+     [:params {:optional true} [:map-of :keyword :any]]]]
 
    ["chat.done"
     [:map
@@ -241,7 +245,10 @@
      [:type :string]
      [:rid {:optional true} :string]
      [:code :string]
-     [:message :string]]]])
+     [:message :string]
+     ;; finer reason of a refused request (W25 file refusals) and its params
+     [:reason {:optional true} :string]
+     [:params {:optional true} [:map-of :keyword :any]]]]])
 
 (def valid-client-message?
   (sm/lazy-validator schema:client-message))
@@ -305,13 +312,16 @@
     (assoc :project-name project-name)))
 
 (defn chat-send
-  [{:keys [rid conversation-id text attachments]}]
+  [{:keys [rid conversation-id text attachments selection-dismissed]}]
   (cond-> {:type "chat.send"
            :rid (or rid (next-rid))
            :conversation-id conversation-id
            :text text}
     (seq attachments)
-    (assoc :attachments (vec attachments))))
+    (assoc :attachments (vec attachments))
+
+    selection-dismissed
+    (assoc :selection-dismissed true)))
 
 (defn chat-cancel
   [conversation-id]

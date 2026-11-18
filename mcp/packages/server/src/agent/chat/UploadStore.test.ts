@@ -4,10 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 import type { Attachment, FileAttachment } from "@penpot/mcp-common";
-import { AgentError } from "../AgentClient";
 import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import { AttachmentPrompt } from "./AttachmentPrompt";
-import { UploadStore } from "./UploadStore";
+import { UploadRefusedError, UploadStore } from "./UploadStore";
 
 const PROJECT_ID = "5b2a9c11-3f4e-4c70-8a1d-0e6f2b7c9d31";
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
@@ -28,10 +27,11 @@ function uploads(): string[] {
     }
 }
 
-async function refused(attachments: Attachment[], pattern: RegExp): Promise<void> {
+async function refused(attachments: Attachment[], reason: string, pattern: RegExp): Promise<void> {
     await assert.rejects(new UploadStore(workspace).saveAll(attachments), (error: unknown) => {
-        assert.ok(error instanceof AgentError);
+        assert.ok(error instanceof UploadRefusedError);
         assert.equal(error.code, "bad-request");
+        assert.equal(error.reason, reason);
         assert.match(error.message, pattern);
         return true;
     });
@@ -75,20 +75,41 @@ test("messages without files are returned unchanged", async () => {
 });
 
 test("unsupported types are refused", async () => {
-    await refused([file("tool.exe", "application/x-msdownload", Buffer.from("MZ"))], /not a supported file type/);
-    await refused([file("logo.svg", "image/svg+xml", Buffer.from("<svg/>"))], /not a supported file type/);
+    await refused(
+        [file("tool.exe", "application/x-msdownload", Buffer.from("MZ"))],
+        "file-type",
+        /not a supported file type/
+    );
+    await refused([file("logo.svg", "image/svg+xml", Buffer.from("<svg/>"))], "file-type", /not a supported/);
 });
 
-test("bytes that do not match the declared type are refused", async () => {
-    await refused([file("fake.png", "image/png", Buffer.from("hello"))], /does not contain what its type says/);
-    await refused([file("fake.pdf", "application/pdf", PNG)], /does not contain/);
-    await refused([file("bin.txt", "text/plain", Buffer.from([0x61, 0x00, 0x62]))], /does not contain/);
-    await refused([file("latin.txt", "text/plain", Buffer.from([0xff, 0xfe, 0x41]))], /does not contain/);
+test("the bytes decide the real type of a file", async () => {
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+    const utf16 = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("Merhaba ğ", "utf16le")]);
+    const saved = (await new UploadStore(workspace).saveAll([
+        file("photo.png", "image/png", jpeg),
+        file("spec.png", "image/png", PDF),
+        file("notes.txt", "text/plain", utf16),
+    ])) as FileAttachment[];
+
+    assert.deepEqual(
+        saved.map((attachment) => attachment.mime),
+        ["image/jpeg", "application/pdf", "text/plain"]
+    );
+    assert.equal(Buffer.from(saved[2].base64!, "base64").toString("utf8"), "Merhaba ğ", "UTF-16 becomes UTF-8");
+    assert.equal(saved[2].size, Buffer.byteLength("Merhaba ğ"));
+    assert.deepEqual(readFileSync(join(workspace.root, saved[2].path!)).toString("utf8"), "Merhaba ğ");
+});
+
+test("content that is no accepted type is refused", async () => {
+    await refused([file("fake.png", "image/png", Buffer.from("hello"))], "file-type", /does not contain an image/);
+    await refused([file("bin.txt", "text/plain", Buffer.from([0x61, 0x00, 0x62]))], "file-type", /does not contain/);
+    await refused([file("latin.txt", "text/plain", Buffer.from([0xe9, 0x41, 0xe8]))], "file-type", /does not contain/);
 });
 
 test("size limits per file and per message are enforced", async () => {
-    const bigImage = Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]);
-    await refused([file("big.png", "image/png", bigImage)], /too large \(limit 5 MB\)/);
+    const bigImage = Buffer.concat([PNG, Buffer.alloc(4 * 1024 * 1024)]);
+    await refused([file("big.png", "image/png", bigImage)], "file-size", /too large \(limit 3.75 MB\)/);
 
     const pdf = Buffer.concat([PDF, Buffer.alloc(9 * 1024 * 1024)]);
     await refused(
@@ -97,20 +118,25 @@ test("size limits per file and per message are enforced", async () => {
             file("b.pdf", "application/pdf", pdf),
             file("c.pdf", "application/pdf", pdf),
         ],
+        "files-total",
         /too large together/
     );
 
     const many = Array.from({ length: 11 }, (_, index) => file(`f${index}.txt`, "text/plain", Buffer.from("x")));
-    await refused(many, /At most 10 files/);
+    await refused(many, "file-count", /At most 10 files/);
 });
 
 test("a declared size that differs from the bytes is refused", async () => {
-    await refused([file("cut.pdf", "application/pdf", PDF, PDF.length + 10)], /arrived incomplete/);
+    await refused([file("cut.pdf", "application/pdf", PDF, PDF.length + 10)], "file-incomplete", /incomplete/);
 });
 
 test("malformed base64 is refused", async () => {
-    await refused([{ kind: "file", name: "x.txt", mime: "text/plain", size: 1, base64: "@@@=" }], /could not be read/);
-    await refused([{ kind: "file", name: "x.txt", mime: "text/plain", size: 1 }], /could not be read/);
+    await refused(
+        [{ kind: "file", name: "x.txt", mime: "text/plain", size: 1, base64: "@@@=" }],
+        "file-read",
+        /could not be read/
+    );
+    await refused([{ kind: "file", name: "x.txt", mime: "text/plain", size: 1 }], "file-read", /could not be read/);
 });
 
 test("safe names drop folders and odd characters", () => {
