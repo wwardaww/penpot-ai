@@ -24,9 +24,9 @@
   (:import
    java.io.InputStream
    java.io.OutputStream
-   java.nio.file.FileSystems
+   java.nio.file.attribute.FileAttribute
    java.nio.file.Files
-   java.nio.file.attribute.FileAttribute))
+   java.nio.file.FileSystems))
 
 (def default-tmp-dir
   "Folder of the temporary files; `PENPOT_TMP_DIRECTORY` overrides it
