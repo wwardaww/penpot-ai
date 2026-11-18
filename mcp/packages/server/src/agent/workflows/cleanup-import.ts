@@ -172,7 +172,6 @@ export class ImportCleaner {
         try {
             return await this.execute(false);
         } finally {
-            await this.runCode(CleanupScripts.closeStep()).catch(() => undefined);
             release();
         }
     }
@@ -1158,8 +1157,6 @@ export class ImportCleaner {
         try {
             await action();
         } catch (error) {
-            // a step that failed between its two scripts leaves its undo block open
-            await this.runCode(CleanupScripts.closeStep()).catch(() => undefined);
             if (this.ctx.signal.aborted) {
                 throw error;
             }

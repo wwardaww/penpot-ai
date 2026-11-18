@@ -282,7 +282,6 @@ describe("CleanupScripts", () => {
             CleanupScripts.read({ pageId: "p", unitId: "u" }),
             CleanupScripts.junkHide("p", []),
             CleanupScripts.junkFinish("p", [], []),
-            CleanupScripts.closeStep(),
             CleanupScripts.applyLayouts("p", [], {}),
             CleanupScripts.revertLayouts("p", [], {}),
             CleanupScripts.applyComponent(
@@ -303,6 +302,9 @@ describe("CleanupScripts", () => {
     it("applies and reverts layouts, turning groups into boards and back", async () => {
         const scene = cardListScene();
         const { penpot } = scene;
+        const badge = new FakeShape("rectangle", "Badge", 300, 110, 40, 16);
+        badge.visible = false;
+        scene.cards[0].add(badge);
         const before = await penpot.render(scene.screen.id);
         const heuristics = new CleanupHeuristics(await scanOf(penpot));
         const layouts = heuristics.layouts(new Set(heuristics.junk().map((item) => item.nodeId)));
@@ -329,6 +331,9 @@ describe("CleanupScripts", () => {
         );
         const card = penpot.page.getShapeById(applied.remap[scene.cards[0].id])!;
         assert.equal(card.flex?.topPadding, 16);
+        const shownLater = card.items.find((shape) => shape.name === "Badge")!;
+        assert.equal(shownLater.absolute, true, "a kept hidden child stays where it is when shown");
+        assert.deepEqual([shownLater.x, shownLater.y], [300, 110]);
         assert.equal(card.items[0].name, "Rectangle", "background stays at the bottom");
         assert.equal(card.items[0].absolute, true);
         assert.deepEqual(card.children.map((child) => child.name).slice(0, 2), ["Title", "Subtitle"]);
@@ -358,7 +363,8 @@ describe("CleanupScripts", () => {
                 CleanupScripts.applyComponent(penpot.page.id, proposal, "Task Card", "r:1")
             )) as string
         );
-        assert.equal(penpot.openBlocks, 1, "the step's undo block stays open until keep or take back");
+        assert.equal(penpot.openBlocks, 0, "every script closes its own undo block");
+        assert.equal(penpot.undoBlocks, 1);
         assert.deepEqual(step.errors, []);
         assert.equal(step.pairs.length, 2);
         assert.equal(penpot.components[0].name, "Task Card");
@@ -370,7 +376,7 @@ describe("CleanupScripts", () => {
 
         await penpot.execute(CleanupScripts.revertComponent(penpot.page.id, step));
         assert.equal(penpot.openBlocks, 0);
-        assert.equal(penpot.undoBlocks, 1, "one undo block for the whole step");
+        assert.equal(penpot.undoBlocks, 2, "apply and take back: one undo block each");
         assert.equal(penpot.components.length, 0);
         assert.equal(penpot.page.getShapeById(step.pairs[0].copyId), null);
         assert.ok(scene.cards[1].visible && scene.cards[2].visible);

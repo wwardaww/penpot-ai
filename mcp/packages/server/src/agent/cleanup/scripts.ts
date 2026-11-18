@@ -4,11 +4,10 @@ import type { ComponentProposal, JunkProposal, LayoutProposal } from "./types";
  * Plugin API code of the tidy-up, run with `execute_code` (natural child ordering is on there:
  * `children` of a flex board are in visual order, of other containers bottom to top).
  *
- * Every script that changes the design opens the page first and returns a JSON string. Layout
- * scripts wrap their changes in one undo block. A junk or component step spans two scripts (apply,
- * then keep or take back) and stays one undo block: the first script opens it and keeps it in the
- * plugin's persistent `storage`, the second closes it ({@link CleanupScripts.closeStep} closes a
- * block left open by a failed step).
+ * Every script that changes the design opens the page first, wraps its changes in one undo block
+ * that it closes before it returns, and returns a JSON string. A junk or component step runs two
+ * scripts (apply, then keep or take back), so it makes two undo entries: a block kept open across
+ * scripts would be force-committed by Penpot after 20 s and would take in the user's own edits.
  */
 export class CleanupScripts {
     /** most layers read per unit */
@@ -28,15 +27,13 @@ const openPage = async (pageId) => {
   return penpot.currentPage || page;
 };
 const message = (e) => String((e && e.message) || e);
-const STEP = "penforgeCleanupBlock";
+// the script's undo block: opened and closed inside this one call
+let BLOCK = null;
+const beginStep = () => { if (!BLOCK) { BLOCK = penpot.history.undoBlockBegin(); } };
 const endStep = () => {
-  const block = storage[STEP];
-  storage[STEP] = null;
+  const block = BLOCK;
+  BLOCK = null;
   if (block) { penpot.history.undoBlockFinish(block); }
-};
-const beginStep = () => {
-  endStep();
-  storage[STEP] = penpot.history.undoBlockBegin();
 };
 `;
 
@@ -244,8 +241,8 @@ return JSON.stringify({ nodes, truncated });
     }
 
     /**
-     * Opens the junk step's undo block and hides the junk layers that are still visible.
-     * JSON `{hidden:[id], missing:[id]}`. Finish with {@link junkFinish}.
+     * Hides the junk layers that are still visible (one undo block). JSON `{hidden:[id],
+     * missing:[id]}`. Finish with {@link junkFinish}.
      */
     public static junkHide(pageId: string, items: JunkProposal[]): string {
         return `${CleanupScripts.PRELUDE}
@@ -268,13 +265,14 @@ try {
   endStep();
   throw e;
 }
+endStep();
 return JSON.stringify({ hidden, missing });
 `;
     }
 
     /**
-     * Ends the junk step: shows `showIds` again (taken back) and removes `removeIds` (kept), then
-     * closes the step's undo block. JSON `{removed, shown}`.
+     * Ends the junk step: shows `showIds` again (taken back) and removes `removeIds` (kept), in
+     * one undo block. JSON `{removed, shown}`.
      */
     public static junkFinish(pageId: string, removeIds: string[], showIds: string[]): string {
         return `${CleanupScripts.PRELUDE}
@@ -282,6 +280,7 @@ const P = ${JSON.stringify({ pageId, removeIds, showIds })};
 const page = await openPage(P.pageId);
 let removed = 0;
 let shown = 0;
+beginStep();
 try {
   for (const id of P.showIds) {
     const shape = page.getShapeById(id);
@@ -295,14 +294,6 @@ try {
   endStep();
 }
 return JSON.stringify({ removed, shown });
-`;
-    }
-
-    /** Closes a step's undo block left open (a step that failed between its two scripts). */
-    public static closeStep(): string {
-        return `${CleanupScripts.PRELUDE}
-endStep();
-return JSON.stringify({ closed: true });
 `;
     }
 
@@ -375,7 +366,8 @@ const apply = (item) => {
   if (rest.some((c) => c.visible !== false)) { throw new Error("Children changed"); }
   const p = layout.padding;
   const pads = (l) => { l.topPadding = p.top; l.rightPadding = p.right; l.bottomPadding = p.bottom; l.leftPadding = p.left; };
-  const keep = below.concat(above).map((c) => ({ c, x: c.x, y: c.y }));
+  // hidden children too: shown again later, they stay where they were instead of joining the flow
+  const keep = below.concat(above, rest).map((c) => ({ c, x: c.x, y: c.y }));
   // z order (bottom to top) set before the layout exists: a flex layout shows its children
   // top-most first, so the flow goes in reversed; "below" stays at the bottom, "above" on top
   board.children = below.concat(rest, flow.slice().reverse(), above);
@@ -490,12 +482,12 @@ return JSON.stringify({ reverted, errors, remap: R });
     }
 
     /**
-     * Opens the component step's undo block, makes the first member a main component and puts a
+     * Makes the first member a main component (one undo block) and puts a
      * copy in place of every other member (same parent, index, position and constraints; texts
      * and images of the member carried over), hiding the members. The first member's backup (a
      * hidden clone) allows taking the component back. The layers made are marked with `stepKey`
      * so that {@link recoverComponent} can take back a step whose script did not answer; an error
-     * inside the script takes the step back at once and closes the block (answer `{failed}`).
+     * inside the script takes the step back at once (answer `{failed}`).
      *
      * JSON `{componentId, mainId, backupId, pairs:[{memberId, copyId}], errors}` or `{failed}`.
      * Finish with {@link keepComponent} or {@link revertComponent}.
@@ -570,6 +562,7 @@ try {
   try { undoMarked(page, P.key, P.memberIds); } finally { endStep(); }
   return JSON.stringify({ failed: message(e) });
 }
+endStep();
 const main = component ? safe(() => component.mainInstance(), null) : null;
 return JSON.stringify({
   componentId: component ? component.id : null,
@@ -582,14 +575,15 @@ return JSON.stringify({
     }
 
     /**
-     * Takes back a component step whose apply script did not answer (marked layers), then closes
-     * the step's undo block.
+     * Takes back a component step whose apply script did not answer (marked layers), in one undo
+     * block.
      */
     public static recoverComponent(pageId: string, stepKey: string, memberIds: string[]): string {
         return `${CleanupScripts.PRELUDE}
 ${CleanupScripts.MARKS}
 const P = ${JSON.stringify({ pageId, key: stepKey, memberIds })};
 const page = await openPage(P.pageId);
+beginStep();
 try { undoMarked(page, P.key, P.memberIds); } finally { endStep(); }
 return JSON.stringify({ recovered: true });
 `;
@@ -597,7 +591,7 @@ return JSON.stringify({ recovered: true });
 
     /**
      * Keeps a component step: removes the hidden members and the backup, clears the marks of
-     * `keepIds` and closes the step's undo block. JSON `{removed}`.
+     * `keepIds`, in one undo block. JSON `{removed}`.
      */
     public static keepComponent(pageId: string, removeIds: string[], keepIds: string[]): string {
         return `${CleanupScripts.PRELUDE}
@@ -605,6 +599,7 @@ ${CleanupScripts.MARKS}
 const P = ${JSON.stringify({ pageId, removeIds, keepIds })};
 const page = await openPage(P.pageId);
 let removed = 0;
+beginStep();
 try {
   for (const id of P.removeIds) {
     const shape = page.getShapeById(id);
@@ -623,8 +618,8 @@ return JSON.stringify({ removed });
 
     /**
      * Takes a component step back: removes the copies, shows the members again, deletes the
-     * component (and its main) and shows the backup of the first member in its place, then closes
-     * the step's undo block. JSON `{restoredId}`.
+     * component (and its main) and shows the backup of the first member in its place, in one undo
+     * block. JSON `{restoredId}`.
      */
     public static revertComponent(
         pageId: string,
@@ -635,6 +630,7 @@ ${CleanupScripts.MARKS}
 const P = ${JSON.stringify({ pageId, ...step })};
 const page = await openPage(P.pageId);
 let restoredId = null;
+beginStep();
 try {
   for (const pair of P.pairs) {
     const copy = page.getShapeById(pair.copyId);

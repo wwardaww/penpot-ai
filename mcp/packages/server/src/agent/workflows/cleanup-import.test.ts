@@ -125,7 +125,6 @@ describe("cleanup-import workflow", () => {
         assert.equal(result.components[0].name, "Task Card");
         assert.equal(await penpot.render(scene.screen.id), before);
         assert.equal(penpot.openBlocks, 0);
-        assert.equal(penpot.storage.penforgeCleanupBlock, null);
 
         const list = scene.screen.items.find((shape) => shape.name === "Board")!;
         assert.equal(list.type, "board");
