@@ -9,6 +9,7 @@ import { ListCanvasCommentsTool } from "./ListCanvasCommentsTool";
 import { PenforgeOverviewTool } from "./PenforgeOverviewTool";
 import { ResolveCanvasCommentTool } from "./ResolveCanvasCommentTool";
 import { UpdateDesignNodeTool } from "./UpdateDesignNodeTool";
+import { TidyUpTool } from "../../agent/cleanup/TidyUpTool";
 
 /**
  * Factory of the Penforge typed MCP tools (architecture §6).
@@ -44,6 +45,8 @@ export class PenforgeTools {
             new ListBoardsTool(mcpServer),
             new GetPrototypeGraphTool(mcpServer),
             new GenerateCodeHintsTool(mcpServer),
+            // W17: tidy-up for the AI chat
+            new TidyUpTool(mcpServer),
         ];
     }
 }

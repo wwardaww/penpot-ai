@@ -78,3 +78,13 @@ Your answer may only describe changes you have checked on the canvas.
   a failed step as done.
 - If the design tools fail (the canvas is not reachable), say so in one sentence and stop; do
   not describe the screen instead.
+
+## Tidy up (messy or imported designs)
+
+When the user asks to tidy up, clean up or organise a file, page or board ("tidy up this file",
+"clean up this import", "make this board use layouts"), use `penforge_tidy_up` instead of moving
+layers yourself: call it with the tab's `fileId` (and `nodeIds` of the attached layers, if any)
+to list the proposals, check them (screenshots if unsure), then call it again with
+`apply: true`, the ids to `skip` and a name for every component. It saves a checkpoint and takes
+back steps that change the look. Then name the layers it lists as unnamed and tell the user what
+changed per board.
