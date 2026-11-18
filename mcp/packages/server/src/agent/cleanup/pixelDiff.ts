@@ -14,13 +14,26 @@ export interface RgbaImage {
  *
  * A pixel counts as different when no pixel within {@link PixelDiff.RADIUS} of the same place in
  * the other image is within {@link PixelDiff.CHANNEL_TOLERANCE} on every channel (checked both
- * ways), so anti-aliasing and sub-pixel moves of a layout do not count.
+ * ways), so anti-aliasing and sub-pixel moves of a layout do not count. Screenshots are taken at
+ * 1 screenshot px per design px, so the radius is one design pixel.
+ *
+ * Besides the share of differing pixels over the whole image, the share in the worst
+ * {@link PixelDiff.TILE} x {@link PixelDiff.TILE} tile is reported: a layer that moved a few
+ * pixels on a tall board changes little of the whole image but much of its tiles.
  */
 export class PixelDiff {
-    public static readonly CHANNEL_TOLERANCE = 40;
+    public static readonly CHANNEL_TOLERANCE = 24;
     public static readonly RADIUS = 1;
     /** largest size difference (px per side) still compared; bigger counts as all different */
-    public static readonly SIZE_TOLERANCE = 2;
+    public static readonly SIZE_TOLERANCE = 1;
+    public static readonly TILE = 32;
+    /** most differing pixels one tile may have for a step to pass */
+    public static readonly TILE_LIMIT = 0.03;
+
+    /** True when a step whose screenshots scored `score` keeps the look. */
+    public static passes(score: DiffScore, threshold: number): boolean {
+        return score.ratio <= threshold && score.maxTile <= PixelDiff.TILE_LIMIT;
+    }
 
     /** Decodes a base64 PNG/JPEG/WebP into RGBA (transparent pixels over white). */
     public static async decode(base64: string): Promise<RgbaImage> {
@@ -57,19 +70,36 @@ export class PixelDiff {
             width === 0 ||
             height === 0
         ) {
-            return { ratio: 1, width, height, sameSize };
+            return { ratio: 1, maxTile: 1, width, height, sameSize };
         }
         const w = Math.min(a.width, b.width);
         const h = Math.min(a.height, b.height);
-        let different = width * height - w * h;
-        for (let y = 0; y < h; y++) {
-            for (let x = 0; x < w; x++) {
-                if (!PixelDiff.near(a, b, x, y) || !PixelDiff.near(b, a, x, y)) {
+        const t = PixelDiff.TILE;
+        const columns = Math.ceil(width / t);
+        const tiles = new Uint32Array(columns * Math.ceil(height / t));
+        let different = 0;
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                if (x >= w || y >= h) {
+                    // the strip one image has more: counted in the share, not in the tiles
                     different++;
+                } else if (!PixelDiff.near(a, b, x, y) || !PixelDiff.near(b, a, x, y)) {
+                    different++;
+                    tiles[Math.floor(y / t) * columns + Math.floor(x / t)]++;
                 }
             }
         }
-        return { ratio: different / (width * height), width, height, sameSize };
+        let maxTile = 0;
+        for (let i = 0; i < tiles.length; i++) {
+            const tx = i % columns;
+            const ty = Math.floor(i / columns);
+            const area = (Math.min(width, (tx + 1) * t) - tx * t) * (Math.min(height, (ty + 1) * t) - ty * t);
+            // edge slivers are too small to judge
+            if (area >= (t * t) / 4) {
+                maxTile = Math.max(maxTile, tiles[i] / area);
+            }
+        }
+        return { ratio: different / (width * height), maxTile, width, height, sameSize };
     }
 
     /** True when pixel (x, y) of `a` has a close match around (x, y) in `b`. */

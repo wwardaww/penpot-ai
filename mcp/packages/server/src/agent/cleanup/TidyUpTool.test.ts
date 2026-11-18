@@ -4,7 +4,6 @@ import { mkdtemp, mkdir, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import type { WorkflowToolResult, WorkflowToolsApi } from "@penpot/mcp-common";
-import { ImportCleaner } from "../workflows/cleanup-import";
 import { TidyUpTool } from "./TidyUpTool";
 import type { FakePenpot } from "./testing/FakePenpot";
 import { cardListScene } from "./testing/scenes";
@@ -47,37 +46,60 @@ describe("TidyUpTool", () => {
         }
     });
 
-    it("lists proposals, then applies the kept ones and lists layers left to name", async () => {
+    it("lists proposals with a plan id, then applies the kept ones and lists layers left to name", async () => {
         const scene = cardListScene();
         const { penpot } = scene;
-        const args = { fileId: "f-1", pageId: penpot.page.id };
-        const ctx = await TidyUpTool.context(args, fakeTools(penpot), join(tmpdir(), "penforge-no-projects"));
-        const params = { pageId: penpot.page.id, review: false, steps: { names: false } };
+        const base = { fileId: "f-tool", pageId: penpot.page.id };
+        const noProject = await TidyUpTool.context(base, fakeTools(penpot), join(tmpdir(), "penforge-no-projects"));
+        const tuning = { settleMs: 0, checkpoint: async () => ({ id: "cp-1", n: 1 }) };
 
-        const listing = await new ImportCleaner(ctx, { ...params, dryRun: true }, { settleMs: 0 }).run();
-        const text = TidyUpTool.describeProposals(listing);
-        assert.match(text, /"id":"C1","kind":"component"/);
-        assert.match(text, /apply: true/);
+        const text = await TidyUpTool.handle(noProject, base, tuning);
+        const listing = JSON.parse(text.split("\n")[0]);
+        assert.ok(listing.proposals.some((p: { id: string }) => p.id === `C:${scene.cards[0].id}`));
+        assert.ok(
+            listing.proposals.some(
+                (p: { onlyOnRequest?: boolean; layerId: string }) => p.onlyOnRequest && p.layerId === scene.hidden.id
+            )
+        );
+        assert.deepEqual(listing.hiddenLayers, { count: 1, names: ["Old header"] });
+        assert.match(text, /removeHidden: true/);
         assert.equal(penpot.undoBlocks, 0);
 
-        const cleaner = new ImportCleaner(
+        // no plan id, or no project to save a checkpoint in: nothing changes
+        assert.match(await TidyUpTool.handle(noProject, { ...base, apply: true }, tuning), /plan-missing/);
+        assert.match(
+            await TidyUpTool.handle(noProject, { ...base, apply: true, planId: listing.planId }, tuning),
+            /checkpoint-failed/
+        );
+        assert.equal(penpot.undoBlocks, 0);
+
+        const ctx = { ...noProject, workspace: {} as never };
+        const answer = await TidyUpTool.handle(
             ctx,
-            { ...params, skip: ["J1"], componentNames: { C1: "Task Card" } },
-            { settleMs: 0 }
+            {
+                ...base,
+                apply: true,
+                planId: listing.planId,
+                skip: [`J:${scene.zeroSize.id}`],
+                componentNames: { [`C:${scene.cards[0].id}`]: "Task Card" },
+            },
+            tuning
         );
-        const result = await cleaner.run();
-        assert.equal(result.totals.junk, 2);
-        assert.equal(result.totals.components, 1);
-        assert.equal(result.components[0].name, "Task Card");
-        assert.ok(scene.hidden.parent, "skipped junk kept");
-        const unnamed = await cleaner.defaultNamedLayers();
+        const report = JSON.parse(answer.split("\n")[0]);
+        assert.equal(report.totals.junk, 1, "only the empty group: zero-size skipped, hidden kept");
+        assert.equal(report.totals.components, 1);
+        assert.equal(report.components[0].name, "Task Card");
+        assert.ok(scene.hidden.parent && scene.zeroSize.parent);
         assert.deepEqual(
-            unnamed.map((layer) => layer.name),
-            ["Board 1", "Board"],
-            "layers inside the component are left to the component"
+            report.unnamedLayers.map((layer: { name: string }) => layer.name),
+            ["Board 1", "Board", "Rectangle 7"],
+            "layers inside the component are left to the component; the skipped one is listed"
         );
-        const answer = TidyUpTool.describeApplied(result, unnamed, false);
-        assert.match(answer, /No checkpoint was saved/);
         assert.match(answer, /unnamed layers/);
+        // the same plan again: the layers changed, so it is refused
+        assert.match(
+            await TidyUpTool.handle(ctx, { ...base, apply: true, planId: listing.planId }, tuning),
+            /plan-changed/
+        );
     });
 });

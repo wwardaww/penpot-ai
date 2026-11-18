@@ -12101,3 +12101,39 @@ msgstr "Could not find the page to tidy up."
 #: src/app/main/data/ai/actions/cleanup.cljs
 msgid "penforge.cleanup.error.read-failed"
 msgstr "Could not read the layers of the page. Try again."
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.error.checkpoint-failed"
+msgstr "Nothing was changed: the checkpoint that lets you go back could not be saved. Check that the AI tab is connected and try again."
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.error.busy"
+msgstr "A tidy-up of this file is already running. Wait for it to finish."
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.error.plan-changed"
+msgstr "The layers changed while the tidy-up was being prepared. Nothing was changed: run it again."
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.hidden.question"
+msgid_plural "penforge.cleanup.hidden.question"
+msgstr[0] "1 hidden layer could be deleted (%s). Hidden layers are often states such as hover or error. Delete it too?"
+msgstr[1] "%s hidden layers could be deleted (%s). Hidden layers are often states such as hover or error. Delete them too?"
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.hidden.keep"
+msgstr "Keep them"
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.hidden.delete"
+msgstr "Delete them"
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.summary.hidden-kept"
+msgid_plural "penforge.cleanup.summary.hidden-kept"
+msgstr[0] "Kept 1 hidden layer."
+msgstr[1] "Kept %s hidden layers."
+
+#: src/app/main/data/ai/actions/cleanup.cljs
+msgid "penforge.cleanup.summary.stopped"
+msgstr "Stopped early to stay within the time limit: run it again for the rest."

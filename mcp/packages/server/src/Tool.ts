@@ -47,10 +47,13 @@ export abstract class Tool<TArgs extends object> {
      * This method handles the unknown args from the MCP protocol,
      * delegating to the type-safe implementation. A rollback reported by a
      * plugin task during the execution puts a warning first in the response.
+     *
+     * @param args - the tool arguments
+     * @param signal - aborted when the client cancels the call or disconnects
      */
-    async execute(args: unknown): Promise<ToolResponse> {
+    async execute(args: unknown, signal?: AbortSignal): Promise<ToolResponse> {
         const [response, rollbacks] = await this.mcpServer.pluginBridge.rollbackNotices.collect(() =>
-            this.executeAndReport(args)
+            this.executeAndReport(args, signal)
         );
         return RollbackNotices.withNotice(response, rollbacks);
     }
@@ -60,7 +63,7 @@ export abstract class Tool<TArgs extends object> {
      *
      * @param args - the tool arguments
      */
-    private async executeAndReport(args: unknown): Promise<ToolResponse> {
+    private async executeAndReport(args: unknown, signal?: AbortSignal): Promise<ToolResponse> {
         const executionId = ++Tool.executionCounter;
         try {
             let argsInstance: TArgs = args as TArgs;
@@ -70,7 +73,7 @@ export abstract class Tool<TArgs extends object> {
             }
 
             // execute the actual tool logic
-            let result = await this.executeCore(argsInstance);
+            let result = await this.executeCore(argsInstance, signal);
 
             this.logger.info("Tool execution #%d complete: %s", executionId, this.getToolName());
             return result;
@@ -148,5 +151,5 @@ export abstract class Tool<TArgs extends object> {
      *
      * @param args - The (typed) tool arguments
      */
-    protected abstract executeCore(args: TArgs): Promise<ToolResponse>;
+    protected abstract executeCore(args: TArgs, signal?: AbortSignal): Promise<ToolResponse>;
 }

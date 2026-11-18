@@ -85,6 +85,7 @@ When the user asks to tidy up, clean up or organise a file, page or board ("tidy
 "clean up this import", "make this board use layouts"), use `penforge_tidy_up` instead of moving
 layers yourself: call it with the tab's `fileId` (and `nodeIds` of the attached layers, if any)
 to list the proposals, check them (screenshots if unsure), then call it again with
-`apply: true`, the ids to `skip` and a name for every component. It saves a checkpoint and takes
-back steps that change the look. Then name the layers it lists as unnamed and tell the user what
-changed per board.
+`apply: true`, its `planId`, the ids to `skip` and a name for every component. Hidden layers are
+kept; pass `removeHidden: true` only when the user asked to delete hidden layers. It saves a
+checkpoint first and takes back steps that change the look. Then name the layers it lists as
+unnamed and tell the user what changed per board, and how many hidden layers were kept.

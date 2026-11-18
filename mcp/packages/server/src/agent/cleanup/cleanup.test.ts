@@ -2,14 +2,14 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import sharp from "sharp";
 import { CleanupHeuristics, CleanupScripts, PixelDiff, type Box, type CleanupNode, type CleanupScan } from "./index";
-import { FakePenpot } from "./testing/FakePenpot";
+import { FakePenpot, FakeShape } from "./testing/FakePenpot";
 import { cardListScene } from "./testing/scenes";
 
 /** Reads a scan of the fake page through the real plan and read scripts. */
 async function scanOf(penpot: FakePenpot, nodeIds: string[] = []): Promise<CleanupScan> {
     const plan = JSON.parse(
         (await penpot.execute(CleanupScripts.plan({ pageId: penpot.page.id, nodeIds }))) as string
-    ) as { pageId: string; pageName: string; units: { id: string }[]; scopeRoots: string[] };
+    ) as { pageId: string; pageName: string; units: { id: string }[]; scopeRoots: string[]; commented: string[] };
     const nodes = new Map<string, CleanupNode>();
     for (const unit of plan.units) {
         const data = JSON.parse(
@@ -30,6 +30,7 @@ async function scanOf(penpot: FakePenpot, nodeIds: string[] = []): Promise<Clean
         nodes,
         scope,
         truncated: false,
+        commented: new Set(plan.commented),
     };
 }
 
@@ -202,6 +203,65 @@ describe("CleanupHeuristics on a scanned page", () => {
         assert.equal(again.junk().length, 3);
     });
 
+    it("never makes components of items with their own links, exports, comments or mixed texts", async () => {
+        for (const mark of [
+            (s: ReturnType<typeof cardListScene>) => (s.cards[1].items[1].interactions = [{ trigger: "click" }]),
+            (s: ReturnType<typeof cardListScene>) => (s.cards[2].items[2].exports = [{ type: "png" }]),
+            (s: ReturnType<typeof cardListScene>) =>
+                s.penpot.page.threads.push({ board: null, nodeId: s.cards[0].items[1].id }),
+            (s: ReturnType<typeof cardListScene>) => (s.cards[1].items[1].fontSize = "mixed"),
+        ]) {
+            const scene = cardListScene();
+            mark(scene);
+            const components = new CleanupHeuristics(await scanOf(scene.penpot)).components();
+            // the marked card is left out; the two others still match
+            assert.equal(components.length, 1);
+            assert.equal(components[0].memberIds.length, 2);
+        }
+    });
+
+    it("keeps hidden layers with content, links or comments, and lists every hidden layer", async () => {
+        const scene = cardListScene();
+        const state = new FakeShape("group", "Error state", 0, 0, 100, 40).add(
+            new FakeShape("text", "Error", 0, 0, 100, 40)
+        );
+        state.visible = false;
+        scene.screen.add(state);
+        const linked = new FakeShape("rectangle", "Hover", 0, 0, 10, 10);
+        linked.visible = false;
+        linked.interactions = [{ trigger: "click" }];
+        scene.screen.add(linked);
+        const heuristics = new CleanupHeuristics(await scanOf(scene.penpot));
+        const junk = heuristics.junk();
+        assert.deepEqual(
+            junk.filter((item) => item.reason === "hidden").map((item) => item.nodeId),
+            [scene.hidden.id]
+        );
+        assert.equal(junk[0].id, `J:${scene.hidden.id}`);
+        assert.deepEqual(
+            heuristics
+                .hiddenLayers()
+                .map((node) => node.name)
+                .sort(),
+            ["Error state", "Hover", "Old header"]
+        );
+        scene.penpot.page.threads.push({ board: null, nodeId: scene.emptyGroup.id });
+        const again = new CleanupHeuristics(await scanOf(scene.penpot)).junk();
+        assert.ok(!again.some((item) => item.nodeId === scene.emptyGroup.id), "commented layer kept");
+    });
+
+    it("leaves containers with pinned children or exports alone", async () => {
+        const scene = cardListScene();
+        scene.cards[0].items[1].constraintsHorizontal = "right";
+        scene.list.exports = [{ type: "png" }];
+        const heuristics = new CleanupHeuristics(await scanOf(scene.penpot));
+        const ids = heuristics.layouts().map((item) => item.nodeId);
+        assert.ok(!ids.includes(scene.cards[0].id));
+        assert.ok(!ids.includes(scene.list.id));
+        assert.ok(ids.includes(scene.cards[1].id));
+        assert.ok(CleanupHeuristics.pinned("left/bottom") && !CleanupHeuristics.pinned("scale/top"));
+    });
+
     it("limits the scope to the selection", async () => {
         const scene = cardListScene();
         const heuristics = new CleanupHeuristics(await scanOf(scene.penpot, [scene.cards[1].id]));
@@ -221,19 +281,22 @@ describe("CleanupScripts", () => {
             CleanupScripts.plan({ pageId: null, nodeIds: [] }),
             CleanupScripts.read({ pageId: "p", unitId: "u" }),
             CleanupScripts.junkHide("p", []),
-            CleanupScripts.show("p", []),
-            CleanupScripts.remove("p", []),
+            CleanupScripts.junkFinish("p", [], []),
+            CleanupScripts.closeStep(),
             CleanupScripts.applyLayouts("p", [], {}),
             CleanupScripts.revertLayouts("p", [], {}),
             CleanupScripts.applyComponent(
                 "p",
-                { id: "C1", kind: "component", memberIds: [], unitIds: [], name: "", width: 1, height: 1, size: 1 },
-                "Card"
+                { id: "C:x", kind: "component", memberIds: [], unitIds: [], name: "", width: 1, height: 1, size: 1 },
+                "Card",
+                "run:1"
             ),
+            CleanupScripts.recoverComponent("p", "run:1", []),
+            CleanupScripts.keepComponent("p", [], []),
             CleanupScripts.revertComponent("p", { componentId: null, backupId: null, pairs: [] }),
         ];
         for (const script of scripts) {
-            assert.doesNotThrow(() => new AsyncFunction("penpot", script));
+            assert.doesNotThrow(() => new AsyncFunction("penpot", "storage", script));
         }
     });
 
@@ -291,8 +354,11 @@ describe("CleanupScripts", () => {
         const before = await penpot.render(scene.screen.id);
         const [proposal] = new CleanupHeuristics(await scanOf(penpot)).components();
         const step = JSON.parse(
-            (await penpot.execute(CleanupScripts.applyComponent(penpot.page.id, proposal, "Task Card"))) as string
+            (await penpot.execute(
+                CleanupScripts.applyComponent(penpot.page.id, proposal, "Task Card", "r:1")
+            )) as string
         );
+        assert.equal(penpot.openBlocks, 1, "the step's undo block stays open until keep or take back");
         assert.deepEqual(step.errors, []);
         assert.equal(step.pairs.length, 2);
         assert.equal(penpot.components[0].name, "Task Card");
@@ -303,9 +369,42 @@ describe("CleanupScripts", () => {
         assert.equal(await penpot.render(scene.screen.id), before);
 
         await penpot.execute(CleanupScripts.revertComponent(penpot.page.id, step));
+        assert.equal(penpot.openBlocks, 0);
+        assert.equal(penpot.undoBlocks, 1, "one undo block for the whole step");
         assert.equal(penpot.components.length, 0);
         assert.equal(penpot.page.getShapeById(step.pairs[0].copyId), null);
         assert.ok(scene.cards[1].visible && scene.cards[2].visible);
+        assert.equal(await penpot.render(scene.screen.id), before);
+    });
+
+    it("takes a component step back by itself when it fails half way", async () => {
+        const scene = cardListScene();
+        const { penpot } = scene;
+        const before = await penpot.render(scene.screen.id);
+        const shapes = penpot.page.root.all().length;
+        const [proposal] = new CleanupHeuristics(await scanOf(penpot)).components();
+        penpot.failInstanceAfter = 1;
+        const step = JSON.parse(
+            (await penpot.execute(CleanupScripts.applyComponent(penpot.page.id, proposal, "Card", "r:2"))) as string
+        );
+        assert.match(step.failed, /instance failed/);
+        assert.equal(penpot.openBlocks, 0);
+        assert.equal(penpot.components.length, 0);
+        assert.equal(penpot.page.root.all().length, shapes, "the main is gone, its backup is back");
+        assert.ok(scene.cards[1].visible && scene.cards[2].visible);
+        assert.equal(await penpot.render(scene.screen.id), before);
+    });
+
+    it("recovers a component step whose script did not answer, by its marks", async () => {
+        const scene = cardListScene();
+        const { penpot } = scene;
+        const before = await penpot.render(scene.screen.id);
+        const [proposal] = new CleanupHeuristics(await scanOf(penpot)).components();
+        await penpot.execute(CleanupScripts.applyComponent(penpot.page.id, proposal, "Card", "r:3"));
+        await penpot.execute(CleanupScripts.recoverComponent(penpot.page.id, "r:3", proposal.memberIds));
+        assert.equal(penpot.openBlocks, 0);
+        assert.equal(penpot.components.length, 0);
+        assert.ok(penpot.page.root.all().every((shape) => shape.copyOf === null));
         assert.equal(await penpot.render(scene.screen.id), before);
     });
 });
@@ -340,5 +439,15 @@ describe("PixelDiff", () => {
         const bigger = await PixelDiff.compareBase64(a, await image(50, 40, square(0)));
         assert.equal(bigger.ratio, 1);
         assert.equal(bigger.sameSize, false);
+    });
+
+    it("catches a small local shift on a tall image through its tiles", async () => {
+        // a 20 x 20 square moved down 4 px on a 200 x 2000 image: little of the whole, much of a tile
+        const tall = (dy: number) => (x: number, y: number) =>
+            x >= 10 && x < 30 && y >= 1000 + dy && y < 1020 + dy ? [0, 0, 0, 255] : [255, 255, 255, 255];
+        const score = await PixelDiff.compareBase64(await image(200, 2000, tall(0)), await image(200, 2000, tall(4)));
+        assert.ok(score.ratio < 0.002, String(score.ratio));
+        assert.ok(score.maxTile > PixelDiff.TILE_LIMIT, String(score.maxTile));
+        assert.equal(PixelDiff.passes(score, 0.002), false);
     });
 });

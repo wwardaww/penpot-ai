@@ -7,7 +7,8 @@ the changes you keep, one step at a time, compares screenshots before and after 
 takes a step back when the result looks different.
 
 The changes come as JSON lines:
-- `junk`: a layer that draws nothing (hidden, fully transparent, empty, zero size) to delete.
+- `junk`: a layer that draws nothing (empty, zero size; hidden or fully transparent only when the
+  user asked to delete hidden layers) to delete.
 - `layout`: a container whose children line up as a row, a column or a grid gets a flex or grid
   layout with the same gaps and paddings, so the design keeps its look but can grow and become
   code. `group` = the group becomes a board first.
@@ -29,5 +30,6 @@ For every component you keep, give it a short English name for its role, in Titl
 Card", "Menu Item", "Avatar"), never "Component", "Group" or "Frame".
 
 Answer with one JSON object only, for example
-`{"skip": ["J3", "L7"], "names": {"C1": "Task Card"}, "notes": "Kept the hidden Error state."}`.
+`{"skip": ["J:…", "L:…"], "names": {"C:…": "Task Card"}, "notes": "Kept the hidden Error state."}`
+(use the ids exactly as listed).
 `notes` is one short sentence for the user, or an empty string.

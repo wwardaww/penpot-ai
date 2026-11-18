@@ -73,14 +73,33 @@
   (let [code (when (string? error)
                (second (re-find #"^cleanup/([a-z-]+)" error)))]
     (case code
-      "no-selection" (tr "penforge.cleanup.error.no-selection")
-      "no-page"      (tr "penforge.cleanup.error.no-page")
-      "read-failed"  (tr "penforge.cleanup.error.read-failed")
+      "no-selection"      (tr "penforge.cleanup.error.no-selection")
+      "no-page"           (tr "penforge.cleanup.error.no-page")
+      "read-failed"       (tr "penforge.cleanup.error.read-failed")
+      "checkpoint-failed" (tr "penforge.cleanup.error.checkpoint-failed")
+      "busy"              (tr "penforge.cleanup.error.busy")
+      "plan-changed"      (tr "penforge.cleanup.error.plan-changed")
       nil)))
+
+(defn hidden-question
+  "Translated question about hidden layers (`plan` payload
+  `{:code \"hidden\" :count :names}`)."
+  [{n :count names :names}]
+  (tr "penforge.cleanup.hidden.question"
+      (i18n/c (or n 0))
+      (str/join ", " names)))
+
+(defn option-label
+  "Translated label of a question option, or nil for unknown ids."
+  [id]
+  (case id
+    "keep"   (tr "penforge.cleanup.hidden.keep")
+    "delete" (tr "penforge.cleanup.hidden.delete")
+    nil))
 
 (defn summary-text
   "Translated summary of a run from its `result` payload."
-  [{:keys [page-name totals checkpoint notes]}]
+  [{:keys [page-name totals checkpoint notes hidden stopped]}]
   (let [{:keys [junk layouts layouts-reverted components
                 components-reverted renamed]} totals
         junk       (or junk 0)
@@ -89,6 +108,7 @@
         renamed    (or renamed 0)
         reverted   (+ (or layouts-reverted 0) (or components-reverted 0))
         changed?   (pos? (+ junk layouts components renamed))
+        kept       (- (or (:count hidden) 0) (or (:removed hidden) 0))
         parts      (cond-> [(if changed?
                               (tr "penforge.cleanup.summary.title" (or page-name ""))
                               (tr "penforge.cleanup.summary.nothing"))]
@@ -97,6 +117,8 @@
                      (pos? components) (conj (tr "penforge.cleanup.summary.components" (i18n/c components)))
                      (pos? renamed)    (conj (tr "penforge.cleanup.summary.renamed" (i18n/c renamed)))
                      (pos? reverted)   (conj (tr "penforge.cleanup.summary.reverted" (i18n/c reverted)))
+                     (pos? kept)       (conj (tr "penforge.cleanup.summary.hidden-kept" (i18n/c kept)))
+                     (some? stopped)   (conj (tr "penforge.cleanup.summary.stopped"))
                      (and changed? (:n checkpoint))
                      (conj (tr "penforge.cleanup.summary.checkpoint" (:n checkpoint)))
                      (not (str/blank? notes)) (conj notes))]
@@ -119,12 +141,41 @@
             (d/update-in-when [:penforge :chat :runs run-id] g))
         state))))
 
+(defn- update-question
+  [question-id f]
+  (ptk/reify ::update-question
+    ptk/UpdateEvent
+    (update [_ state]
+      (if (some? (get-in state [:penforge :chat :entries]))
+        (update-in state [:penforge :chat :entries]
+                   (fn [entries]
+                     (mapv #(if (and (= :question (:kind %)) (= question-id (:id %)))
+                              (f %)
+                              %)
+                           entries)))
+        state))))
+
+(defn- translate-options
+  [options]
+  (mapv #(if-let [label (option-label (:id %))]
+           (assoc % :label label)
+           %)
+        options))
+
 (defn localize
   "Event that translates what a daemon message of the run changed in
-  the chat, or nil. `result` is the run's `result` payload, if any."
-  [{:keys [message result]}]
+  the chat, or nil. `result` and `plan` are the run's last payloads of
+  those kinds, if any."
+  [{:keys [message result plan]}]
   (let [{msg-type :type :keys [kind payload run-id ok error]} message]
     (cond
+      (and (= "workflow.event" msg-type) (= "question" kind) (= "hidden" (:code plan)))
+      (let [text (hidden-question plan)]
+        (update-question (:question-id payload)
+                         #(-> %
+                              (assoc :text text)
+                              (update :options translate-options))))
+
       (and (= "workflow.event" msg-type) (= "progress" kind))
       (when-let [text (progress-text payload)]
         (update-run run-id
@@ -148,9 +199,10 @@
 
 (defn- collect-run
   [acc message]
-  (cond-> (assoc acc :message message)
-    (and (= "workflow.event" (:type message)) (= "result" (:kind message)))
-    (assoc :result (:payload message))))
+  (let [kind (when (= "workflow.event" (:type message)) (:kind message))]
+    (cond-> (assoc acc :message message)
+      (= "result" kind) (assoc :result (:payload message))
+      (= "plan" kind)   (assoc :plan (:payload message)))))
 
 ;; --- Run
 

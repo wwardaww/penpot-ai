@@ -73,6 +73,7 @@ export class CleanupHeuristics {
     private readonly signatures = new Map<string, string>();
     private readonly sizes = new Map<string, number>();
     private readonly unitOrder = new Map<string, number>();
+    private readonly ownData = new Map<string, boolean>();
 
     constructor(
         private readonly scan: CleanupScan,
@@ -97,12 +98,42 @@ export class CleanupHeuristics {
         return this.componentized.has(id);
     }
 
+    /** Pinned constraints (right, center, stretched): a layout would stop them following resizes. */
+    public static pinned(constraints: string): boolean {
+        const [h, v] = (constraints ?? "").split("/");
+        return ["right", "leftright", "center"].includes(h) || ["bottom", "topbottom", "center"].includes(v);
+    }
+
+    /**
+     * True when the layer or a layer inside it has something a component copy would not keep or
+     * a removal would lose: prototype interactions, export settings, comment threads, or texts
+     * with styles that change inside them.
+     */
+    public carriesOwnData(id: string): boolean {
+        const cached = this.ownData.get(id);
+        if (cached !== undefined) {
+            return cached;
+        }
+        const node = this.node(id);
+        const own =
+            !node ||
+            node.interactions > 0 ||
+            (node.exports ?? 0) > 0 ||
+            this.scan.commented.has(id) ||
+            node.text?.mixed === true ||
+            node.children.some((child) => this.carriesOwnData(child));
+        this.ownData.set(id, own);
+        return own;
+    }
+
     // --- Junk
 
     /**
-     * Hidden, fully transparent, empty and zero-size layers that draw nothing. Units, masks,
-     * layers in components and layers with interactions are kept; children of a junk layer are
-     * not listed (removing the parent removes them).
+     * Layers that draw nothing: empty groups and boards, zero-size layers, and (`hidden` /
+     * `transparent`, removed only when the user asks) hidden or fully transparent layers without
+     * children. Units, masks, layers in components and layers with interactions, exports or
+     * comment threads are kept; children of a junk layer are not listed (removing the parent
+     * removes them). Ids are `J:<layer id>`.
      */
     public junk(): JunkProposal[] {
         const proposals: JunkProposal[] = [];
@@ -115,9 +146,13 @@ export class CleanupHeuristics {
                     continue;
                 }
                 const reason = this.scan.scope.has(id) ? this.junkReason(node) : null;
-                if (reason) {
+                if (reason || (this.scan.scope.has(id) && this.isHiddenLayer(node))) {
+                    if (!reason) {
+                        // a hidden layer that must stay: nothing inside it is junk either
+                        continue;
+                    }
                     proposals.push({
-                        id: `J${proposals.length + 1}`,
+                        id: `J:${id}`,
                         kind: "junk",
                         unitId,
                         nodeId: id,
@@ -134,15 +169,40 @@ export class CleanupHeuristics {
         return proposals;
     }
 
+    /**
+     * Hidden or fully transparent layers in the scope (outside components), top-most only: what a
+     * report lists as kept unless the user asks to remove them.
+     */
+    public hiddenLayers(): CleanupNode[] {
+        const out: CleanupNode[] = [];
+        for (const unitId of this.scan.units) {
+            const stack = [...(this.node(unitId)?.children ?? [])];
+            while (stack.length > 0) {
+                const node = this.node(stack.pop()!);
+                if (!node) {
+                    continue;
+                }
+                if (this.scan.scope.has(node.id) && this.isHiddenLayer(node)) {
+                    out.push(node);
+                    continue;
+                }
+                stack.push(...node.children);
+            }
+        }
+        return out;
+    }
+
+    private isHiddenLayer(node: CleanupNode): boolean {
+        return !this.componentized.has(node.id) && (!node.visible || node.opacity < 0.01);
+    }
+
     private junkReason(node: CleanupNode): JunkProposal["reason"] | null {
-        if (this.componentized.has(node.id) || node.interactions > 0 || this.isMaskShape(node)) {
+        if (this.componentized.has(node.id) || this.isMaskShape(node) || this.carriesOwnData(node.id)) {
             return null;
         }
-        if (!node.visible) {
-            return "hidden";
-        }
-        if (node.opacity < 0.01) {
-            return "transparent";
+        if (!node.visible || node.opacity < 0.01) {
+            // hidden states (hover, error, alternatives) are common in imports: only leaves
+            return node.children.length === 0 ? (node.visible ? "transparent" : "hidden") : null;
         }
         if (node.children.length > 0) {
             return null;
@@ -196,7 +256,7 @@ export class CleanupHeuristics {
                 b.depth - a.depth ||
                 a.nodeId.localeCompare(b.nodeId)
         );
-        proposals.forEach((proposal, index) => (proposal.id = `L${index + 1}`));
+        proposals.forEach((proposal) => (proposal.id = `L:${proposal.nodeId}`));
         return proposals;
     }
 
@@ -211,7 +271,7 @@ export class CleanupHeuristics {
             node.transformed ||
             !node.visible ||
             this.componentized.has(node.id) ||
-            (convert && (node.interactions > 0 || node.opacity < 1 || node.effects !== ""))
+            (convert && (node.interactions > 0 || node.opacity < 1 || node.effects !== "" || (node.exports ?? 0) > 0))
         ) {
             return null;
         }
@@ -221,6 +281,10 @@ export class CleanupHeuristics {
         }
         const visible = (children as CleanupNode[]).filter((child) => child.visible && !skip.has(child.id));
         if (visible.length < 2 || visible.some((child) => child.transformed || child.absolute)) {
+            return null;
+        }
+        // a layout drops the children's constraints: keep containers whose children are pinned
+        if ((children as CleanupNode[]).some((child) => CleanupHeuristics.pinned(child.constraints))) {
             return null;
         }
         const below: string[] = [];
@@ -515,7 +579,7 @@ export class CleanupHeuristics {
             free.forEach((id) => this.claim(id, claimed));
             const first = this.node(free[0])!;
             proposals.push({
-                id: `C${proposals.length + 1}`,
+                id: `C:${free[0]}`,
                 kind: "component",
                 memberIds: free,
                 unitIds: [...new Set(free.map((id) => this.unitOf.get(id)!))],
@@ -541,7 +605,8 @@ export class CleanupHeuristics {
         if (this.componentized.has(node.id) || !node.visible || node.children.length === 0 || node.mask) {
             return false;
         }
-        if (node.interactions > 0 || node.transformed) {
+        // a copy would take the main's interactions, exports and texts; comments would lose their board
+        if (node.transformed || this.carriesOwnData(node.id)) {
             return false;
         }
         // not fully read

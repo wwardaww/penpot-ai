@@ -32,6 +32,10 @@ export interface CleanupNode {
     mask: boolean;
     /** number of prototype interactions on the layer */
     interactions: number;
+    /** number of export settings on the layer */
+    exports: number;
+    /** constraints `<horizontal>/<vertical>` ("" when unset) */
+    constraints: string;
     component: ComponentRole;
     /** component of a copy root (look-alike items must use the same one) */
     componentRef?: string | null;
@@ -52,7 +56,7 @@ export interface CleanupNode {
     effects: string;
     radius: string;
     /** text layers only */
-    text?: { content: string; font: string; grow: string };
+    text?: { content: string; font: string; grow: string; mixed: boolean };
     /** children ids, bottom to top */
     children: string[];
 }
@@ -68,9 +72,11 @@ export interface CleanupScan {
     scope: Set<string>;
     /** some unit had more layers than the scan reads */
     truncated: boolean;
+    /** layers comment threads point at (their board, or the layer under them) */
+    commented: Set<string>;
 }
 
-/** Why a layer counts as junk. */
+/** Why a layer counts as junk; `hidden` and `transparent` are removed only on request. */
 export type JunkReason = "hidden" | "transparent" | "empty-group" | "empty-board" | "zero-size";
 
 export interface JunkProposal {
@@ -153,6 +159,8 @@ export type CleanupProposal = JunkProposal | LayoutProposal | ComponentProposal;
 export interface DiffScore {
     /** share of differing pixels, 0..1 (1 when the sizes differ) */
     ratio: number;
+    /** highest share of differing pixels in one tile (catches a local shift on a big board) */
+    maxTile: number;
     width: number;
     height: number;
     sameSize: boolean;
@@ -205,6 +213,12 @@ export interface CleanupResult {
     proposals?: CleanupProposal[];
     /** proposal ids Claude asked to skip */
     skipped: string[];
+    /** hash of the proposals of this run (a caller that listed them passes it back) */
+    planId: string;
+    /** hidden or fully transparent layers: found, removed (only on request), names of kept ones */
+    hidden: { count: number; removed: number; names: string[] };
+    /** why the run ended early, if it did */
+    stopped: "time-budget" | null;
     /** short notes from Claude's review */
     notes: string | null;
     threshold: number;

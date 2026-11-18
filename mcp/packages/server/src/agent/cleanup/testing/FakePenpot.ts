@@ -86,6 +86,9 @@ export class FakeComponent {
         if (!this.main) {
             throw new Error("deleted component");
         }
+        if (this.penpot.failInstanceAfter !== null && this.penpot.instancesMade++ >= this.penpot.failInstanceAfter) {
+            throw new Error("instance failed");
+        }
         const copy = this.main.deepClone((shape) => {
             shape.mainOf = null;
             shape.copyOf = this;
@@ -130,6 +133,8 @@ export class FakeShape {
     public copyHead = false;
     public mask = false;
     public absolute = false;
+    public exports: unknown[] = [];
+    public readonly sharedData = new Map<string, string>();
     /** bottom to top */
     public items: FakeShape[] = [];
     private _x: number;
@@ -262,6 +267,9 @@ export class FakeShape {
             (copy as any)[key] = (this as any)[key];
         }
         copy.fills = this.fills.map((fill) => ({ ...fill }));
+        this.sharedData.forEach((value, key) => copy.sharedData.set(key, value));
+        copy.constraintsHorizontal = this.constraintsHorizontal;
+        copy.constraintsVertical = this.constraintsVertical;
         copy.mainOf = this.mainOf;
         copy.copyOf = this.copyOf;
         if (this.flex) {
@@ -294,6 +302,14 @@ export class FakeShape {
 
     public isMask(): boolean {
         return this.mask;
+    }
+
+    public setSharedPluginData(namespace: string, key: string, value: string): void {
+        this.sharedData.set(`${namespace}/${key}`, value);
+    }
+
+    public getSharedPluginData(namespace: string, key: string): string {
+        return this.sharedData.get(`${namespace}/${key}`) ?? "";
     }
 
     public isComponentMainInstance(): boolean {
@@ -334,6 +350,12 @@ export class FakePage {
     public readonly id = "page-1";
     public readonly name = "Page 1";
     public readonly root = new FakeShape("board", "Root", 0, 0, 0, 0, ROOT_ID);
+    /** comment threads: the board they belong to and the layer under them */
+    public threads: { board: FakeShape | null; nodeId: string | null }[] = [];
+
+    public async findCommentThreads(): Promise<{ board: FakeShape | null; nodeId: string | null }[]> {
+        return this.threads;
+    }
 
     public getShapeById(id: string): FakeShape | null {
         return this.root.all().find((shape) => shape.id === id) ?? null;
@@ -344,6 +366,11 @@ export class FakePage {
 export class FakePenpot {
     public readonly page = new FakePage();
     public components: FakeComponent[] = [];
+    /** the `storage` object execute_code keeps between calls */
+    public readonly storage: Record<string, unknown> = {};
+    /** makes `instance()` throw after this many copies (null = never) */
+    public failInstanceAfter: number | null = null;
+    public instancesMade = 0;
     public undoBlocks = 0;
     public openBlocks = 0;
     public readonly history = {
@@ -430,8 +457,8 @@ export class FakePenpot {
     public async execute(code: string): Promise<unknown> {
         this.reflow();
         const AsyncFunction = Object.getPrototypeOf(async () => undefined).constructor;
-        const fn = new AsyncFunction("penpot", code);
-        return fn(this);
+        const fn = new AsyncFunction("penpot", "storage", code);
+        return fn(this, this.storage);
     }
 
     /**

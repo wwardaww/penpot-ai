@@ -5,4 +5,5 @@
 export { CleanupHeuristics, type Box, type GridMatch, type HeuristicOptions, type StackMatch } from "./heuristics";
 export { CleanupScripts, type LayoutUndo } from "./scripts";
 export { PixelDiff, type RgbaImage } from "./pixelDiff";
+export { CleanupLock } from "./lock";
 export type * from "./types";

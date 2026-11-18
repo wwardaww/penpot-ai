@@ -1,7 +1,9 @@
+import { createHash } from "crypto";
 import type { Attachment, Workflow, WorkflowContext, WorkflowToolFilter, WorkflowToolResult } from "@penpot/mcp-common";
-import { ensureCheckpoint } from "../checkpoints";
+import { Checkpoints } from "../checkpoints";
 import {
     CleanupHeuristics,
+    CleanupLock,
     CleanupScripts,
     PixelDiff,
     type CleanupNode,
@@ -31,20 +33,28 @@ export interface CleanupParams {
     review?: boolean;
     /** only report what would change */
     dryRun?: boolean;
-    /** largest share of differing pixels a step may cause (default 0.005) */
+    /** largest share of differing pixels a step may cause (default 0.002) */
     threshold?: number;
     /**
-     * Decisions taken by the caller instead of the review turn (the chat's tool): proposal ids
-     * (of a dry run on the same layers) to leave out, and names of components (`C<n>` → name).
+     * Remove hidden and fully transparent layers (only leaves without interactions, exports or
+     * comments). Unset: the workflow asks the user when there are any; false: keep them.
+     */
+    removeHidden?: boolean;
+    /**
+     * Decisions taken by the caller instead of the review turn (the chat's tool): ids of listed
+     * proposals to leave out, and names of components (`C:<id>` → name).
      */
     skip?: string[];
     componentNames?: Record<string, string>;
+    /** `planId` of the listing the caller decided on; the run stops if the proposals changed */
+    expectedPlan?: string;
 }
 
 /** Error of a run, message `cleanup/<code>[: detail]`. */
 export class CleanupError extends Error {
     constructor(
-        public readonly code: "no-selection" | "no-page" | "read-failed",
+        public readonly code:
+            "no-selection" | "no-page" | "read-failed" | "checkpoint-failed" | "plan-changed" | "busy",
         detail?: string
     ) {
         super(`cleanup/${code}${detail ? `: ${detail}` : ""}`);
@@ -52,10 +62,21 @@ export class CleanupError extends Error {
     }
 }
 
+/** Saves the checkpoint a run needs before changing anything; null or a throw stops the run. */
+export type CheckpointSaver = (ctx: WorkflowContext, label: string) => Promise<{ id: string; n: number } | null>;
+
 /** Tuning of a run (tests shorten the waits). */
 export interface CleanupTuning {
     /** wait after a change before the "after" screenshot, so layouts have reflowed */
     settleMs?: number;
+    /** time after which the run stops starting new steps (default 20 min) */
+    budgetMs?: number;
+    /** layouts per `execute_code` call */
+    layoutChunk?: number;
+    /** time one layout script may spend */
+    layoutScriptBudgetMs?: number;
+    /** checkpoint before the first change (default: W19 checkpoint with a saved design version) */
+    checkpoint?: CheckpointSaver;
 }
 
 /** Claude's review of the proposals. */
@@ -72,30 +93,42 @@ class NoToolsFilter implements WorkflowToolFilter {
     }
 }
 
-/** Screenshot of a unit. */
+/** Screenshot of a layer. */
 interface Shot {
     base64: string;
 }
 
+/** Hidden or transparent layers asked about, and what the user chose. */
+interface HiddenDecision {
+    remove: boolean;
+}
+
 /**
  * Runs a tidy-up (W17): reads the page or selection, finds junk, rows/columns/grids and
- * look-alike items with {@link CleanupHeuristics}, lets Claude review them, then applies them
- * unit by unit (top-level layer), each step in its own undo block, comparing a screenshot before
- * and after; a step whose screenshot differs more than the threshold is taken back. A checkpoint
- * is saved first and the auto-naming (W16) runs last.
+ * look-alike items with {@link CleanupHeuristics}, lets Claude review them, saves a checkpoint
+ * (required), then applies them unit by unit (top-level layer), comparing screenshots before and
+ * after each step at one screenshot pixel per design pixel; a step that changes the look is taken
+ * back. Hidden layers are removed only when the user asks. Auto-naming (W16) runs last.
  */
 export class ImportCleaner {
-    public static readonly DEFAULT_THRESHOLD = 0.005;
-    /** longest side of the comparison screenshots */
-    private static readonly SHOT_SIZE = 2000;
+    public static readonly DEFAULT_THRESHOLD = 0.002;
+    /** biggest screenshot of a unit; bigger units are compared at a smaller scale plus per layer */
+    public static readonly MAX_SHOT_PIXELS = 12_000_000;
+    public static readonly DEFAULT_BUDGET_MS = 20 * 60_000;
+    public static readonly DEFAULT_LAYOUT_CHUNK = 6;
     /** longest side of the screenshots Claude reviews */
     private static readonly REVIEW_SHOT_SIZE = 1024;
     private static readonly REVIEW_SHOTS = 3;
     /** most single layout retries per unit after a combined step failed */
     private static readonly MAX_RETRIES = 12;
+    private static readonly HIDDEN_NAMES = 20;
 
     private readonly threshold: number;
     private readonly settleMs: number;
+    private readonly deadline: number;
+    private readonly layoutChunk: number;
+    private readonly layoutScriptBudgetMs: number;
+    private readonly saveCheckpoint: CheckpointSaver;
     private scan!: CleanupScan;
     private pageId = "";
     /** ids of groups that became boards, and their reverts */
@@ -106,6 +139,9 @@ export class ImportCleaner {
     private readonly components: ComponentReport[] = [];
     /** units that must not be changed any more (a revert did not restore them) */
     private readonly frozen = new Set<string>();
+    private hiddenRemoved = 0;
+    private stopped: CleanupResult["stopped"] = null;
+    private stepCount = 0;
 
     constructor(
         private readonly ctx: WorkflowContext,
@@ -118,11 +154,31 @@ export class ImportCleaner {
                 ? threshold
                 : ImportCleaner.DEFAULT_THRESHOLD;
         this.settleMs = tuning.settleMs ?? 600;
+        this.deadline = Date.now() + (tuning.budgetMs ?? ImportCleaner.DEFAULT_BUDGET_MS);
+        this.layoutChunk = Math.max(1, tuning.layoutChunk ?? ImportCleaner.DEFAULT_LAYOUT_CHUNK);
+        this.layoutScriptBudgetMs = tuning.layoutScriptBudgetMs ?? CleanupScripts.LAYOUT_SCRIPT_BUDGET_MS;
+        this.saveCheckpoint = tuning.checkpoint ?? ImportCleaner.designCheckpoint;
     }
 
     public async run(): Promise<CleanupResult> {
+        if (this.params.dryRun === true) {
+            return this.execute(true);
+        }
+        const key = this.ctx.context?.fileId || this.params.pageId || this.ctx.context?.pageId || "file";
+        const release = CleanupLock.acquire(key);
+        if (!release) {
+            throw new CleanupError("busy");
+        }
+        try {
+            return await this.execute(false);
+        } finally {
+            await this.runCode(CleanupScripts.closeStep()).catch(() => undefined);
+            release();
+        }
+    }
+
+    private async execute(dryRun: boolean): Promise<CleanupResult> {
         const steps = { junk: true, layouts: true, components: true, names: true, ...(this.params.steps ?? {}) };
-        const dryRun = this.params.dryRun === true;
         this.progress("scan", "Reading the layers");
         this.scan = await this.read();
         this.pageId = this.scan.pageId;
@@ -138,55 +194,78 @@ export class ImportCleaner {
                 maxDiff: 0,
                 layouts: [],
             });
-            this.scales.set(unitId, ImportCleaner.scaleFor(node, ImportCleaner.SHOT_SIZE));
+            this.scales.set(unitId, ImportCleaner.unitScale(node));
         }
         const heuristics = new CleanupHeuristics(this.scan);
-        const junk = steps.junk ? heuristics.junk() : [];
-        const junkIds = new Set(junk.map((item) => item.nodeId));
-        const layouts = steps.layouts ? heuristics.layouts(junkIds) : [];
+        const allJunk = steps.junk ? heuristics.junk() : [];
+        const hiddenJunk = allJunk.filter(ImportCleaner.isHiddenJunk);
+        const plainJunk = allJunk.filter((item) => !ImportCleaner.isHiddenJunk(item));
+        const hiddenLayers = heuristics.hiddenLayers();
+        const listedLayouts = steps.layouts ? heuristics.layouts(new Set(plainJunk.map((item) => item.nodeId))) : [];
         const components = steps.components ? heuristics.components() : [];
-        const proposals: CleanupProposal[] = [...junk, ...layouts, ...components];
+        const listed: CleanupProposal[] = [...allJunk, ...listedLayouts, ...components];
+        const planId = ImportCleaner.planId(listed);
+        const hidden = {
+            count: hiddenLayers.length,
+            removed: 0,
+            names: hiddenLayers.slice(0, ImportCleaner.HIDDEN_NAMES).map((node) => node.name),
+        };
 
         const result = (extra: Partial<CleanupResult> & { renamed?: number }): CleanupResult =>
-            this.result(dryRun, extra);
+            this.result(dryRun, planId, hidden, extra);
         if (dryRun) {
-            return result({ proposals });
+            return result({ proposals: listed });
         }
-        let checkpoint: CleanupResult["checkpoint"] = null;
+        if (this.params.expectedPlan !== undefined && this.params.expectedPlan !== planId) {
+            throw new CleanupError("plan-changed");
+        }
+
+        const decision = await this.decideHidden(hiddenJunk);
+        const junk = decision.remove ? allJunk : plainJunk;
+        const layouts =
+            decision.remove && hiddenJunk.length > 0 && steps.layouts
+                ? heuristics.layouts(new Set(junk.map((item) => item.nodeId))).map((item) => ({ ...item }))
+                : listedLayouts;
+        const proposals: CleanupProposal[] = [...junk, ...layouts, ...components];
+
         let review: CleanupReview = { skip: new Set(), names: new Map(), notes: null };
-        if (proposals.length > 0) {
+        if (this.params.skip !== undefined || this.params.componentNames !== undefined) {
+            review = ImportCleaner.parseReview(
+                JSON.stringify({ skip: this.params.skip ?? [], names: this.params.componentNames ?? {} }),
+                listed
+            );
+        } else if (this.params.review !== false && proposals.length > 0) {
+            review = await this.review(proposals);
+        }
+        const kept = proposals.filter((proposal) => !review.skip.has(proposal.id));
+        let checkpoint: CleanupResult["checkpoint"] = null;
+        if (kept.length > 0) {
             this.progress("checkpoint", "Saving a checkpoint");
-            const saved = await ensureCheckpoint(this.ctx, `Before tidying up ${this.scan.pageName}`, "cleanup-import");
-            checkpoint = saved ? { id: saved.id, n: saved.n } : null;
-            if (this.params.skip !== undefined || this.params.componentNames !== undefined) {
-                review = ImportCleaner.parseReview(
-                    JSON.stringify({ skip: this.params.skip ?? [], names: this.params.componentNames ?? {} }),
-                    proposals
-                );
-            } else if (this.params.review !== false) {
-                review = await this.review(proposals);
-            }
+            checkpoint = await this.checkpointOrStop();
         }
         this.checkAborted();
 
         for (const unitId of this.scan.units) {
+            if (this.outOfTime()) {
+                break;
+            }
             const unitJunk = junk.filter((item) => item.unitId === unitId && !review.skip.has(item.id));
             const unitLayouts = layouts.filter((item) => item.unitId === unitId && !review.skip.has(item.id));
             if (unitJunk.length > 0) {
                 await this.guard(unitId, "junk", () => this.junkStep(unitId, unitJunk));
             }
-            if (unitLayouts.length > 0) {
+            if (unitLayouts.length > 0 && !this.outOfTime()) {
                 await this.guard(unitId, "layout", () => this.layoutStep(unitId, unitLayouts));
             }
             this.checkAborted();
         }
 
-        if (steps.components) {
+        if (steps.components && kept.some((proposal) => proposal.kind === "component") && !this.outOfTime()) {
             await this.componentSteps(components, review);
         }
 
         let renamed = 0;
-        if (steps.names) {
+        if (steps.names && checkpoint && !this.outOfTime()) {
             this.progress("names", "Naming layers");
             try {
                 const named = await autoName(this.ctx, {
@@ -204,6 +283,7 @@ export class ImportCleaner {
                 this.log("names-failed", { message: describe(error) }, `Could not name the layers: ${describe(error)}`);
             }
         }
+        hidden.removed = this.hiddenRemoved;
         const applied = [...this.reports.values()].some((unit) => unit.junkRemoved + unit.layoutsApplied > 0);
         return result({
             checkpoint,
@@ -212,6 +292,84 @@ export class ImportCleaner {
             renamed,
             proposals: applied || this.components.some((c) => c.outcome === "applied") ? undefined : proposals,
         });
+    }
+
+    // --- Checkpoint and decisions
+
+    /** Saves the checkpoint; without one nothing is changed. */
+    private async checkpointOrStop(): Promise<{ id: string; n: number }> {
+        let saved: { id: string; n: number } | null;
+        try {
+            saved = await this.saveCheckpoint(this.ctx, `Before tidying up ${this.scan.pageName}`);
+        } catch (error) {
+            if (this.ctx.signal.aborted) {
+                throw error;
+            }
+            throw error instanceof CleanupError ? error : new CleanupError("checkpoint-failed", describe(error));
+        }
+        if (!saved) {
+            throw new CleanupError("checkpoint-failed");
+        }
+        return saved;
+    }
+
+    /** Default checkpoint: W19 checkpoint that must hold a Penpot version of the file. */
+    public static async designCheckpoint(ctx: WorkflowContext, label: string): Promise<{ id: string; n: number }> {
+        if (!ctx.workspace) {
+            throw new CleanupError("checkpoint-failed", "the file is not in a Penforge project");
+        }
+        const checkpoint = await new Checkpoints(ctx).create({ label, workflow: "cleanup-import" });
+        if (!checkpoint.fileVersion) {
+            throw new CleanupError(
+                "checkpoint-failed",
+                (checkpoint.warnings ?? []).join("; ") || "the design version was not saved"
+            );
+        }
+        return { id: checkpoint.id, n: checkpoint.n };
+    }
+
+    /**
+     * Whether hidden layers go: the `removeHidden` param, else the user's answer (asked only when
+     * there are some). Keeping them is the default.
+     */
+    private async decideHidden(hiddenJunk: JunkProposal[]): Promise<HiddenDecision> {
+        if (this.params.removeHidden !== undefined || hiddenJunk.length === 0) {
+            return { remove: this.params.removeHidden === true && hiddenJunk.length > 0 };
+        }
+        const names = hiddenJunk.slice(0, 5).map((item) => item.name);
+        this.ctx.emit("plan", { code: "hidden", count: hiddenJunk.length, names });
+        const answer = await this.ctx.ask({
+            text:
+                `${hiddenJunk.length} hidden layers could be deleted (${names.map((n) => `"${n}"`).join(", ")}` +
+                `${hiddenJunk.length > names.length ? ", …" : ""}). They may be states such as hover or error. ` +
+                "Delete them too?",
+            options: [
+                { id: "keep", label: "Keep them" },
+                { id: "delete", label: "Delete them" },
+            ],
+        });
+        return { remove: answer === "delete" };
+    }
+
+    private static isHiddenJunk(item: JunkProposal): boolean {
+        return item.reason === "hidden" || item.reason === "transparent";
+    }
+
+    /** Hash of the proposals: the same layers and changes give the same id. */
+    public static planId(proposals: CleanupProposal[]): string {
+        const keys = proposals
+            .map((proposal) => {
+                switch (proposal.kind) {
+                    case "junk":
+                        return `${proposal.id}|${proposal.reason}`;
+                    case "layout":
+                        return `${proposal.id}|${JSON.stringify(proposal.layout)}|${proposal.absoluteBelow.join(",")}`;
+                    case "component":
+                        return `${proposal.id}|${proposal.memberIds.join(",")}`;
+                }
+            })
+            .sort();
+        return createHash("sha1").update(keys.join("\n")).digest("hex").slice(0, 16);
     }
 
     // --- Reading
@@ -272,6 +430,7 @@ export class ImportCleaner {
             pageName: string;
             units: { id: string; name: string; type: string }[];
             scopeRoots: string[];
+            commented?: string[];
         };
         if (!plan || !Array.isArray(plan.units)) {
             throw new CleanupError("no-page");
@@ -306,7 +465,15 @@ export class ImportCleaner {
             nodes.get(id)?.children.forEach(add);
         };
         roots.forEach(add);
-        return { pageId: plan.pageId, pageName: plan.pageName, units, nodes, scope, truncated };
+        return {
+            pageId: plan.pageId,
+            pageName: plan.pageName,
+            units,
+            nodes,
+            scope,
+            truncated,
+            commented: new Set(plan.commented ?? []),
+        };
     }
 
     // --- Review
@@ -464,18 +631,23 @@ export class ImportCleaner {
         return review;
     }
 
-    // --- Junk step
+    // --- Junk step (one undo block: hide, compare, then remove or show again)
 
     private async junkStep(unitId: string, items: JunkProposal[]): Promise<void> {
         const report = this.reports.get(unitId)!;
         const before = await this.baseline(unitId);
+        if (!before) {
+            this.log("no-screenshot", { board: report.name }, `No screenshot of "${report.name}": unused layers kept`);
+            return;
+        }
         this.progress("junk", `Removing ${items.length} unused layers`, { board: report.name, count: items.length });
+        const ids = items.map((item) => item.nodeId);
         const hidden = (await this.runCode(CleanupScripts.junkHide(this.pageId, items))) as { hidden: string[] };
-        if (hidden.hidden.length > 0 && before) {
+        if (hidden.hidden.length > 0) {
             const after = await this.captureAfter(unitId);
             const score = after ? await this.compare(before, after) : null;
-            if (!score || score.ratio > this.threshold) {
-                await this.runCode(CleanupScripts.show(this.pageId, hidden.hidden));
+            if (!score || !PixelDiff.passes(score, this.threshold)) {
+                await this.runCode(CleanupScripts.junkFinish(this.pageId, [], hidden.hidden));
                 report.junkReverted += items.length;
                 this.reverted(report.name, "junk", score);
                 return;
@@ -483,13 +655,9 @@ export class ImportCleaner {
             report.maxDiff = Math.max(report.maxDiff, score.ratio);
             this.baselines.set(this.unitId(unitId), after!);
         }
-        const removed = (await this.runCode(
-            CleanupScripts.remove(
-                this.pageId,
-                items.map((item) => item.nodeId)
-            )
-        )) as { removed: number };
+        const removed = (await this.runCode(CleanupScripts.junkFinish(this.pageId, ids, []))) as { removed: number };
         report.junkRemoved += removed.removed;
+        this.hiddenRemoved += items.filter(ImportCleaner.isHiddenJunk).length;
     }
 
     // --- Layout step
@@ -502,14 +670,19 @@ export class ImportCleaner {
             return;
         }
         this.progress("layout", `Adding layouts in "${report.name}"`, { board: report.name, count: items.length });
+        const regions = await this.regionBaselines(
+            unitId,
+            items.map((item) => item.nodeId)
+        );
         const first = await this.applyLayouts(items);
         if (first.undos.length === 0) {
             return;
         }
         const after = await this.captureAfter(unitId);
         const score = after ? await this.compare(before, after) : null;
-        if (score && score.ratio <= this.threshold) {
+        if (score && PixelDiff.passes(score, this.threshold) && (await this.regionsPass(regions))) {
             this.keepLayouts(unitId, items, first.undos, score, after!);
+            report.layoutsReverted += first.notTried;
             return;
         }
         // take all back, then try the layouts one by one
@@ -518,18 +691,22 @@ export class ImportCleaner {
             return;
         }
         let baseline = this.baselines.get(this.unitId(unitId)) ?? before;
-        const retries = items
-            .filter((item) => first.undos.some((undo) => undo.id === item.id))
-            .slice(0, ImportCleaner.MAX_RETRIES);
+        const tried = items.filter((item) => first.undos.some((undo) => undo.id === item.id));
+        const retries = tried.slice(0, ImportCleaner.MAX_RETRIES);
         for (const item of retries) {
             this.checkAborted();
+            if (this.outOfTime()) {
+                report.layoutsReverted++;
+                continue;
+            }
             const single = await this.applyLayouts([item]);
             if (single.undos.length === 0) {
                 continue;
             }
             const shot = await this.captureAfter(unitId);
             const one = shot ? await this.compare(baseline, shot) : null;
-            if (one && one.ratio <= this.threshold) {
+            const region = regions.filter((entry) => entry.nodeId === item.nodeId);
+            if (one && PixelDiff.passes(one, this.threshold) && (await this.regionsPass(region))) {
                 this.keepLayouts(unitId, [item], single.undos, one, shot!);
                 baseline = shot!;
             } else {
@@ -540,33 +717,55 @@ export class ImportCleaner {
                 baseline = this.baselines.get(this.unitId(unitId)) ?? baseline;
             }
         }
-        report.layoutsReverted += Math.max(0, first.undos.length - retries.length);
+        report.layoutsReverted += Math.max(0, tried.length - retries.length) + first.notTried;
     }
 
-    private async applyLayouts(items: LayoutProposal[]): Promise<{ undos: LayoutUndo[] }> {
+    /**
+     * Applies layouts in chunks (one `execute_code` and one undo block each); items a script had
+     * no time for go into the next chunk. Stops starting chunks when the run is out of time.
+     */
+    private async applyLayouts(items: LayoutProposal[]): Promise<{ undos: LayoutUndo[]; notTried: number }> {
         // a group with a default name becomes "Board", so that the naming step sees a default name
-        const named = items.map((item) =>
+        const queue = items.map((item) =>
             item.convert && DefaultNames.isDefault(item.name, "group") ? { ...item, boardName: "Board" } : item
         );
-        const data = (await this.runCode(CleanupScripts.applyLayouts(this.pageId, named, this.remap))) as {
-            results: { id: string; ok: boolean; error?: string; undo?: LayoutUndo }[];
-            remap: Record<string, string>;
-        };
-        this.remap = data.remap ?? this.remap;
         const undos: LayoutUndo[] = [];
-        for (const result of data.results ?? []) {
-            if (result.ok && result.undo) {
-                undos.push(result.undo);
-            } else if (!result.ok) {
-                const item = items.find((candidate) => candidate.id === result.id);
-                this.log(
-                    "layout-failed",
-                    { layer: item?.name ?? result.id, message: result.error ?? "" },
-                    `Could not add a layout to "${item?.name ?? result.id}": ${result.error ?? ""}`
-                );
+        while (queue.length > 0) {
+            this.checkAborted();
+            if (this.outOfTime()) {
+                break;
             }
+            const chunk = queue.splice(0, this.layoutChunk);
+            const data = (await this.runCode(
+                CleanupScripts.applyLayouts(this.pageId, chunk, this.remap, this.layoutScriptBudgetMs)
+            )) as {
+                results: { id: string; ok: boolean; deferred?: boolean; error?: string; undo?: LayoutUndo }[];
+                remap: Record<string, string>;
+            };
+            this.remap = data.remap ?? this.remap;
+            const deferred: LayoutProposal[] = [];
+            for (const result of data.results ?? []) {
+                const item = chunk.find((candidate) => candidate.id === result.id);
+                if (result.ok && result.undo) {
+                    undos.push(result.undo);
+                } else if (result.deferred && item) {
+                    deferred.push(item);
+                } else if (!result.ok) {
+                    this.log(
+                        "layout-failed",
+                        { layer: item?.name ?? result.id, message: result.error ?? "" },
+                        `Could not add a layout to "${item?.name ?? result.id}": ${result.error ?? ""}`
+                    );
+                }
+            }
+            if (deferred.length === chunk.length) {
+                // the script had no time even for one: give up on the rest instead of looping
+                queue.unshift(...deferred);
+                break;
+            }
+            queue.unshift(...deferred);
         }
-        return { undos };
+        return { undos, notTried: queue.length };
     }
 
     private keepLayouts(
@@ -594,19 +793,24 @@ export class ImportCleaner {
     }
 
     /**
-     * Takes layouts back and checks the unit looks like `expected` again. A unit whose revert
-     * does not restore it is frozen (no more changes) and reported.
+     * Takes layouts back (chunked, last first) and checks the unit looks like `expected` again.
+     * A unit whose revert does not restore it is frozen (no more changes) and reported.
      */
     private async revertLayouts(unitId: string, undos: LayoutUndo[], expected: Shot): Promise<boolean> {
-        const data = (await this.runCode(CleanupScripts.revertLayouts(this.pageId, undos, this.remap))) as {
-            reverted: number;
-            errors: { id: string; error: string }[];
-            remap: Record<string, string>;
-        };
-        this.remap = data.remap ?? this.remap;
+        const errors: { id: string; error: string }[] = [];
+        for (let end = undos.length; end > 0; end -= this.layoutChunk) {
+            const chunk = undos.slice(Math.max(0, end - this.layoutChunk), end);
+            const data = (await this.runCode(CleanupScripts.revertLayouts(this.pageId, chunk, this.remap))) as {
+                reverted: number;
+                errors: { id: string; error: string }[];
+                remap: Record<string, string>;
+            };
+            this.remap = data.remap ?? this.remap;
+            errors.push(...(data.errors ?? []));
+        }
         const shot = await this.captureAfter(unitId);
         const score = shot ? await this.compare(expected, shot) : null;
-        if (!shot || !score || score.ratio > this.threshold || (data.errors ?? []).length > 0) {
+        if (!shot || !score || !PixelDiff.passes(score, this.threshold) || errors.length > 0) {
             const name = this.reports.get(unitId)!.name;
             this.frozen.add(unitId);
             this.log("revert-incomplete", { board: name }, `"${name}" may still differ: use Undo or the checkpoint`);
@@ -640,14 +844,18 @@ export class ImportCleaner {
         }
         for (const proposal of proposals) {
             this.checkAborted();
+            if (this.outOfTime()) {
+                break;
+            }
             const origin = this.originOf(proposal, initial);
-            if (origin && review.skip.has(origin.id)) {
+            // only what was proposed (and not skipped) at the start: nothing new after the review
+            if (!origin || review.skip.has(origin.id)) {
                 continue;
             }
             if (proposal.unitIds.some((unitId) => this.frozen.has(this.originalUnit(unitId)))) {
                 continue;
             }
-            const name = (origin && review.names.get(origin.id)) ?? ImportCleaner.componentName(proposal.name);
+            const name = review.names.get(origin.id) ?? ImportCleaner.componentName(proposal.name);
             await this.guard(proposal.unitIds[0], "components", () => this.componentStep(proposal, name));
         }
     }
@@ -658,63 +866,107 @@ export class ImportCleaner {
         for (const unitId of units) {
             const shot = await this.baseline(unitId);
             if (!shot) {
+                this.log("no-screenshot", { name }, `No screenshot for "${name}": component not made`);
                 return;
             }
             before.set(unitId, shot);
         }
         this.progress("components", `Making "${name}" a component`, { name, count: proposal.memberIds.length });
-        const step = (await this.runCode(CleanupScripts.applyComponent(this.pageId, proposal, name))) as {
+        const memberRegions = units.some((unitId) => this.isBig(unitId))
+            ? await this.captureRegions(proposal.memberIds)
+            : new Map<string, Shot>();
+        const report: ComponentReport = { name, componentId: null, instances: 0, outcome: "failed", diff: 0 };
+        this.components.push(report);
+        const stepKey = `${this.ctx.runId ?? "run"}:${++this.stepCount}`;
+        let step: {
             componentId: string | null;
             mainId: string;
             backupId: string | null;
             pairs: { memberId: string; copyId: string }[];
             errors: string[];
+            failed?: string;
         };
-        const report: ComponentReport = {
-            name,
-            componentId: step.componentId,
-            instances: 0,
-            outcome: "failed",
-            diff: 0,
-        };
-        this.components.push(report);
-        if (!step.componentId) {
-            await this.runCode(CleanupScripts.revertComponent(this.pageId, step));
+        try {
+            step = (await this.runCode(
+                CleanupScripts.applyComponent(this.pageId, proposal, name, stepKey)
+            )) as typeof step;
+        } catch (error) {
+            // the script did not answer: take back whatever it made
+            await this.runCode(CleanupScripts.recoverComponent(this.pageId, stepKey, proposal.memberIds)).catch(
+                () => undefined
+            );
+            this.dropBaselines(units);
+            throw error;
+        }
+        if (step.failed) {
+            this.dropBaselines(units);
+            this.log("component-failed", { name, message: step.failed }, `Could not make "${name}": ${step.failed}`);
             return;
         }
-        let worst = 0;
-        const afters = new Map<string, Shot>();
-        for (const unitId of units) {
-            const shot = await this.captureAfter(unitId);
-            const score = shot ? await this.compare(before.get(unitId)!, shot) : null;
-            worst = Math.max(worst, score ? score.ratio : 1);
-            if (shot) {
-                afters.set(unitId, shot);
+        report.componentId = step.componentId;
+        try {
+            if (!step.componentId) {
+                throw new Error("no component made");
             }
-        }
-        report.diff = worst;
-        if (worst > this.threshold) {
-            await this.runCode(CleanupScripts.revertComponent(this.pageId, step));
-            report.outcome = "reverted";
-            this.reverted(name, "components", { ratio: worst, width: 0, height: 0, sameSize: true });
+            let worst = 0;
+            let pass = true;
+            const afters = new Map<string, Shot>();
             for (const unitId of units) {
-                this.baselines.delete(this.unitId(unitId));
+                const shot = await this.captureAfter(unitId);
+                const score = shot ? await this.compare(before.get(unitId)!, shot) : null;
+                worst = Math.max(worst, score ? score.ratio : 1);
+                pass &&= !!score && PixelDiff.passes(score, this.threshold);
+                if (shot) {
+                    afters.set(unitId, shot);
+                }
             }
-            return;
-        }
-        const remove = step.pairs.map((pair) => pair.memberId);
-        if (step.backupId) {
-            remove.push(step.backupId);
-        }
-        await this.runCode(CleanupScripts.keepComponent(this.pageId, remove));
-        report.outcome = "applied";
-        report.instances = step.pairs.length + 1;
-        for (const [unitId, shot] of afters) {
-            this.baselines.set(this.unitId(unitId), shot);
-            const unit = this.reports.get(this.originalUnit(unitId));
-            if (unit) {
-                unit.maxDiff = Math.max(unit.maxDiff, worst);
+            if (pass && memberRegions.size > 0) {
+                const pairs = [{ memberId: proposal.memberIds[0], copyId: step.mainId }, ...step.pairs];
+                for (const pair of pairs) {
+                    const region = memberRegions.get(pair.memberId);
+                    const shot = region ? await this.capture(pair.copyId, 1, "png") : null;
+                    const score = region && shot ? await this.compare(region, shot) : null;
+                    pass &&= !!score && PixelDiff.passes(score, this.threshold);
+                }
             }
+            report.diff = worst;
+            if (!pass) {
+                await this.runCode(CleanupScripts.revertComponent(this.pageId, step));
+                report.outcome = "reverted";
+                this.reverted(name, "components", { ratio: worst, maxTile: 0, width: 0, height: 0, sameSize: true });
+                this.dropBaselines(units);
+                return;
+            }
+            const remove = step.pairs.map((pair) => pair.memberId);
+            if (step.backupId) {
+                remove.push(step.backupId);
+            }
+            await this.runCode(
+                CleanupScripts.keepComponent(this.pageId, remove, [
+                    step.mainId,
+                    ...step.pairs.map((pair) => pair.copyId),
+                ])
+            );
+            report.outcome = "applied";
+            report.instances = step.pairs.length + 1;
+            for (const [unitId, shot] of afters) {
+                this.baselines.set(this.unitId(unitId), shot);
+                const unit = this.reports.get(this.originalUnit(unitId));
+                if (unit) {
+                    unit.maxDiff = Math.max(unit.maxDiff, worst);
+                }
+            }
+        } catch (error) {
+            if (report.outcome !== "applied") {
+                await this.runCode(CleanupScripts.revertComponent(this.pageId, step)).catch(() =>
+                    this.runCode(CleanupScripts.recoverComponent(this.pageId, stepKey, proposal.memberIds)).catch(
+                        () => undefined
+                    )
+                );
+                report.outcome = "failed";
+                this.dropBaselines(units);
+            }
+            throw error;
         }
     }
 
@@ -752,9 +1004,15 @@ export class ImportCleaner {
                 add(id);
             }
         }
-        // units keep their report ids
-        const scan: CleanupScan = { pageId: this.pageId, pageName: this.scan.pageName, units, nodes, scope, truncated };
-        return scan;
+        return {
+            pageId: this.pageId,
+            pageName: this.scan.pageName,
+            units,
+            nodes,
+            scope,
+            truncated,
+            commented: this.scan.commented,
+        };
     }
 
     /** The first-run proposal that shares members with a proposal of the second read. */
@@ -764,6 +1022,43 @@ export class ImportCleaner {
     }
 
     // --- Screenshots
+
+    /** True when the unit is compared below one screenshot pixel per design pixel. */
+    private isBig(unitId: string): boolean {
+        return (this.scales.get(this.originalUnit(unitId)) ?? 1) < 1;
+    }
+
+    /** Screenshots of layers at full scale, taken before a step on a big unit. */
+    private async regionBaselines(unitId: string, nodeIds: string[]): Promise<{ nodeId: string; shot: Shot }[]> {
+        if (!this.isBig(unitId)) {
+            return [];
+        }
+        const shots = await this.captureRegions(nodeIds);
+        return nodeIds.filter((id) => shots.has(id)).map((id) => ({ nodeId: id, shot: shots.get(id)! }));
+    }
+
+    private async captureRegions(nodeIds: string[]): Promise<Map<string, Shot>> {
+        const shots = new Map<string, Shot>();
+        for (const id of nodeIds) {
+            const shot = await this.capture(this.remap[id] ?? id, 1, "png");
+            if (shot) {
+                shots.set(id, shot);
+            }
+        }
+        return shots;
+    }
+
+    /** Compares layers (under their current ids) with their full-scale screenshots from before. */
+    private async regionsPass(regions: { nodeId: string; shot: Shot }[]): Promise<boolean> {
+        for (const region of regions) {
+            const shot = await this.capture(this.remap[region.nodeId] ?? region.nodeId, 1, "png");
+            const score = shot ? await this.compare(region.shot, shot) : null;
+            if (!score || !PixelDiff.passes(score, this.threshold)) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     private async baseline(unitId: string): Promise<Shot | null> {
         const current = this.unitId(unitId);
@@ -776,6 +1071,10 @@ export class ImportCleaner {
             this.baselines.set(current, shot);
         }
         return shot;
+    }
+
+    private dropBaselines(unitIds: string[]): void {
+        unitIds.forEach((unitId) => this.baselines.delete(this.unitId(unitId)));
     }
 
     private async captureAfter(unitId: string): Promise<Shot | null> {
@@ -803,8 +1102,21 @@ export class ImportCleaner {
         try {
             return await PixelDiff.compareBase64(before.base64, after.base64);
         } catch {
-            return { ratio: 1, width: 0, height: 0, sameSize: false };
+            return { ratio: 1, maxTile: 1, width: 0, height: 0, sameSize: false };
         }
+    }
+
+    /**
+     * Scale of a unit's comparison screenshots: 1 (one screenshot pixel per design pixel) unless
+     * that passes {@link MAX_SHOT_PIXELS}; then smaller, and the changed layers are also compared
+     * one by one at scale 1.
+     */
+    public static unitScale(node: { width: number; height: number }): number {
+        const area = Math.max(1, node.width) * Math.max(1, node.height);
+        if (area <= ImportCleaner.MAX_SHOT_PIXELS) {
+            return 1;
+        }
+        return Math.max(0.1, Math.floor(Math.sqrt(ImportCleaner.MAX_SHOT_PIXELS / area) * 100) / 100);
     }
 
     /** Scale that keeps the longest side at most `size` pixels (at most 1). */
@@ -846,6 +1158,8 @@ export class ImportCleaner {
         try {
             await action();
         } catch (error) {
+            // a step that failed between its two scripts leaves its undo block open
+            await this.runCode(CleanupScripts.closeStep()).catch(() => undefined);
             if (this.ctx.signal.aborted) {
                 throw error;
             }
@@ -857,6 +1171,17 @@ export class ImportCleaner {
             );
             this.baselines.delete(this.unitId(unitId));
         }
+    }
+
+    private outOfTime(): boolean {
+        if (Date.now() <= this.deadline) {
+            return false;
+        }
+        if (!this.stopped) {
+            this.stopped = "time-budget";
+            this.log("time-budget", {}, "Stopped early: the tidy-up ran out of time; run it again for the rest");
+        }
+        return true;
     }
 
     private async runCode(code: string): Promise<unknown> {
@@ -904,7 +1229,12 @@ export class ImportCleaner {
         }
     }
 
-    private result(dryRun: boolean, extra: Partial<CleanupResult> & { renamed?: number }): CleanupResult {
+    private result(
+        dryRun: boolean,
+        planId: string,
+        hidden: CleanupResult["hidden"],
+        extra: Partial<CleanupResult> & { renamed?: number }
+    ): CleanupResult {
         const units = [...this.reports.values()];
         const applied = this.components.filter((c) => c.outcome === "applied");
         return {
@@ -921,13 +1251,16 @@ export class ImportCleaner {
                 layoutsReverted: units.reduce((sum, unit) => sum + unit.layoutsReverted, 0),
                 components: applied.length,
                 instances: applied.reduce((sum, c) => sum + c.instances, 0),
-                componentsReverted: this.components.filter((c) => c.outcome === "reverted").length,
+                componentsReverted: this.components.filter((c) => c.outcome !== "applied").length,
                 renamed: extra.renamed ?? 0,
             },
             ...(extra.proposals ? { proposals: extra.proposals } : {}),
             skipped: extra.skipped ?? [],
             notes: extra.notes ?? null,
             threshold: this.threshold,
+            planId,
+            hidden,
+            stopped: this.stopped,
         };
     }
 
@@ -944,10 +1277,13 @@ export function describeCleanup(result: CleanupResult): string {
     if (result.dryRun) {
         return `${result.proposals?.length ?? 0} possible changes found`;
     }
+    const kept = result.hidden.count - result.hidden.removed;
+    const hidden = kept > 0 ? `; kept ${kept} hidden layers` : "";
+    const stopped = result.stopped ? "; stopped early (time limit)" : "";
     if (t.junk + t.layouts + t.components + t.renamed === 0) {
-        return "Nothing to tidy up";
+        return `Nothing to tidy up${hidden}${stopped}`;
     }
-    return `Removed ${t.junk} unused layers, added ${t.layouts} layouts, made ${t.components} components (${t.instances} items), renamed ${t.renamed} layers`;
+    return `Removed ${t.junk} unused layers, added ${t.layouts} layouts, made ${t.components} components (${t.instances} items), renamed ${t.renamed} layers${hidden}${stopped}`;
 }
 
 /** The `cleanup-import` workflow. */

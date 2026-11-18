@@ -15,6 +15,7 @@
    [app.util.i18n :as i18n :refer [tr]]
    [beicon.v2.core :as rx]
    [cljs.test :as t :include-macros true]
+   [clojure.string :as str]
    [potok.v2.core :as ptk]))
 
 (def ^:private page-id (uuid/next))
@@ -129,3 +130,30 @@
              (get-in state [:penforge :chat :entries 0 :summary]))))
   (t/is (nil? (cleanup/localize {:message {:type "workflow.done" :run-id "run-1" :ok false
                                            :error "cancelled"}}))))
+
+(t/deftest the-hidden-layers-question-is-translated
+  (let [plan  {:code "hidden" :count 2 :names ["Hover" "Error"]}
+        event (cleanup/localize {:message {:type "workflow.event" :run-id "run-1" :kind "question"
+                                           :payload {:question-id "q-1"}}
+                                 :plan plan})
+        state (ptk/update event {:penforge {:chat {:entries [{:kind :question :id "q-1" :text "English"
+                                                              :options [{:id "keep" :label "Keep them"}
+                                                                        {:id "delete" :label "Delete them"}]}]}}})
+        entry (get-in state [:penforge :chat :entries 0])]
+    (t/is (= (tr "penforge.cleanup.hidden.question" (i18n/c 2) "Hover, Error") (:text entry)))
+    (t/is (= [(tr "penforge.cleanup.hidden.keep") (tr "penforge.cleanup.hidden.delete")]
+             (mapv :label (:options entry))))))
+
+(t/deftest the-summary-says-what-was-kept-and-when-it-stopped
+  (let [summary (cleanup/summary-text {:page-name "Page 1"
+                                       :totals {:junk 1 :layouts 0 :components 0 :renamed 0}
+                                       :hidden {:count 3 :removed 1 :names []}
+                                       :stopped "time-budget"})]
+    (t/is (str/includes? summary (tr "penforge.cleanup.summary.hidden-kept" (i18n/c 2))))
+    (t/is (str/includes? summary (tr "penforge.cleanup.summary.stopped")))))
+
+(t/deftest new-errors-are-translated
+  (t/is (= (tr "penforge.cleanup.error.checkpoint-failed")
+           (cleanup/error-text "cleanup/checkpoint-failed: the file is not in a Penforge project")))
+  (t/is (= (tr "penforge.cleanup.error.busy") (cleanup/error-text "cleanup/busy")))
+  (t/is (= (tr "penforge.cleanup.error.plan-changed") (cleanup/error-text "cleanup/plan-changed"))))
