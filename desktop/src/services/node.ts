@@ -86,6 +86,7 @@ export function daemonService(options: () => DaemonOptions): ServiceDefinition {
                 command: ctx.nodeExecutable,
                 args: [ctx.runtime.daemonEntry, "--penforge"],
                 env: daemonEnv(ctx, options()),
+                // the MCP server reads `data/initial_instructions.md` relative to its cwd
                 cwd: dirname(dirname(ctx.runtime.daemonEntry)),
                 logFile: join(ctx.data.logs, "daemon.log"),
             };

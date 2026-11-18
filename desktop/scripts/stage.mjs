@@ -12,6 +12,7 @@
 // jre/ and postgres/ come from scripts/fetch-runtime.mjs.
 //
 // Usage: node scripts/stage.mjs [--backend <dir>] [--frontend <dir>] [--skip-node-builds]
+//        [--parts backend,frontend,daemon,media-processor]
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -81,8 +82,19 @@ function stageFrontend() {
     console.log(`frontend from ${from}`);
 }
 
-/** Keeps only the ripgrep binary of this platform in the Claude Agent SDK (saves ~50 MB). */
+/**
+ * Drops the Claude Code binary the Agent SDK ships per platform (~330 MB,
+ * `@anthropic-ai/claude-agent-sdk-<os>-<arch>`): the desktop app runs the user's own
+ * logged-in `claude` (PENFORGE_CLAUDE_PATH), and Claude Code is not ours to redistribute.
+ * Keeps only the ripgrep binary of this platform.
+ */
 function pruneAgentSdk(nodeModules) {
+    const scope = join(nodeModules, "@anthropic-ai");
+    for (const entry of existsSync(scope) ? readdirSync(scope) : []) {
+        if (/^claude-agent-sdk-/.test(entry)) {
+            rmSync(join(scope, entry), { recursive: true, force: true });
+        }
+    }
     const vendor = join(nodeModules, "@anthropic-ai", "claude-agent-sdk", "vendor", "ripgrep");
     if (!existsSync(vendor)) {
         return;
@@ -128,10 +140,8 @@ function stageMediaProcessor(skipBuild) {
     mkdirSync(to, { recursive: true });
     cpSync(join(src, "dist"), join(to, "dist"), { recursive: true });
     cpSync(join(src, "pnpm-lock.yaml"), join(to, "pnpm-lock.yaml"));
-    const pkg = JSON.parse(readFileSync(join(src, "package.json"), "utf8"));
-    delete pkg.devDependencies;
-    delete pkg.scripts;
-    writeFileSync(join(to, "package.json"), JSON.stringify(pkg, null, 2));
+    // unchanged package.json: the frozen lockfile must match it; --prod skips devDependencies
+    cpSync(join(src, "package.json"), join(to, "package.json"));
     writeFileSync(join(to, "pnpm-workspace.yaml"), `storeDir: ${JSON.stringify(join(REPO, ".pnpm-store"))}\nallowBuilds:\n  sharp: false\n`);
     pnpm(["install", "--prod", "--frozen-lockfile", "--config.node-linker=hoisted"], to);
     rmSync(join(to, "pnpm-workspace.yaml"), { force: true });
@@ -151,7 +161,8 @@ function collectLicenses() {
     const sources = [
         ["penpot-MPL-2.0.txt", join(REPO, "LICENSE")],
         ["jre", join(RUNTIME, "jre", "legal")],
-        ["postgresql-COPYRIGHT.txt", join(RUNTIME, "postgres", "share", "COPYRIGHT")],
+        // the zonky archives carry no license file
+        ["postgresql-LICENSE.txt", join(ROOT, "build-resources", "licenses", "postgresql-LICENSE.txt")],
         ["sharp-LICENSE.txt", join(RUNTIME, "media-processor", "node_modules", "sharp", "LICENSE")],
         ["claude-agent-sdk-LICENSE.md", join(RUNTIME, "daemon", "node_modules", "@anthropic-ai", "claude-agent-sdk", "LICENSE.md")],
     ];
@@ -174,11 +185,13 @@ function collectLicenses() {
 }
 
 const skipNode = process.argv.includes("--skip-node-builds");
+const partsArg = process.argv.indexOf("--parts");
+const parts = new Set(partsArg >= 0 ? process.argv[partsArg + 1].split(",") : ["backend", "frontend", "daemon", "media-processor"]);
 mkdirSync(RUNTIME, { recursive: true });
-stageBackend();
-stageFrontend();
-stageDaemon(skipNode);
-stageMediaProcessor(skipNode);
+if (parts.has("backend")) stageBackend();
+if (parts.has("frontend")) stageFrontend();
+if (parts.has("daemon")) stageDaemon(skipNode);
+if (parts.has("media-processor")) stageMediaProcessor(skipNode);
 writeVersion();
 collectLicenses();
 console.log(`runtime staged in ${RUNTIME}`);
