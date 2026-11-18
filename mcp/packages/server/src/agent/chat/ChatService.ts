@@ -9,6 +9,7 @@ import type {
 import { createLogger } from "../../logger";
 import { AgentError, type AgentClient } from "../AgentClient";
 import { RunnerNotConfiguredError } from "../runner/ClaudeRunner";
+import { CanvasCheck } from "./CanvasCheck";
 import { ConversationStore } from "./ConversationStore";
 import { ToolSummary } from "./toolSummary";
 import type { TurnRunner } from "./TurnRunner";
@@ -32,6 +33,8 @@ interface ActiveTurn {
 export class ChatService {
     private readonly logger = createLogger("ChatService");
     private readonly active = new Map<string, ActiveTurn>();
+    /** Tool name of the canvas check's step lines in `chat.tool`. */
+    public static readonly CANVAS_CHECK = "penforge_canvas_check";
 
     constructor(private readonly turns: TurnRunner) {}
 
@@ -116,6 +119,9 @@ export class ChatService {
             attachments,
         });
 
+        const check = new CanvasCheck(setup.tools);
+        const boardsBefore = await check.boards();
+        let changedDesign = false;
         let messageId: string = randomUUID();
         let text = "";
         let usage: ChatUsage | undefined;
@@ -139,6 +145,7 @@ export class ChatService {
                         client.send({ type: "chat.delta", conversationId, messageId, text: event.text });
                         break;
                     case "tool":
+                        changedDesign ||= event.status === "done" && CanvasCheck.changesDesign(event.toolName);
                         client.send({
                             type: "chat.tool",
                             conversationId,
@@ -170,6 +177,9 @@ export class ChatService {
             }
         }
 
+        if (changedDesign && !signal.aborted) {
+            text += await this.reportCanvasProblems(client, conversationId, messageId, check, boardsBefore);
+        }
         if (failure !== undefined && !signal.aborted) {
             this.logger.warn("Chat turn of %s failed: %s", conversationId, failure);
             client.send({
@@ -188,6 +198,42 @@ export class ChatService {
             });
         }
         client.send({ type: "chat.done", conversationId, messageId, usage });
+    }
+
+    /**
+     * Checks the canvas after a turn that changed the design and tells the user about problems
+     * Claude's own checks missed: a failed step line per problem, and a note at the end of the
+     * answer (kept in the history).
+     *
+     * @returns the note appended to the answer ("" when the canvas looks right)
+     */
+    private async reportCanvasProblems(
+        client: AgentClient,
+        conversationId: string,
+        messageId: string,
+        check: CanvasCheck,
+        before: Awaited<ReturnType<CanvasCheck["boards"]>>
+    ): Promise<string> {
+        const after = await check.boards();
+        if (!after) {
+            return "";
+        }
+        const problems = CanvasCheck.problems(before, after);
+        if (problems.length === 0) {
+            return "";
+        }
+        for (const problem of problems) {
+            client.send({
+                type: "chat.tool",
+                conversationId,
+                toolName: ChatService.CANVAS_CHECK,
+                summary: problem.text,
+                status: "error",
+            });
+        }
+        const note = `\n\n**Check:** ${problems.map((problem) => problem.text).join(" ")}`;
+        client.send({ type: "chat.delta", conversationId, messageId, text: note });
+        return note;
     }
 
     private static failureText(persona: Persona, failure: string): string {

@@ -37,8 +37,13 @@ to-do app"), build it on the canvas yourself; do not only describe it.
 
 - Look first: list the boards and read the file's library (components, colors, typographies,
   tokens) so the new screen matches what is there.
-- Create one new top-level board on the current page, to the right of the existing boards with a
-  100 px gap, named after the screen ("Home", "Login").
+- Files often start with empty platform boards (for example "iPhone" and "Android", or "Desktop"
+  and "Mobile"). When an empty board fits the request (same platform, nothing in it), build the
+  screen inside it instead of adding another board. Otherwise create one new top-level board on
+  the current page, to the right of the existing boards with a 100 px gap, named after the screen
+  ("Home", "Login"). Never place a board where it overlaps another one: check the positions from
+  `list_boards` first. The same holds for variants of a screen (an "Android version" of an
+  iPhone screen): fill the existing empty board of that platform, or put the copy in free space.
 {{#web}}
   Size: 1440 × 1024 (desktop). Content in a centered column with a sensible max width.
 {{/web}}
@@ -56,5 +61,19 @@ to-do app"), build it on the canvas yourself; do not only describe it.
   and wrap each one that changes the design in one undo block:
   `const block = penpot.history.undoBlockBegin(); try { … } finally { penpot.history.undoBlockFinish(block); }`
 - Finish with a screenshot of the new board and check it looks right; fix what does not.
+
+## Check before you report
+
+Your answer may only describe changes you have checked on the canvas.
+
+- After changing the design, read the result back: `get_node_properties` of the board or layer
+  you changed (its `childCount` and children must match what you built), and `list_boards` for
+  new or moved boards (no board may overlap another one; a node screenshot shows the node on its
+  own and does not reveal a board hidden under another). Then take a screenshot.
+- If the result does not match, fix it and check again. If you cannot fix it, say plainly what
+  is missing or wrong; never describe the intended result as if it were there.
+- When a tool call fails ("Tool execution failed", an error, a rolled-back change), tell the
+  user in one plain sentence which step failed, then retry another way or stop. Never summarize
+  a failed step as done.
 - If the design tools fail (the canvas is not reachable), say so in one sentence and stop; do
   not describe the screen instead.
