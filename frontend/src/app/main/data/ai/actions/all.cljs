@@ -23,4 +23,6 @@
    [app.main.ui.workspace.ai.audit.panel]
    [app.main.ui.workspace.ai.build.actions]
    ;; W19: AI history dialog; requires app.main.data.ai.actions.checkpoints
-   [app.main.ui.workspace.ai.checkpoints.history]))
+   [app.main.ui.workspace.ai.checkpoints.history]
+   ;; W18: visual QA report panel; its events ns registers :ai/visual-qa
+   [app.main.ui.workspace.ai.qa.panel]))

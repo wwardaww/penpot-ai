@@ -12014,3 +12014,213 @@ msgstr "Working…"
 #: src/app/main/ui/workspace/ai/chat/status.cljs
 msgid "penforge.chat.status.writing"
 msgstr "Writing the answer…"
+
+# penforge:W18
+
+#: src/app/main/ui/workspace/ai/qa/events.cljs
+msgid "penforge.actions.visual-qa"
+msgstr "Check app against design"
+
+#: src/app/main/ui/workspace/ai/qa/events.cljs
+msgid "penforge.qa.auto-done"
+msgstr "Visual check after the build: %s of %s screens match the design."
+
+#: src/app/main/ui/workspace/ai/qa/events.cljs
+msgid "penforge.qa.open-report"
+msgstr "Open report"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.title"
+msgstr "Does the app match the design?"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.intro"
+msgstr "Compares each screen of the running app with its design board."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.checking"
+msgstr "Checking the app against the design…"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.fixing"
+msgstr "Fixing the differences…"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.step.preview"
+msgstr "Starting the app…"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.step.browser"
+msgstr "Opening the app in a hidden browser…"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.step.design"
+msgstr "Looking at %s in the design…"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.step.app"
+msgstr "Looking at %s in the app…"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.step.compare"
+msgstr "Comparing %s…"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.step.checkpoint"
+msgstr "Saving a restore point…"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.step.fix"
+msgstr "Fixing %s (try %s of %s)…"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.step.save"
+msgstr "Saving the changes…"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.all-match"
+msgstr "All %s screens match the design."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.some-differ"
+msgstr "%s of %s screens match the design."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.threshold"
+msgstr "A screen matches from a score of %s out of 100."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.saved"
+msgstr "The changes to the app are saved."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.undo-hint"
+msgstr "You can undo them from AI history."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.score-hint"
+msgstr "How closely the app looks like the design, from 0 to 100"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.score.matches"
+msgstr "Matches · %s"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.score.differs"
+msgstr "Differs · %s"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.before"
+msgstr "Was %s, now %s"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.design"
+msgstr "Design"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.app"
+msgstr "App"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.diff"
+msgstr "Differences"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.design-alt"
+msgstr "Design of %s"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.app-alt"
+msgstr "%s in the app"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.diff-alt"
+msgstr "Differences of %s, in red"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.metrics"
+msgstr "Pixels that differ: %s · SSIM %s"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.changed-files"
+msgstr "%s files changed"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.skipped.board-missing"
+msgstr "%s was not checked: its board is no longer in the design."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.skipped.dynamic-route"
+msgstr "%s was not checked: its address needs data to open."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.auto-run"
+msgstr "Check after every build"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.stop"
+msgstr "Stop"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.check-again"
+msgstr "Check again"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.accept"
+msgstr "Accept as is"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.fix"
+msgstr "Fix the differences"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.keep-fixing"
+msgstr "Keep fixing"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.done"
+msgstr "Done"
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.error.stopped"
+msgstr "The check was stopped."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.error.not-connected"
+msgstr "Penforge is not connected. Start it and try again."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.error.not-built"
+msgstr "The app has not been built yet. Build it first."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.error.other-file"
+msgstr "The app was built from another file of this project. Build it from this file first."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.error.no-screens"
+msgstr "No screen of the app can be checked."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.error.busy"
+msgstr "A build or another check is running. Try again when it is done."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.error.no-preview"
+msgstr "The app did not start. Open the preview to see why."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.error.no-browser"
+msgstr "No Chrome or Edge was found on this computer to look at the app."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.error.design-unavailable"
+msgstr "The design could not be read. Keep this file open and try again."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.error.generic"
+msgstr "The check could not finish."
+
+#: src/app/main/ui/workspace/ai/qa/panel.cljs
+msgid "penforge.qa.error.generic-detail"
+msgstr "The check could not finish: %s"

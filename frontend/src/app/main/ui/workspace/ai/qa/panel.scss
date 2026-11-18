@@ -1,0 +1,173 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/_utils.scss" as *;
+@use "ds/_borders.scss" as *;
+@use "ds/typography.scss" as t;
+
+.modal-overlay {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-index-set);
+  background-color: var(--color-overlay-default);
+}
+
+.modal-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-l);
+  inline-size: px2rem(760);
+  max-inline-size: calc(100vw - var(--sp-xxxl));
+  max-block-size: 85vh;
+  padding: var(--sp-xxl);
+  border-radius: $br-8;
+  border: $b-2 solid var(--color-background-quaternary);
+  background-color: var(--color-background-primary);
+  color: var(--color-foreground-primary);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-m);
+  min-block-size: 0;
+  overflow-y: auto;
+}
+
+.progress,
+.scope {
+  @include t.use-typography("body-medium");
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xxs);
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.scope {
+  display: block;
+}
+
+.activity {
+  @include t.use-typography("body-small");
+}
+
+.screens,
+.skipped {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-m);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.skipped {
+  @include t.use-typography("body-small");
+
+  gap: var(--sp-xxs);
+  color: var(--color-foreground-secondary);
+}
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  padding: var(--sp-m);
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+}
+
+.screen-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-s);
+}
+
+.screen-name {
+  @include t.use-typography("body-medium");
+
+  font-weight: 600;
+}
+
+.screen-route,
+.screen-note,
+.screen-meta {
+  @include t.use-typography("body-small");
+
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.score {
+  @include t.use-typography("body-small");
+
+  margin-inline-start: auto;
+  padding: 0 var(--sp-s);
+  border-radius: $br-4;
+  font-weight: 600;
+}
+
+.score-ok {
+  background-color: var(--color-background-success);
+  color: var(--color-accent-success);
+}
+
+.score-off {
+  background-color: var(--color-background-warning);
+  color: var(--color-accent-warning);
+}
+
+.images {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-s);
+}
+
+.figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xxs);
+  margin: 0;
+}
+
+.image {
+  inline-size: 100%;
+  max-block-size: px2rem(360);
+  object-fit: contain;
+  object-position: top;
+  border-radius: $br-4;
+  border: $b-1 solid var(--color-background-quaternary);
+  background-color: var(--color-background-secondary);
+}
+
+.caption {
+  @include t.use-typography("body-small");
+
+  color: var(--color-foreground-secondary);
+  text-align: center;
+}
+
+.options {
+  display: flex;
+  align-items: center;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-s);
+}
