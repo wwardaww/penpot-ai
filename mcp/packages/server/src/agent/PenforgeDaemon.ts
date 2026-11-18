@@ -95,7 +95,11 @@ export class PenforgeDaemon {
     public async start(): Promise<void> {
         await this.server.start();
         this.logger.info("Penforge home: %s; runner: %s", this.config.home, this.runner.kind);
-        this.logger.info("Pair Penforge with your browser: %s", this.pairUrl);
+        if (this.config.requirePairing) {
+            this.logger.info("Pair Penforge with your browser: %s", this.pairUrl);
+        } else {
+            this.logger.info("Ready: open %s, the AI tab connects by itself", this.config.publicUri);
+        }
     }
 
     /**

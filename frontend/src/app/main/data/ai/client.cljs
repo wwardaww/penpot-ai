@@ -13,9 +13,12 @@
   `auth.ok`. Incoming messages are emitted as `::message` events (see
   `messages`) so every feature can follow them on the store stream.
 
-  The pairing token comes from the pair route and lives only in
-  `sessionStorage` (`penforge.token`); other tabs of the same origin
-  can share it through the broadcast channel."
+  The daemon accepts this origin without a token by default, so the
+  client connects by itself and keeps retrying while the daemon is down.
+  When the daemon requires pairing (`PENFORGE_REQUIRE_PAIRING=1`), the
+  token comes from the pair route and lives only in `sessionStorage`
+  (`penforge.token`); other tabs of the same origin can share it through
+  the broadcast channel."
   (:require
    [app.common.logging :as log]
    [app.config :as cf]
@@ -36,12 +39,6 @@
 (def default-agent-uri "ws://127.0.0.1:4410/agent")
 
 (def token-key "penforge.token")
-
-(def max-reconnect-attempts
-  "Reconnect attempts after a lost or refused connection before the
-  client gives up and waits for an explicit retry. Every refused
-  attempt is logged by the browser, so the number stays small."
-  6)
 
 (defn enabled?
   "Check if the Penforge AI features are enabled."
@@ -193,9 +190,9 @@
     (watch [_ state stream]
       (let [{:keys [reason attempt]} (get-in state [:penforge :connection])
             attempt (or attempt 0)]
-        (if (or (= :auth-error reason)
-                (>= attempt max-reconnect-attempts)
-                (nil? (get-token)))
+        ;; Keep trying while the daemon is down (backoff up to 30 s), so
+        ;; starting it is enough; only a refused pairing stops here.
+        (if (= :auth-error reason)
           (rx/empty)
           (->> (rx/timer (get-reconnect-delay attempt))
                (rx/map (fn [_] (connect {:attempt (inc attempt)})))
@@ -205,30 +202,25 @@
                            stream))))))))
 
 (defn connect
-  "Open the connection to the daemon with the stored token. A new
-  connection replaces the current one."
+  "Open the connection to the daemon, with the stored pairing token
+  when there is one. A new connection replaces the current one."
   ([] (connect nil))
   ([{:keys [attempt]}]
    (ptk/reify ::connect
      ptk/UpdateEvent
      (update [_ state]
-       (if (get-token)
-         (set-connection state {:status :pairing
-                                :reason nil
-                                :attempt (or attempt 0)})
-         (set-connection state {:status :disconnected
-                                :reason :no-token})))
+       (set-connection state {:status :pairing
+                              :reason nil
+                              :attempt (or attempt 0)}))
 
      ptk/WatchEvent
      (watch [_ _ stream]
-       (if-let [token (get-token)]
-         (->> (open-socket (get-agent-uri) token)
-              (rx/take-until
-               (rx/filter #(or (ptk/type? ::connect %)
-                               (ptk/type? ::disconnect %)
-                               (ptk/type? ::auth/logged-out %))
-                          stream)))
-         (rx/empty))))))
+       (->> (open-socket (get-agent-uri) (or (get-token) ""))
+            (rx/take-until
+             (rx/filter #(or (ptk/type? ::connect %)
+                             (ptk/type? ::disconnect %)
+                             (ptk/type? ::auth/logged-out %))
+                        stream)))))))
 
 (defn disconnect
   "Close the connection to the daemon."
@@ -345,6 +337,19 @@
 (def ^:private connected-ref
   (l/derived #(= :connected (get-in % [:penforge :connection :status])) st/state))
 
+(defn mcp-connect-wanted?
+  "True when the daemon is connected and the hidden MCP plugin is
+  enabled but not asked to connect yet. Either side can become ready
+  first (the plugin waits for the plugin runtime), and the MCP state
+  is reset on every MCP init, so both are watched together."
+  [state]
+  (and (= :connected (get-in state [:penforge :connection :status]))
+       (true? (get-in state [:mcp :enabled]))
+       (not (get-in state [:mcp :connection-requested]))))
+
+(def ^:private mcp-connect-wanted-ref
+  (l/derived mcp-connect-wanted? st/state))
+
 ;; --- Lifecycle
 
 (defn initialize
@@ -366,7 +371,7 @@
                        (rx/filter (ptk/type? ::auth/logged-out) stream))
             status    (get-in state [:penforge :connection :status])]
         (->> (rx/merge
-              (if (and (get-token) (not= :connected status))
+              (if (not= :connected status)
                 (rx/of (connect))
                 (rx/empty))
 
@@ -391,13 +396,11 @@
                    (rx/pipe (rxo/distinct-contiguous))
                    (rx/map (comp send proto/context-set)))
 
-              ;; Connect the hidden MCP plugin to the daemon bridge each
-              ;; time the daemon pairs, so its tools reach this tab.
-              (->> (rx/from-atom connected-ref {:emit-current-value? true})
+              ;; Connect the hidden MCP plugin to the daemon bridge once
+              ;; both are ready, so the design tools reach this tab.
+              (->> (rx/from-atom mcp-connect-wanted-ref {:emit-current-value? true})
                    (rx/pipe (rxo/distinct-contiguous))
                    (rx/filter true?)
-                   (rx/filter (fn [_]
-                                (not (get-in @st/state [:mcp :connection-requested]))))
                    (rx/map (fn [_] (mcp/connect-mcp))))
 
               ;; A tab that pairs shares the token with the others.

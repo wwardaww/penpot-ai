@@ -25,6 +25,7 @@ interface ConfigFile {
     runner?: RunnerKind;
     claudePath?: string;
     model?: string;
+    requirePairing?: boolean;
 }
 
 /**
@@ -55,6 +56,15 @@ export class AgentConfig {
     public readonly fixedToken?: string;
     /** URL of the Penpot MCP endpoint the runner connects Claude to. */
     public readonly mcpUrl: string;
+    /**
+     * Whether browser sessions must present the pairing token (`PENFORGE_REQUIRE_PAIRING=1`).
+     *
+     * Off by default: the WebSocket upgrade already requires an allowed `Origin`, which web pages
+     * cannot forge, so a page of the Penforge frontend connects without a manual pairing step.
+     * Penpot plugins share that origin but get no WebSocket in their sandbox, and the token is
+     * never handed to a page. Turn it on when the daemon is reachable by other people (hosting).
+     */
+    public readonly requirePairing: boolean;
 
     constructor(values: {
         home: string;
@@ -67,6 +77,7 @@ export class AgentConfig {
         model?: string;
         fixedToken?: string;
         mcpUrl: string;
+        requirePairing?: boolean;
     }) {
         this.home = values.home;
         this.host = values.host;
@@ -78,6 +89,7 @@ export class AgentConfig {
         this.model = values.model;
         this.fixedToken = values.fixedToken;
         this.mcpUrl = values.mcpUrl;
+        this.requirePairing = values.requirePairing ?? false;
     }
 
     /**
@@ -109,6 +121,7 @@ export class AgentConfig {
             model: AgentConfig.nonBlank(env.PENFORGE_CLAUDE_MODEL) ?? file.model,
             fixedToken: AgentConfig.nonBlank(env.PENFORGE_TOKEN),
             mcpUrl,
+            requirePairing: AgentConfig.flag(env.PENFORGE_REQUIRE_PAIRING) ?? file.requirePairing ?? false,
         });
     }
 
@@ -124,6 +137,11 @@ export class AgentConfig {
     /** Folder holding the per-project folders. */
     public get projectsDir(): string {
         return join(this.home, "projects");
+    }
+
+    private static flag(value: string | undefined): boolean | undefined {
+        const v = AgentConfig.nonBlank(value)?.toLowerCase();
+        return v === undefined ? undefined : ["1", "true", "yes", "on"].includes(v);
     }
 
     private static nonBlank(value: string | undefined): string | undefined {

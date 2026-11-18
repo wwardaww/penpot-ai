@@ -10269,7 +10269,7 @@ msgstr "Connect the Penforge agent"
 
 #: src/app/main/ui/workspace/ai/chat/banner.cljs:123
 msgid "penforge.chat.status.not-paired-hint"
-msgstr "The AI runs on your computer through the Penforge agent. Connect it once per browser tab."
+msgstr "The AI runs on your computer through the Penforge agent. Start it and this tab connects by itself."
 
 #: src/app/main/ui/workspace/ai/chat/banner.cljs:113
 msgid "penforge.chat.status.pair-expired"
@@ -10289,7 +10289,7 @@ msgstr "Can't reach the Penforge agent"
 
 #: src/app/main/ui/workspace/ai/chat/banner.cljs:122
 msgid "penforge.chat.status.unreachable-hint"
-msgstr "Make sure the agent is running on this computer."
+msgstr "Start the agent on this computer; this tab connects as soon as it runs."
 
 #: src/app/main/ui/workspace/ai/chat/panel.cljs:383
 msgid "penforge.chat.title"

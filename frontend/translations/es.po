@@ -10262,7 +10262,7 @@ msgstr "Conecta el agente de Penforge"
 
 #: src/app/main/ui/workspace/ai/chat/banner.cljs:123
 msgid "penforge.chat.status.not-paired-hint"
-msgstr "La IA funciona en tu ordenador a través del agente de Penforge. Conéctalo una vez por pestaña del navegador."
+msgstr "La IA funciona en tu ordenador a través del agente de Penforge. Arráncalo y esta pestaña se conecta sola."
 
 #: src/app/main/ui/workspace/ai/chat/banner.cljs:113
 msgid "penforge.chat.status.pair-expired"
@@ -10282,7 +10282,7 @@ msgstr "No se puede contactar con el agente de Penforge"
 
 #: src/app/main/ui/workspace/ai/chat/banner.cljs:122
 msgid "penforge.chat.status.unreachable-hint"
-msgstr "Comprueba que el agente está en marcha en este ordenador."
+msgstr "Arranca el agente en este ordenador; esta pestaña se conecta en cuanto esté en marcha."
 
 #: src/app/main/ui/workspace/ai/chat/panel.cljs:383
 msgid "penforge.chat.title"

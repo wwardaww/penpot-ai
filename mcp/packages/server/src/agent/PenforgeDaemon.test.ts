@@ -64,6 +64,8 @@ beforeEach(async () => {
         publicUri: ORIGIN,
         runner: "fake",
         mcpUrl: "http://127.0.0.1:1/mcp",
+        // Most tests check the pairing flow; the default (no pairing) has its own tests.
+        requirePairing: true,
     });
     daemon = new PenforgeDaemon(config, { runner, registry, tools: null, authTimeoutMs: 500 });
     await daemon.start();
@@ -161,6 +163,41 @@ test("a wrong token closes the connection with a policy violation", async () => 
     const error = await client.next("auth.error");
     assert.equal(error.reason, "Invalid token");
     assert.equal((await client.closed).code, 1008);
+});
+
+async function withoutPairing<T>(body: (url: string) => Promise<T>): Promise<T> {
+    const config = new AgentConfig({
+        home,
+        host: "127.0.0.1",
+        port: 0,
+        allowedOrigins: [ORIGIN],
+        publicUri: ORIGIN,
+        runner: "fake",
+        mcpUrl: "http://127.0.0.1:1/mcp",
+    });
+    const open = new PenforgeDaemon(config, { runner, registry: WorkflowRegistry.withShippedWorkflows(), tools: null, authTimeoutMs: 500 });
+    await open.start();
+    try {
+        return await body(`ws://127.0.0.1:${open.port}/agent`);
+    } finally {
+        await open.stop();
+    }
+}
+
+test("by default the frontend origin connects without a pairing token", async () => {
+    await withoutPairing(async (url) => {
+        const client = await AgentTestClient.connect(url, ORIGIN);
+        clients.push(client);
+        client.send({ type: "auth", token: "" });
+        await client.next("auth.ok");
+    });
+});
+
+test("by default a foreign origin is still refused", async () => {
+    await withoutPairing(async (url) => {
+        await assert.rejects(AgentTestClient.connect(url, "https://evil.test"), /HTTP 403/);
+        await assert.rejects(AgentTestClient.connect(url), /HTTP 403/);
+    });
 });
 
 test("a first message other than auth closes the connection", async () => {

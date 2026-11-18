@@ -46,7 +46,8 @@ export class PairingToken {
  *
  * Binds to the configured host (127.0.0.1 by default). Every request must name the daemon in its
  * `Host` header (against DNS rebinding) and, when it carries an `Origin`, come from an allowed
- * origin; WebSocket upgrades must carry an allowed `Origin`. `/pair` prints the pairing URL to the
+ * origin; WebSocket upgrades must carry an allowed `Origin`. Sessions from an allowed origin need
+ * the pairing token only when `requirePairing` is on. `/pair` prints the pairing URL to the
  * daemon's log and returns it only to clients without an `Origin` (local programs, not web pages).
  */
 export class AgentServer {
@@ -184,7 +185,9 @@ export class AgentServer {
         this.wsServer.handleUpgrade(request, socket, head, (ws) => {
             const session = new AgentSession(ws, {
                 ...this.sessionDeps,
-                verifyToken: (candidate) => this.token.verify(candidate),
+                // The upgrade passed the Origin check above; without required pairing that is
+                // enough (see AgentConfig.requirePairing).
+                verifyToken: (candidate) => !this.config.requirePairing || this.token.verify(candidate),
             });
             this.sessions.add(session);
             ws.on("close", () => this.sessions.delete(session));

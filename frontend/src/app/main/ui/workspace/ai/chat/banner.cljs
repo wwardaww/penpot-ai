@@ -82,16 +82,19 @@
 
 (mf/defc start-help*
   {::mf/private true}
-  []
+  [{:keys [pairing-required]}]
   [:ol {:class (stl/css :steps)}
    [:li {:class (stl/css :step)}
     [:> text* {:as "span" :typography t/body-small}
      (tr "penforge.chat.help.start")]
     [:code {:class (stl/css :command)} start-command]]
-   [:li {:class (stl/css :step)}
-    [:> text* {:as "span" :typography t/body-small}
-     (tr "penforge.chat.help.pair")]
-    [:> pair-form* {}]]])
+   ;; The daemon accepts this app without pairing unless it was started
+   ;; with PENFORGE_REQUIRE_PAIRING=1, which shows up as a refused token.
+   (when ^boolean pairing-required
+     [:li {:class (stl/css :step)}
+      [:> text* {:as "span" :typography t/body-small}
+       (tr "penforge.chat.help.pair")]
+      [:> pair-form* {}]])])
 
 (mf/defc connection-banner*
   [{:keys [connection]}]
@@ -131,7 +134,7 @@
           (:unreachable :closed) (tr "penforge.chat.status.unreachable-hint")
           (tr "penforge.chat.status.not-paired-hint"))]
 
-       [:> start-help* {}]
+       [:> start-help* {:pairing-required (= reason :auth-error)}]
 
        (when (contains? #{:unreachable :closed} reason)
          [:> button* {:variant "secondary"
