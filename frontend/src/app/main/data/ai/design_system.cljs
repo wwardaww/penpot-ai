@@ -353,7 +353,7 @@
   [rid result]
   (fn [state]
     (cond-> state
-      (= rid (dm/get-in state (conj state-path :running :rid)))
+      (= rid (get-in state (conj state-path :running :rid)))
       (update-in state-path dissoc :running)
 
       (some? result)
@@ -434,4 +434,4 @@
 (defn running
   "The run in progress `{:kind :rid}`, or nil."
   [state]
-  (dm/get-in state (conj state-path :running)))
+  (get-in state (conj state-path :running)))
