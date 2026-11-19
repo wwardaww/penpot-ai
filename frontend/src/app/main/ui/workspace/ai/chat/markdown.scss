@@ -22,6 +22,16 @@
   line-height: 1.55;
   color: var(--color-foreground-primary);
   overflow-wrap: anywhere;
+
+  // plain <strong>/<em> (no class): other panels' tests read that markup
+  strong {
+    font-weight: 700;
+    color: var(--color-foreground-primary);
+  }
+
+  em {
+    font-style: italic;
+  }
 }
 
 .paragraph {
@@ -60,15 +70,6 @@
 
   font-weight: 600;
   color: var(--color-foreground-primary);
-}
-
-.strong {
-  font-weight: 700;
-  color: var(--color-foreground-primary);
-}
-
-.em {
-  font-style: italic;
 }
 
 .inline-code {
