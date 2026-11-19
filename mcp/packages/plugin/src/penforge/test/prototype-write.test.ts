@@ -96,6 +96,27 @@ test("updatePrototype skips existing links and reports conflicts instead of repl
     assert.equal(f.page.flows.length, 1);
 });
 
+test("updatePrototype reports a board that already starts another flow instead of failing", async () => {
+    const f = todoFile();
+    f.page.createFlow("Flow 1", f.home);
+    const result: any = await PenforgeApi.updatePrototype({
+        operations: [
+            { op: "add-interaction", sourceId: f.plus.id, action: { type: "navigate-to", destinationId: f.add.id } },
+            { op: "set-flow", name: "To-Do App", startingBoardId: f.home.id },
+            { op: "set-flow", name: "Flow 1", startingBoardId: f.home.id, newName: "To-Do App" },
+        ],
+    });
+    assert.deepEqual(
+        result.results.map((r: any) => r.status),
+        ["added", "conflict", "updated"]
+    );
+    assert.equal(result.results[1].existingFlow, "Flow 1");
+    assert.deepEqual(
+        f.page.flows.map((flow: any) => flow.name),
+        ["To-Do App"]
+    );
+});
+
 test("updatePrototype updates and removes interactions by index without shifting", async () => {
     const f = todoFile();
     f.plus.addInteraction("click", { type: "navigate-to", destination: f.home });
@@ -126,18 +147,18 @@ test("updatePrototype updates and removes interactions by index without shifting
 test("updatePrototype moves, renames and removes flows", async () => {
     const f = todoFile();
     f.page.createFlow("Main", f.add);
-    f.page.createFlow("Old", f.add);
+    f.page.createFlow("Old", f.home);
     const result: any = await PenforgeApi.updatePrototype({
         pageId: f.page.id,
         operations: [
-            { op: "set-flow", name: "Main", startingBoardId: f.home.id, newName: "Tasks" },
             { op: "remove-flow", name: "Old" },
+            { op: "set-flow", name: "Main", startingBoardId: f.home.id, newName: "Tasks" },
             { op: "remove-flow", name: "Missing" },
         ],
     });
     assert.deepEqual(
         result.results.map((r: any) => r.status),
-        ["updated", "removed", "skipped"]
+        ["removed", "updated", "skipped"]
     );
     assert.deepEqual(
         f.page.flows.map((flow: any) => [flow.name, flow.startingBoard.name]),

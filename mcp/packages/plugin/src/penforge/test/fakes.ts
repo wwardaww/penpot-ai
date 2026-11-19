@@ -222,6 +222,10 @@ export function fakePage(name: string, children: any[], overrides: Record<string
             return walk(root);
         },
         createFlow(flowName: string, board: any) {
+            // like Penpot: one flow per starting board
+            if (page.flows.some((f: any) => f.startingBoard?.id === board.id)) {
+                throw new Error("[PENPOT PLUGIN] Value not valid: [object ShapeProxy]. Code: :createFlow-frame");
+            }
             const flow: any = { name: flowName, startingBoard: board, page };
             flow.remove = () => {
                 page.flows = page.flows.filter((f: any) => f !== flow);

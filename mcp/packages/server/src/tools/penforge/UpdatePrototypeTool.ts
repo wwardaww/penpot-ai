@@ -151,7 +151,9 @@ export class UpdatePrototypeTool extends PenforgePluginTool<UpdatePrototypeArgs>
             "Adding is safe to repeat: an identical interaction is `skipped`, and when the source " +
             "already has an interaction with the same trigger the add is reported as `conflict` and " +
             "NOT applied - ask the user, then use update-interaction or remove-interaction with the " +
-            "reported `index`. `set-flow` changes the flow with that name or creates it. Returns " +
+            "reported `index`. `set-flow` changes the flow with that name or creates it; a board " +
+            "starts at most one flow, so when another flow already starts there the result is " +
+            "`conflict` with `existingFlow` (rename that flow with set-flow name/newName instead). Returns " +
             "`{pageId, undoGrouped, results, graph}`; `results` has one `{op, status, ...}` per " +
             "operation (status added, updated, removed, skipped or conflict) and `graph` is " +
             "get_prototype_graph for the page after the change."

@@ -279,6 +279,21 @@ export class PrototypeWriter {
     private setFlow(name: string, board: Board, newName: string | undefined): JsonObject {
         const flows = this.page.flows ?? [];
         const flow = flows.find((f) => f.name === name);
+        // Penpot allows one flow per starting board and throws otherwise, after the
+        // earlier operations of the batch already ran: report it instead.
+        const other = flows.find((f) => f !== flow && f.startingBoard?.id === board.id);
+        if (other) {
+            return {
+                status: "conflict",
+                reason:
+                    `the board already starts the flow "${other.name}"; to rename it use set-flow ` +
+                    `{name: "${other.name}", newName: "${newName ?? name}"}, or pick another board`,
+                name,
+                existingFlow: other.name,
+                startingBoardId: board.id,
+                startingBoardName: board.name,
+            };
+        }
         if (!flow) {
             this.page.createFlow(newName ?? name, board);
             return { status: "added", name: newName ?? name, startingBoardId: board.id, startingBoardName: board.name };
