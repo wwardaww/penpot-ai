@@ -109,10 +109,10 @@
         (mf/html [:* {:key key} (.-text token)]))
 
       "strong"
-      (mf/html [:strong {:key key :class (stl/css :strong)} (render-inline (.-tokens token))])
+      (mf/html [:strong {:key key} (render-inline (.-tokens token))])
 
       "em"
-      (mf/html [:em {:key key :class (stl/css :em)} (render-inline (.-tokens token))])
+      (mf/html [:em {:key key} (render-inline (.-tokens token))])
 
       "del"
       (mf/html [:del {:key key} (render-inline (.-tokens token))])

@@ -99,14 +99,15 @@
   (t/is (= base (chat/apply-message base (assoc (changed "delete" "u2") :conversation-id "c2")))))
 
 (t/deftest edit-cuts-the-timeline-and-starts-a-turn
-  (let [chat (chat/edit-user-message (assoc-in base [:entries 2 :attachments] [{:kind "node" :node-id "n1"}])
-                                     "u2" "u2b" "teal, please" "u2b")]
+  (let [start (assoc-in base [:entries 2 :attachments] [{:kind "node" :node-id "n1"}])
+        chat  (chat/edit-user-message start "u2" "u2b" "teal, please" "u2b")]
     (t/is (= ["u1" "a1" "u2b"] (ids chat)))
     (t/is (= {:kind :user :id "u2b" :text "teal, please" :attachments [{:kind "node" :node-id "n1"}]}
              (dissoc (last (:entries chat)) :ts))
           "the edited message keeps its attachments")
     (t/is (= :streaming (:status chat)))
-    (t/is (= three-turns (get-in chat [:pending-action :entries])))
+    (t/is (= (:entries start) (get-in chat [:pending-action :entries]))
+          "the timeline before the edit waits to be put back")
     (t/is (= base (chat/edit-user-message base "nope" "x" "t" "x")) "unknown ids change nothing")))
 
 (t/deftest the-edit-answer-streams-in-after-the-reply
@@ -190,9 +191,10 @@
 (t/deftest user-messages-offer-edit-delete-and-revert
   (let [markup (render-panel {})]
     (t/is (= 3 (count-of markup "data-testid=\"ai-chat-message-actions\"")) "one toolbar per user message")
-    (t/is (str/includes? markup "penforge.chat.message.edit"))
-    (t/is (str/includes? markup "penforge.chat.message.delete"))
-    (t/is (str/includes? markup "penforge.chat.message.revert"))))
+    ;; the buttons' labels live in tooltips, which static rendering leaves out
+    (t/is (= 3 (count-of markup "#icon-pencil")) "edit")
+    (t/is (= 3 (count-of markup "#icon-history")) "revert")
+    (t/is (= 3 (count-of markup "#icon-delete")) "delete")))
 
 (t/deftest no-actions-while-the-ai-answers-or-offline
   (t/is (zero? (count-of (render-panel {:status :streaming}) "ai-chat-message-actions")))
