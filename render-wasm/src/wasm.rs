@@ -1,3 +1,4 @@
+pub mod animation;
 pub mod blend;
 pub mod blurs;
 pub mod fills;
