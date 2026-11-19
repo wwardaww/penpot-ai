@@ -115,6 +115,52 @@
   color: var(--color-foreground-secondary);
 }
 
+.entry-steps {
+  padding: var(--sp-xs) var(--sp-s);
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+  color: var(--color-foreground-secondary);
+}
+
+.steps-summary {
+  @include t.use-typography("body-small");
+
+  display: flex;
+  align-items: center;
+  gap: var(--sp-s);
+  cursor: pointer;
+  list-style: none;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+}
+
+.steps-retried {
+  flex-shrink: 0;
+  color: var(--color-foreground-secondary);
+  opacity: 0.8;
+}
+
+.steps-arrow {
+  flex-shrink: 0;
+  margin-inline-start: auto;
+  transition: transform 0.15s ease;
+}
+
+.steps-details[open] .steps-arrow {
+  transform: rotate(90deg);
+}
+
+.steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  margin: var(--sp-s) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
 .tool-line {
   @include t.use-typography("body-small");
 

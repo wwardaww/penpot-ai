@@ -437,6 +437,41 @@
                                    (subvec tools (inc index)))))))
          (count))))
 
+(defn- step-entry?
+  [entry]
+  (contains? #{:tool :workflow} (:kind entry)))
+
+(defn timeline-items
+  "The timeline as the panel shows it: within each turn (the entries
+  after a user message) all steps (tool calls, workflows) are gathered
+  into one `{:kind :steps :id <first step id> :entries [...]}` item
+  placed before the turn's other entries, so the AI's answer stays
+  below its steps instead of being split up by them."
+  [entries]
+  (let [flush (fn [out turn]
+                (let [steps (filterv step-entry? turn)]
+                  (cond-> out
+                    (seq steps)
+                    (conj {:kind :steps :id (:id (first steps)) :entries steps})
+
+                    :always
+                    (into (remove step-entry?) turn))))]
+    (loop [entries (seq entries)
+           turn    []
+           out     []]
+      (if-let [entry (first entries)]
+        (if (= :user (:kind entry))
+          (recur (next entries) [] (conj (flush out turn) entry))
+          (recur (next entries) (conj turn entry) out))
+        (flush out turn)))))
+
+(defn steps-status
+  "`:running` while a step of the group runs, else `:done`."
+  [steps]
+  (if (some #(= :running (:status %)) steps)
+    :running
+    :done))
+
 (defn- update-chat
   "Update the chat state with `f` and track the AI's activity."
   [state f & args]

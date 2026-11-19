@@ -324,3 +324,26 @@
     (t/is (not (chat/waiting? (-> base
                                   (assoc :entries [{:kind :permission :id "p1" :title "t" :risk :low}]))))
           "a permission request waits only during its turn")))
+
+(t/deftest timeline-items-put-the-steps-of-a-turn-above-its-answer
+  (let [entries [{:kind :user :id "u1"}
+                 {:kind :assistant :id "a1"}
+                 {:kind :tool :id "t1" :status :done}
+                 {:kind :assistant :id "a2"}
+                 {:kind :tool :id "t2" :status :error}
+                 {:kind :workflow :id "w1" :status :done}
+                 {:kind :assistant :id "a3"}
+                 {:kind :user :id "u2"}
+                 {:kind :assistant :id "a4"}
+                 {:kind :user :id "u3"}
+                 {:kind :tool :id "t3" :status :running}]
+        items   (chat/timeline-items entries)]
+    (t/is (= [[:user "u1"] [:steps "t1"] [:assistant "a1"] [:assistant "a2"] [:assistant "a3"]
+              [:user "u2"] [:assistant "a4"]
+              [:user "u3"] [:steps "t3"]]
+             (mapv (juxt :kind :id) items)))
+    (t/is (= ["t1" "t2" "w1"] (mapv :id (:entries (second items))))
+          "every step of the turn lands in one group, in order")
+    (t/is (= :done (chat/steps-status (:entries (second items)))))
+    (t/is (= :running (chat/steps-status (:entries (last items)))))
+    (t/is (= [] (chat/timeline-items [])))))

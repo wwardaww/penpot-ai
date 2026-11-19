@@ -12019,6 +12019,14 @@ msgstr "Waiting for you: answer above"
 msgid "penforge.chat.status.working"
 msgstr "Working…"
 
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:324
+msgid "penforge.chat.steps.count"
+msgstr "%s steps"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs:332
+msgid "penforge.chat.steps.retried"
+msgstr "%s retried"
+
 #: src/app/main/ui/workspace/ai/chat/status.cljs
 msgid "penforge.chat.status.writing"
 msgstr "Writing the answer…"

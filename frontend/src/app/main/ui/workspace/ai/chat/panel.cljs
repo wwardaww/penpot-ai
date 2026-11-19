@@ -296,11 +296,53 @@
      (when (and error (= persona :developer))
        [:pre {:class (stl/css :tool-detail)} (str name "\n" error)])]))
 
+(mf/defc step-item*
+  {::mf/private true
+   ::mf/memo true}
+  [{:keys [entry persona]}]
+  (case (:kind entry)
+    :tool     [:> tool-entry* {:entry entry :persona persona}]
+    :workflow [:> workflow-entry* {:entry entry :persona persona}]
+    nil))
+
+(mf/defc steps-entry*
+  "The steps of one turn in one collapsible block above the answer:
+  closed, it shows the running step (or how many steps ran); open, the
+  full list."
+  {::mf/private true
+   ::mf/memo true}
+  [{:keys [entry persona]}]
+  (let [steps    (:entries entry)
+        status   (chat/steps-status steps)
+        failed   (count (filter #(= :error (:status %)) steps))
+        current  (when (= status :running)
+                   (last (filter #(= :running (:status %)) steps)))
+        label    (if current
+                   (or (not-empty (tool-summary current))
+                       (not-empty (:summary current))
+                       (tr "penforge.chat.status.working"))
+                   (tr "penforge.chat.steps.count" (count steps)))]
+    [:li {:class (stl/css :entry :entry-steps)}
+     [:details {:class (stl/css :steps-details)}
+      [:summary {:class (stl/css :steps-summary)}
+       [:> status-icon* {:status status}]
+       [:span {:class (stl/css :tool-summary)} label]
+       (when (pos? failed)
+         [:span {:class (stl/css :steps-retried)}
+          (tr "penforge.chat.steps.retried" failed)])
+       [:> icon* {:icon-id i/arrow-right :size "s" :class (stl/css :steps-arrow)}]]
+      [:ol {:class (stl/css :steps-list)}
+       (for [step steps]
+         [:> step-item* {:key (str (name (:kind step)) "-" (:id step))
+                         :entry step
+                         :persona persona}])]]]))
+
 (mf/defc entry*
   {::mf/private true
    ::mf/memo true}
   [{:keys [entry persona]}]
   (case (:kind entry)
+    :steps      [:> steps-entry* {:entry entry :persona persona}]
     :user       [:> user-entry* {:entry entry}]
     :assistant  [:> assistant-entry* {:entry entry}]
     :tool       [:> tool-entry* {:entry entry :persona persona}]
@@ -330,7 +372,7 @@
             :data-copyable-text true
             :aria-live "polite"
             :aria-busy (= status :streaming)}
-       (for [entry entries]
+       (for [entry (chat/timeline-items entries)]
          [:> entry* {:key (str (name (:kind entry)) "-" (:id entry))
                      :entry entry
                      :persona persona}])])))
