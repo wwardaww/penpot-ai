@@ -314,7 +314,7 @@
 (actions/register-action!
  {:id :ai/fix-comments
   :label #(tr "penforge.actions.fix-comments")
-  :icon i/comments
+  :icon i/pencil
   :order 20
   :scopes #{:header :main-menu :command-palette}
   :visible? can-edit?
@@ -324,7 +324,7 @@
 (actions/register-action!
  {:id :ai/fix-file-comments
   :label #(tr "penforge.actions.fix-file-comments")
-  :icon i/comments
+  :icon i/pencil
   :order 21
   :scopes #{:main-menu :command-palette}
   :visible? can-edit?

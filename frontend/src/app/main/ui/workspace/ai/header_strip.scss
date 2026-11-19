@@ -4,6 +4,14 @@
 //
 // Copyright (c) KALEIDOS SUBSIDIARY SL
 
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+@use "ds/_utils.scss" as *;
+@use "ds/typography.scss" as *;
+
+// Only for the shared menu placeholders (%menu-dropdown, %menu-item-base).
+@use "refactor/common-refactor.scss" as deprecated;
+
 .header-strip {
   display: flex;
   align-items: center;
@@ -12,4 +20,46 @@
 
 .primary-action {
   flex-shrink: 0;
+}
+
+.menu-wrapper {
+  position: relative;
+}
+
+.menu {
+  @extend %menu-dropdown;
+
+  inset-inline-end: 0;
+  inset-block-start: calc(100% + var(--sp-xs));
+  min-inline-size: px2rem(220);
+}
+
+.menu-item {
+  @extend %menu-item-base;
+
+  display: flex;
+  align-items: center;
+  gap: var(--sp-s);
+}
+
+.menu-item-disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.menu-item-icon {
+  flex-shrink: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.menu-item-name {
+  @include use-typography("body-small");
+
+  white-space: nowrap;
+}
+
+.island-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs);
 }

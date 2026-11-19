@@ -18,7 +18,7 @@
   :label #(tr "penforge.actions.open-chat")
   :icon i/feedback
   :order 0
-  :scopes #{:context-menu :main-menu :header :command-palette}
+  :scopes #{:context-menu :main-menu :command-palette}
   :run (fn [{:keys [scope selected]}]
          (if (and (= scope :context-menu) (seq selected))
            (st/emit! (chat/attach-node selected)

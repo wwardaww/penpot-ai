@@ -45,8 +45,10 @@
         (actions/unregister-action! id)))
     (t/is (not (contains? @actions/registry id)))))
 
-(t/deftest builtin-open-chat-action-is-registered-everywhere
+(t/deftest builtin-open-chat-action-is-registered-outside-the-header
   (let [registry @actions/registry]
-    (doseq [scope [:context-menu :main-menu :header :command-palette]]
+    (doseq [scope [:context-menu :main-menu :command-palette]]
       (t/is (some #(= :ai/open-chat (:id %)) (actions/get-actions registry scope {}))
-            (str scope)))))
+            (str scope)))
+    (t/is (not-any? #(= :ai/open-chat (:id %)) (actions/get-actions registry :header {}))
+          "the chat tab is one click away; no header entry")))

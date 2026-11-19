@@ -218,7 +218,7 @@
 (actions/register-action!
  {:id :ai/audit
   :label #(tr "penforge.actions.audit")
-  :icon i/status-tick
+  :icon i/search
   :order 40
   :scopes #{:context-menu :main-menu :header :command-palette}
   :run (fn [{:keys [scope selected]}]

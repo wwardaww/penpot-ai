@@ -26,7 +26,7 @@
   :icon i/play
   :primary true
   :order 90
-  :scopes #{:header :main-menu :command-palette}
+  :scopes #{:island :main-menu :command-palette}
   :enabled? (fn [state] (not (building? state)))
   :run (fn [_]
          (st/emit! (build/start)))})

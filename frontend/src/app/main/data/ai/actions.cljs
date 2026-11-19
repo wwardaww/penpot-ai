@@ -21,9 +21,10 @@
     the translation scanner sees the key
   - `:icon` optional DS icon id (`i/text`)
   - `:scopes` set of `:context-menu` `:main-menu` `:header`
-    `:command-palette`
+    `:island` `:command-palette`; `:header` actions sit in the AI menu
+    of the right header, `:island` actions in the floating toolbar
   - `:primary` optional; true renders the action as a labelled primary
-    button in the header strip (the Build CTA)
+    button (the Build CTA) instead of a menu entry
   - `:order` optional number; lower first, then by id
   - `:visible?` optional fn of the app state; hidden when false
   - `:enabled?` optional fn of the app state; disabled when false
@@ -34,7 +35,7 @@
    [app.main.store :as st]))
 
 (def scopes
-  #{:context-menu :main-menu :header :command-palette})
+  #{:context-menu :main-menu :header :island :command-palette})
 
 (def schema:action
   [:map {:title "AiAction"}

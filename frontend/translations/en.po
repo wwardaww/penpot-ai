@@ -10139,6 +10139,10 @@ msgstr "Fonts used by the file (install or upload them if the text looks differe
 msgid "penforge.actions.open-chat"
 msgstr "Ask AI"
 
+#: src/app/main/ui/workspace/ai/header_strip.cljs:110
+msgid "penforge.header.ai-menu"
+msgstr "AI actions"
+
 #: src/app/main/ui/workspace/ai/chat/panel.cljs:77
 msgid "penforge.chat.attachment.remove"
 msgstr "Remove %s"

@@ -26,6 +26,7 @@
    [app.main.ui.context :as ctx]
    [app.main.ui.ds.buttons.icon-button :refer [icon-button*]]
    [app.main.ui.ds.foundations.assets.icon :as i]
+   [app.main.ui.workspace.ai.header-strip :refer [island-actions*]]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
    [app.util.keyboard :as kbd]
@@ -431,7 +432,14 @@
           [:li {:class (stl/css :toolbar-option)}
            [:> mcp-menu* {:is-mcp-connected mcp-connected?
                           :is-connection-requested (:connection-requested mcp)
-                          :session-id (:session-id mcp)}]])]
+                          :session-id (:session-id mcp)}]])
+
+        ;; Penforge: the Build CTA (AI actions of the `:island` scope)
+        (when (contains? cf/flags :ai)
+          [:*
+           [:div {:class (stl/css :toolbar-separator)}]
+           [:li {:class (stl/css :toolbar-option)}
+            [:> island-actions* {}]]])]
 
        [:button {:title (tr "workspace.toolbar.toggle-toolbar")
                  :aria-label (tr "workspace.toolbar.toggle-toolbar")

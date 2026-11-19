@@ -142,7 +142,8 @@
         build    (get registry :ai/build)
         toggle   (get registry :ai/preview)]
     (t/is (true? (:primary build)))
-    (t/is (contains? (:scopes build) :header))
+    (t/is (contains? (:scopes build) :island))
+    (t/is (not (contains? (:scopes build) :header)) "Build lives in the floating toolbar")
     (t/is (contains? (:scopes toggle) :main-menu))
     (t/is (nil? (get registry :ai/build-app)) "the dialog has no second Build entry")
     (t/is (= [:ai/build]
