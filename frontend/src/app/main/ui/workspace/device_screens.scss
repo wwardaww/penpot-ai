@@ -1,0 +1,180 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+@use "ds/_utils.scss" as *;
+@use "ds/spacing.scss" as *;
+@use "ds/typography.scss" as t;
+@use "ds/z-index.scss" as *;
+
+// A sibling of the top toolbar island in the viewport. The island is
+// centered (`left: 50%` minus half its width), so the right edge goes at
+// 50% + half the island width (measured, `--island-width`) + a gap. The
+// vertical position repeats the island's (top_toolbar.scss).
+.device-screens {
+  --island-width: 0px;
+  --position-y: #{$sz-28};
+  --offset-y: 0px;
+  --menu-border-color: var(--color-background-quaternary);
+  --menu-background-color: var(--color-background-primary);
+  --trigger-foreground-color: var(--color-foreground-secondary);
+  --trigger-background-color: transparent;
+
+  position: absolute;
+  inset-block-start: calc(var(--position-y) + var(--offset-y));
+  inset-inline-end: calc(50% + var(--island-width) / 2 + var(--sp-s));
+  visibility: hidden;
+  transition: inset-block-start 0.3s;
+  display: flex;
+  align-items: center;
+  padding: var(--sp-m);
+  border-radius: $br-8;
+  border: $b-2 solid var(--menu-border-color);
+  background-color: var(--menu-background-color);
+  z-index: var(--z-index-panels);
+  cursor: default;
+
+  &.measured {
+    visibility: visible;
+  }
+
+  &.no-rulers {
+    --position-y: 0px;
+    --offset-y: 8px;
+  }
+}
+
+.trigger {
+  @include t.use-typography("body-small");
+
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs);
+  block-size: $sz-32;
+  padding-inline: var(--sp-s);
+  border: none;
+  border-radius: $br-8;
+  appearance: none;
+  white-space: nowrap;
+  color: var(--trigger-foreground-color);
+  background-color: var(--trigger-background-color);
+
+  &:hover,
+  &.open {
+    --trigger-foreground-color: var(--color-accent-primary);
+    --trigger-background-color: var(--color-background-tertiary);
+  }
+
+  &:focus-visible {
+    outline: $b-1 solid var(--color-accent-primary);
+  }
+}
+
+.trigger-icon {
+  flex-shrink: 0;
+  color: currentcolor;
+  stroke: currentcolor;
+}
+
+.trigger-label {
+  color: currentcolor;
+}
+
+.panel {
+  position: absolute;
+  inset-block-start: calc(100% + var(--sp-xs));
+  inset-inline-end: calc(-1 * #{$b-2});
+  display: flex;
+  flex-direction: column;
+  inline-size: $sz-284;
+  max-block-size: $sz-500;
+  border-radius: $br-8;
+  border: $b-2 solid var(--menu-border-color);
+  background-color: var(--menu-background-color);
+  z-index: var(--z-index-dropdown);
+  overflow: hidden;
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  padding: var(--sp-s);
+  overflow-y: auto;
+}
+
+.group-title {
+  @include t.use-typography("headline-small");
+
+  padding: var(--sp-xs) var(--sp-s);
+  margin: 0;
+  text-transform: uppercase;
+  color: var(--color-foreground-secondary);
+}
+
+.group-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.device {
+  @include t.use-typography("body-small");
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-s);
+  inline-size: 100%;
+  block-size: $sz-28;
+  padding-inline: var(--sp-s);
+  border: none;
+  border-radius: $br-6;
+  appearance: none;
+  text-align: start;
+  color: var(--color-foreground-primary);
+  background-color: transparent;
+
+  &:hover,
+  &:focus-visible {
+    outline: none;
+    background-color: var(--color-background-tertiary);
+
+    .device-size {
+      color: var(--color-accent-primary);
+    }
+  }
+}
+
+.device-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-size {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-foreground-secondary);
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  padding: var(--sp-m);
+  border-block-start: $b-1 solid var(--menu-border-color);
+}
+
+.footer-hint {
+  @include t.use-typography("body-small");
+
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
