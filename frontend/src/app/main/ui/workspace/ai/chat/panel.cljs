@@ -123,26 +123,173 @@
 
 ;; --- Timeline entries
 
+(mf/defc message-actions*
+  "Hover actions of a user message (W37): edit, delete, revert."
+  {::mf/private true}
+  [{:keys [on-edit on-delete on-revert]}]
+  [:div {:class (stl/css :message-actions)
+         :role "toolbar"
+         :aria-label (tr "penforge.chat.message.actions")
+         :data-testid "ai-chat-message-actions"}
+   [:> icon-button* {:variant "ghost"
+                     :icon i/pencil
+                     :icon-size "s"
+                     :aria-label (tr "penforge.chat.message.edit")
+                     :on-click on-edit}]
+   [:> icon-button* {:variant "ghost"
+                     :icon i/history
+                     :icon-size "s"
+                     :aria-label (tr "penforge.chat.message.revert")
+                     :on-click on-revert}]
+   [:> icon-button* {:variant "ghost"
+                     :icon i/delete
+                     :icon-size "s"
+                     :aria-label (tr "penforge.chat.message.delete")
+                     :on-click on-delete}]])
+
+(mf/defc message-editor*
+  "The text of a user message being edited (W37): Enter or Save sends it
+  again, Escape or Cancel leaves it."
+  {::mf/private true}
+  [{:keys [text on-save on-cancel]}]
+  (let [draft*   (mf/use-state text)
+        draft    (deref draft*)
+        blank    (str/blank? draft)
+
+        on-change
+        (mf/use-fn #(reset! draft* (dom/get-target-val %)))
+
+        on-submit
+        (mf/use-fn
+         (mf/deps draft on-save)
+         (fn [event]
+           (some-> event dom/prevent-default)
+           (when-not (str/blank? draft)
+             (on-save draft))))
+
+        on-key-down
+        (mf/use-fn
+         (mf/deps on-submit on-cancel)
+         (fn [event]
+           (cond
+             (and (kbd/enter? event)
+                  (not (kbd/shift? event))
+                  (not (.-isComposing ^js (.-nativeEvent event))))
+             (on-submit event)
+
+             (kbd/esc? event)
+             (do (dom/stop-propagation event)
+                 (on-cancel)))))]
+
+    [:form {:class (stl/css :message-editor)
+            :on-submit on-submit}
+     [:textarea {:class (stl/css :input :editor-input)
+                 :value draft
+                 :rows 3
+                 :auto-focus true
+                 :aria-label (tr "penforge.chat.message.edit-label")
+                 :on-change on-change
+                 :on-key-down on-key-down}]
+     [:div {:class (stl/css :card-actions)}
+      [:> button* {:variant "secondary" :type "button" :on-click on-cancel}
+       (tr "penforge.chat.message.cancel")]
+      [:> button* {:variant "primary" :type "submit" :disabled blank}
+       (tr "penforge.chat.message.send-edit")]]]))
+
+(mf/defc revert-confirm*
+  "The one question before a revert (W37)."
+  {::mf/private true}
+  [{:keys [on-confirm on-cancel]}]
+  [:div {:class (stl/css :card :revert-confirm)
+         :role "alertdialog"
+         :aria-label (tr "penforge.chat.message.revert")}
+   [:> text* {:as "p" :typography t/body-small}
+    (tr "penforge.chat.message.revert-question")]
+   [:div {:class (stl/css :card-actions)}
+    [:> button* {:variant "secondary" :on-click on-cancel}
+     (tr "penforge.chat.message.cancel")]
+    [:> button* {:variant "primary" :on-click on-confirm}
+     (tr "penforge.chat.message.revert-confirm")]]])
+
 (mf/defc user-entry*
   {::mf/private true}
+  [{:keys [entry can-act]}]
+  (let [{:keys [id text attachments]} entry
+        ;; nil, :edit or :revert (asking first)
+        mode*  (mf/use-state nil)
+        mode   (deref mode*)
+
+        on-edit
+        (mf/use-fn #(reset! mode* :edit))
+
+        on-revert
+        (mf/use-fn #(reset! mode* :revert))
+
+        on-close
+        (mf/use-fn #(reset! mode* nil))
+
+        on-save
+        (mf/use-fn
+         (mf/deps id)
+         (fn [draft]
+           (reset! mode* nil)
+           (st/emit! (chat/edit-message id draft))))
+
+        on-delete
+        (mf/use-fn
+         (mf/deps id)
+         #(st/emit! (chat/delete-message id)))
+
+        on-confirm-revert
+        (mf/use-fn
+         (mf/deps id)
+         (fn []
+           (reset! mode* nil)
+           (st/emit! (chat/revert-message id))))]
+
+    [:li {:class (stl/css :entry :entry-user-row)
+          :data-testid "ai-chat-user-message"}
+     (if (and (= mode :edit) can-act)
+       [:> message-editor* {:text text :on-save on-save :on-cancel on-close}]
+       [:div {:class (stl/css :entry-user)}
+        (when (seq attachments)
+          [:ul {:class (stl/css :chips)}
+           (for [[index attachment] (map-indexed vector attachments)]
+             [:> attachment-chip* {:key (str index "-" (chat/attachment-key attachment))
+                                   :attachment attachment}])])
+        [:> text* {:as "p"
+                   :typography t/body-medium
+                   :class (stl/css :user-text)}
+         text]])
+     (cond
+       (not can-act)
+       nil
+
+       (= mode :revert)
+       [:> revert-confirm* {:on-confirm on-confirm-revert :on-cancel on-close}]
+
+       (nil? mode)
+       [:> message-actions* {:on-edit on-edit
+                             :on-delete on-delete
+                             :on-revert on-revert}])]))
+
+(mf/defc notice-entry*
+  "A line about what a message action did (W37)."
+  {::mf/private true}
   [{:keys [entry]}]
-  (let [{:keys [text attachments]} entry]
-    [:li {:class (stl/css :entry :entry-user)}
-     (when (seq attachments)
-       [:ul {:class (stl/css :chips)}
-        (for [[index attachment] (map-indexed vector attachments)]
-          [:> attachment-chip* {:key (str index "-" (chat/attachment-key attachment))
-                                :attachment attachment}])])
-     [:> text* {:as "p"
-                :typography t/body-medium
-                :class (stl/css :user-text)}
-      text]]))
+  [:li {:class (stl/css :entry :entry-notice)}
+   [:> icon* {:icon-id i/history :size "s"}]
+   [:> text* {:as "p" :typography t/body-small}
+    (if (= "reverted" (:code entry))
+      (tr "penforge.chat.message.reverted")
+      (tr "penforge.chat.message.reverted-unchanged"))]])
 
 (mf/defc assistant-entry*
   {::mf/private true}
   [{:keys [entry]}]
   [:li {:class (stl/css :entry :entry-assistant)}
-   [:> markdown* {:text (:text entry)}]
+   [:> markdown* {:text (:text entry)
+                  :streaming (boolean (:streaming entry))}]
    (when (:streaming entry)
      [:span {:class (stl/css :caret) :aria-hidden true}])])
 
@@ -352,10 +499,11 @@
 (mf/defc entry*
   {::mf/private true
    ::mf/memo true}
-  [{:keys [entry persona]}]
+  [{:keys [entry persona can-act]}]
   (case (:kind entry)
     :steps      [:> steps-entry* {:entry entry :persona persona}]
-    :user       [:> user-entry* {:entry entry}]
+    :user       [:> user-entry* {:entry entry :can-act can-act}]
+    :notice     [:> notice-entry* {:entry entry}]
     :assistant  [:> assistant-entry* {:entry entry}]
     :tool       [:> tool-entry* {:entry entry :persona persona}]
     :error      [:> error-entry* {:entry entry :persona persona}]
@@ -366,7 +514,7 @@
 
 (mf/defc timeline*
   {::mf/private true}
-  [{:keys [entries status persona]}]
+  [{:keys [entries status persona can-act]}]
   (let [list-ref (mf/use-ref nil)]
 
     ;; Follow the conversation while it grows.
@@ -387,7 +535,8 @@
        (for [entry (chat/timeline-items entries)]
          [:> entry* {:key (str (name (:kind entry)) "-" (:id entry))
                      :entry entry
-                     :persona persona}])])))
+                     :persona persona
+                     :can-act can-act}])])))
 
 ;; --- Composer
 
@@ -740,7 +889,8 @@
      (when (or connected (seq entries))
        [:> timeline* {:entries entries
                       :status status
-                      :persona persona}])
+                      :persona persona
+                      :can-act (chat/can-act? chat connected)}])
 
      [:> work-status* {:chat chat}]
 

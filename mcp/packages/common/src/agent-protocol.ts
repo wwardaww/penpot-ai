@@ -176,6 +176,12 @@ export interface ChatSendMessage {
     attachments?: Attachment[];
     /** true when layers are selected but the user removed them from this message's context */
     selectionDismissed?: boolean;
+    /**
+     * Id of the user message (W37), chosen by the client so it can edit, delete or revert the
+     * message later; same pattern as conversation ids. The daemon makes one up when it is missing,
+     * invalid or already used in the conversation.
+     */
+    messageId?: string;
 }
 
 export interface ChatCancelMessage {
@@ -242,7 +248,8 @@ export type ClientMessage =
     | WorkflowCancelMessage
     | PreviewStartMessage
     | PreviewStopMessage
-    | AppsClientMessage;
+    | AppsClientMessage
+    | ChatEditClientMessage;
 
 // ---------------------------------------------------------------------------------------------
 // daemon -> client
@@ -441,6 +448,7 @@ export type DaemonMessage =
     | PreviewStatusMessage
     | PreviewLogMessage
     | AppsDaemonMessage
+    | ChatChangedMessage
     | ErrorMessage;
 
 // ---------------------------------------------------------------------------------------------
@@ -777,3 +785,73 @@ export interface AppsPhoneMessage {
 }
 
 export type AppsDaemonMessage = AppsListReplyMessage | AppsStatusMessage | AppsLogsReplyMessage | AppsPhoneMessage;
+
+// ---------------------------------------------------------------------------------------------
+// message actions in the chat (W37)
+
+/**
+ * Request to send an edited user message again: the message `messageId` and every later message
+ * are dropped, then a turn runs with `text` like `chat.send` (the edited message keeps its
+ * attachments, read from the conversation file; the client sends none). The daemon first replies
+ * `chat.changed` (action `edit`), then streams the turn. Refused with `busy` while the
+ * conversation answers.
+ */
+export interface ChatEditMessage {
+    type: "chat.edit";
+    rid: string;
+    conversationId: string;
+    /** user message to edit */
+    messageId: string;
+    text: string;
+    /** id of the new user message (as `chat.send.messageId`) */
+    newMessageId?: string;
+    selectionDismissed?: boolean;
+}
+
+/** Request to drop a user message and its answer from a conversation; replied with `chat.changed`. */
+export interface ChatDeleteMessage {
+    type: "chat.delete";
+    rid: string;
+    conversationId: string;
+    messageId: string;
+}
+
+/**
+ * Request to put the design back to how it was before a user message and drop that message and
+ * every later one. The design comes back from the first W19 checkpoint a turn from that message on
+ * saved (a chat turn saves one before its first design or file change); none means the AI changed
+ * nothing since, so only the messages go. `confirmed` says the client asked the user first.
+ * Replied with `chat.changed` (action `revert`); a failed restore answers `error` and keeps the
+ * messages.
+ */
+export interface ChatRevertMessage {
+    type: "chat.revert";
+    rid: string;
+    conversationId: string;
+    messageId: string;
+    confirmed: true;
+}
+
+export type ChatEditClientMessage = ChatEditMessage | ChatDeleteMessage | ChatRevertMessage;
+
+/** What a message action did to the design. */
+export type ChatRevertDesign = "restored" | "unchanged";
+
+/**
+ * Reply to `chat.edit`, `chat.delete` and `chat.revert`: the messages are gone from the
+ * conversation file. `removed` lists the ids of the dropped user and assistant messages. The next
+ * turn starts a new Claude session that gets a short history of the kept messages, so Claude does
+ * not remember the dropped ones (`wiki/architecture.md` §5).
+ */
+export interface ChatChangedMessage {
+    type: "chat.changed";
+    rid: string;
+    conversationId: string;
+    action: "edit" | "delete" | "revert";
+    messageId: string;
+    removed: string[];
+    /** revert only */
+    design?: ChatRevertDesign;
+    /** revert only: the restored checkpoint */
+    checkpointId?: string;
+}

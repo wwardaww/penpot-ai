@@ -164,6 +164,15 @@
   color: var(--color-foreground-secondary);
 }
 
+.scope {
+  @include t.use-typography("body-small");
+
+  margin: 0;
+  padding: var(--sp-s) var(--sp-m);
+  color: var(--color-foreground-secondary);
+  border-block-end: $b-1 solid var(--menu-border-color);
+}
+
 .footer {
   display: flex;
   flex-direction: column;

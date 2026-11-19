@@ -231,6 +231,12 @@ export class AgentSession implements AgentClient {
                 return this.deps.chat.cancel(this, message);
             case "chat.history":
                 return this.deps.chat.history(this, message);
+            case "chat.edit":
+                return this.deps.chat.edit(this, message);
+            case "chat.delete":
+                return this.deps.chat.delete(this, message);
+            case "chat.revert":
+                return this.deps.chat.revert(this, message);
             case "permission.respond":
                 if (!this.broker.respond(message.requestId, message.allow, message.remember ?? false)) {
                     throw new AgentError("bad-request", "No such permission request");

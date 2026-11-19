@@ -16,6 +16,7 @@
    [frontend-tests.data.ai-ask-test]
    [frontend-tests.data.ai-audit-test]
    [frontend-tests.data.ai-auto-name-test]
+   [frontend-tests.data.ai-chat-actions-test]
    [frontend-tests.data.ai-chat-test]
    [frontend-tests.data.ai-checkpoints-test]
    [frontend-tests.data.ai-cleanup-test]
@@ -171,6 +172,7 @@
    [frontend-tests.tokens.typography-form-test]
    [frontend-tests.tokens.workspace-tokens-remap-test]
    [frontend-tests.ui.ai-build-test]
+   [frontend-tests.ui.ai-chat-markdown-test]
    [frontend-tests.ui.ai-chat-ux-test]
    [frontend-tests.ui.ai-design-md-test]
    [frontend-tests.ui.ai-design-system-extract-test]
@@ -262,6 +264,7 @@
    'frontend-tests.data.ai-auto-name-test
    'frontend-tests.data.ai-adapt-test
    'frontend-tests.data.ai-audit-test
+   'frontend-tests.data.ai-chat-actions-test
    'frontend-tests.data.ai-chat-test
    'frontend-tests.data.ai-checkpoints-test
    'frontend-tests.data.ai-cleanup-test
@@ -424,6 +427,7 @@
    'frontend-tests.ui.ai-design-system-test
    'frontend-tests.ui.ai-build-test
    'frontend-tests.ui.ai-preview-pane-test
+   'frontend-tests.ui.ai-chat-markdown-test
    'frontend-tests.ui.ai-chat-ux-test
    'frontend-tests.ui.ai-pair-test
    'frontend-tests.ui.ai-visual-qa-test

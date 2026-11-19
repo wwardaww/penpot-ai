@@ -90,6 +90,7 @@
     "build-run"          (tr "penforge.checkpoints.workflow.build")
     "design-md-import"   (tr "penforge.checkpoints.workflow.design-md")
     "token-sync"         (tr "penforge.checkpoints.workflow.token-sync")
+    "chat"               (tr "penforge.checkpoints.workflow.chat")
     (tr "penforge.checkpoints.workflow.other" (str workflow))))
 
 (defn run-outcome
