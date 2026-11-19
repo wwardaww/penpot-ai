@@ -13038,3 +13038,156 @@ msgstr "Right screen"
 #: src/app/main/data/workspace/device_screens.cljs
 msgid "penforge.devices.state.spanned"
 msgstr "Spanned"
+
+# penforge:W31
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.title"
+msgstr "Animation"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.play"
+msgstr "Play animations on canvas"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.entrance"
+msgstr "Entrance"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.exit"
+msgstr "Exit"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.stagger"
+msgstr "Stagger children"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.preset.none"
+msgstr "None"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.preset.custom"
+msgstr "Custom"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.preset.fade"
+msgstr "Fade"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.preset.slide-up"
+msgstr "Slide up"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.preset.slide-down"
+msgstr "Slide down"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.preset.slide-left"
+msgstr "Slide left"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.preset.slide-right"
+msgstr "Slide right"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.preset.fade-slide-up"
+msgstr "Fade + slide up"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.preset.fade-slide-down"
+msgstr "Fade + slide down"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.preset.scale"
+msgstr "Scale"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.preset.fade-scale"
+msgstr "Fade + scale"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.preset.blur"
+msgstr "Blur"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.preset.fade-blur"
+msgstr "Fade + blur"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.easing.spring"
+msgstr "Spring"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.spring.stiffness"
+msgstr "Stiffness"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.spring.damping"
+msgstr "Damping"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.state.hover"
+msgstr "Hover"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.state.press"
+msgstr "Press"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.preview-state"
+msgstr "Preview state"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.opacity"
+msgstr "Opacity"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.scale"
+msgstr "Scale"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.offset-x"
+msgstr "Offset X"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.offset-y"
+msgstr "Offset Y"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.fill"
+msgstr "Fill"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.shadow"
+msgstr "Shadow"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.loop"
+msgstr "Loop"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.loop.pulse"
+msgstr "Pulse"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.loop.spin"
+msgstr "Spin"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.loop.bounce"
+msgstr "Bounce"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.loop.shimmer"
+msgstr "Shimmer"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.loop.count"
+msgstr "Repeat"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.loop.infinite"
+msgstr "Forever"
+
+#: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
+msgid "penforge.animations.smart"
+msgstr "Smart animate to %s"
