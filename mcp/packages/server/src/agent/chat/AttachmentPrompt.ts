@@ -1,4 +1,4 @@
-import type { Attachment, FileAttachment, WorkflowToolsApi } from "@penpot/mcp-common";
+import type { Attachment, FileAttachment, FolderAttachment, WorkflowToolsApi } from "@penpot/mcp-common";
 import { createLogger } from "../../logger";
 import type { RunnerDocument, RunnerImage, RunnerInput } from "../runner/ClaudeRunner";
 import { UploadStore } from "./UploadStore";
@@ -10,7 +10,8 @@ import { UploadStore } from "./UploadStore";
  * `get_node_properties` tool when that tool is available, and their snapshots become images.
  * Attached files become image or document blocks (images, PDFs) or inline text (text files, cut
  * at {@link AttachmentPrompt.MAX_TEXT_CHARS} characters); every file is listed with the path the
- * daemon saved it at, so Claude can read it again later.
+ * daemon saved it at, so Claude can read it again later. Attached folders are not put inline:
+ * Claude gets the folder's path and file list and reads the files it needs with its own tools.
  */
 export class AttachmentPrompt {
     private static readonly PROPERTIES_TOOL = "get_node_properties";
@@ -20,6 +21,8 @@ export class AttachmentPrompt {
     private static readonly IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
     /** Most characters of one text file put inline. */
     public static readonly MAX_TEXT_CHARS = 100_000;
+    /** Most files of one attached folder listed by name. */
+    public static readonly MAX_LISTED_FOLDER_FILES = 200;
     private readonly logger = createLogger("AttachmentPrompt");
 
     /**
@@ -83,6 +86,10 @@ export class AttachmentPrompt {
                     AttachmentPrompt.addFile(attachment, lines, images, documents, contents);
                     break;
                 }
+                case "folder": {
+                    lines.push(...AttachmentPrompt.folderLines(attachment));
+                    break;
+                }
             }
         }
         const sections = contents.length > 0 ? `\n\n${contents.join("\n\n")}` : "";
@@ -91,6 +98,25 @@ export class AttachmentPrompt {
             images,
             ...(documents.length > 0 ? { documents } : {}),
         };
+    }
+
+    /**
+     * Lines describing an attached folder: where it is, that all of it is source material, and its
+     * files (at most {@link MAX_LISTED_FOLDER_FILES}).
+     */
+    public static folderLines(folder: FolderAttachment): string[] {
+        const total = folder.files.reduce((sum, file) => sum + file.size, 0);
+        const where = folder.path ? `, saved at ${folder.path}/` : "";
+        const listed = folder.files.slice(0, AttachmentPrompt.MAX_LISTED_FOLDER_FILES);
+        const rest = folder.files.length - listed.length;
+        return [
+            `- Folder "${folder.name}" (${folder.files.length} files, ${total} bytes${where}). ` +
+                "Every file in it is source material for this request: read the files you need " +
+                "before you answer or design. Use the Read tool for each file (it reads images and " +
+                "PDFs too) and Glob or Grep to search; do not use shell commands for this.",
+            ...listed.map((file) => `  - ${file.path} (${file.size} bytes)`),
+            ...(rest > 0 ? [`  - …and ${rest} more files (use Glob on the folder)`] : []),
+        ];
     }
 
     private static addFile(

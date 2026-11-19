@@ -11958,10 +11958,6 @@ msgid "penforge.chat.attach.drop"
 msgstr "Drop files to attach them"
 
 #: src/app/main/ui/workspace/ai/chat/panel.cljs
-msgid "penforge.chat.attach.files"
-msgstr "Attach images, PDFs or text files"
-
-#: src/app/main/ui/workspace/ai/chat/panel.cljs
 msgid "penforge.chat.selection.many"
 msgstr "%s layers"
 
@@ -13441,3 +13437,32 @@ msgstr "Copied"
 #: src/app/main/data/ai/apps.cljs
 msgid "penforge.apps.tab.starting"
 msgstr "Starting your app…"
+
+# penforge:chat-folder
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.attach.menu"
+msgstr "Attach files or a folder"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.attach.pick-file"
+msgstr "Select file"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.attach.pick-folder"
+msgstr "Select folder"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.attach.folder-label"
+msgstr "%s (%s files)"
+
+#: src/app/main/ui/workspace/ai/chat/files.cljs
+msgid "penforge.chat.attach.error.folder-empty"
+msgstr "The folder %s has no files to attach."
+
+#: src/app/main/ui/workspace/ai/chat/files.cljs
+msgid "penforge.chat.attach.error.folder-count"
+msgstr "The folder %s has more than %s files."
+
+#: src/app/main/ui/workspace/ai/chat/files.cljs
+msgid "penforge.chat.attach.error.folder-size"
+msgstr "%s is too large (limit %s MB per file in a folder)."

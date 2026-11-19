@@ -15,6 +15,8 @@
    [app.main.refs :as refs]
    [app.main.render :as render]
    [app.main.store :as st]
+   [app.main.ui.components.dropdown-menu :refer [dropdown-menu*
+                                                 dropdown-menu-item*]]
    [app.main.ui.ds.buttons.button :refer [button*]]
    [app.main.ui.ds.buttons.icon-button :refer [icon-button*]]
    [app.main.ui.ds.foundations.assets.icon :refer [icon*] :as i]
@@ -93,8 +95,11 @@
   {::mf/private true
    ::mf/memo true}
   [{:keys [attachment on-remove]}]
-  (let [{:keys [kind node-id name type mime base64]} attachment
+  (let [{:keys [kind node-id name type mime base64 files]} attachment
         key (chat/attachment-key attachment)
+        label (if (= "folder" kind)
+                (tr "penforge.chat.attach.folder-label" name (count files))
+                name)
 
         on-click
         (mf/use-fn
@@ -102,10 +107,12 @@
          #(on-remove key))]
 
     [:li {:class (stl/css :chip)}
-     (if (= "file" kind)
-       [:> file-thumbnail* {:mime mime :base64 base64}]
+     (case kind
+       "file" [:> file-thumbnail* {:mime mime :base64 base64}]
+       "folder" [:span {:class (stl/css :thumbnail)}
+                 [:> icon* {:icon-id i/folder :size "s"}]]
        [:> node-thumbnail* {:node-id node-id :type type}])
-     [:span {:class (stl/css :chip-name) :title name} name]
+     [:span {:class (stl/css :chip-name) :title label} label]
      (when on-remove
        [:> icon-button* {:variant "ghost"
                          :icon i/close-small
@@ -189,6 +196,10 @@
       "file-count" (tr "penforge.chat.attach.error.count" limit)
       "files-total" (tr "penforge.chat.attach.error.total" limit-mb)
       ("file-read" "file-incomplete") (tr "penforge.chat.attach.error.read" name)
+      "folder-empty" (tr "penforge.chat.attach.error.folder-empty" name)
+      "folder-count" (tr "penforge.chat.attach.error.folder-count" name limit)
+      "folder-file-size" (tr "penforge.chat.attach.error.folder-size" name limit-mb)
+      "folder-path" (tr "penforge.chat.attach.error.read" name)
       (case code
         "not-connected" (tr "penforge.chat.error.not-connected")
         "busy" (tr "penforge.chat.error.busy")
@@ -425,6 +436,23 @@
                          :aria-label (tr "penforge.chat.selection.remove")
                          :on-click on-remove}]])))
 
+(mf/defc attach-menu-item*
+  {::mf/private true}
+  [{:keys [icon label on-click]}]
+  (let [on-key-down
+        (mf/use-fn
+         (mf/deps on-click)
+         (fn [event]
+           (when (kbd/enter? event)
+             (on-click event))))]
+    [:> dropdown-menu-item* {:class (stl/css :attach-menu-item)
+                             :on-click on-click
+                             :on-key-down on-key-down}
+     [:> icon* {:icon-id icon
+                :size "s"
+                :class (stl/css :attach-menu-icon)}]
+     [:span label]]))
+
 (mf/defc composer*
   {::mf/private true}
   [{:keys [chat status connected]}]
@@ -435,6 +463,9 @@
         dragging*    (mf/use-state false)
         dragging     (deref dragging*)
         input-ref    (mf/use-ref nil)
+        folder-ref   (mf/use-ref nil)
+        menu*        (mf/use-state false)
+        menu-open    (deref menu*)
         reserved-ref (mf/use-ref [])
         attachments  (:attachments chat)
         ;; one turn at a time; workflow runs do not block the chat
@@ -498,8 +529,59 @@
                               (when (seq refused)
                                 (swap! problems* #(into (vec %) refused))))))))))
 
+        add-folder
+        (mf/use-fn
+         (fn [js-files]
+           (when (pos? (.-length js-files))
+             (let [reserved (mf/ref-val reserved-ref)
+                   {:keys [accepted problems]}
+                   (files/check-folder (into (vec (mf/ref-val pending-ref)) reserved)
+                                       (files/folder-entries js-files))]
+               (reset! problems* (not-empty problems))
+               (when (some? accepted)
+                 ;; the folder holds its room while it is read
+                 (let [slot {:kind "folder" :size (:size accepted) :slot (str (uuid/next))}]
+                   (mf/set-ref-val! reserved-ref (conj reserved slot))
+                   (->> (files/read-folder accepted)
+                        (p/fmap (fn [{:keys [attachment problem]}]
+                                  (mf/set-ref-val! reserved-ref
+                                                   (into [] (remove #(= slot %)) (mf/ref-val reserved-ref)))
+                                  (when (some? attachment)
+                                    (st/emit! (chat/add-files [attachment])))
+                                  (when (some? problem)
+                                    (swap! problems* #(conj (vec %) problem))))))))))))
+
+        toggle-menu
+        (mf/use-fn
+         (fn [event]
+           ;; the open menu closes on any document click; keep this one
+           ;; from reaching it
+           (dom/stop-propagation event)
+           (swap! menu* not)))
+
+        close-menu
+        (mf/use-fn #(reset! menu* false))
+
         on-pick
-        (mf/use-fn #(some-> (mf/ref-val input-ref) dom/click))
+        (mf/use-fn
+         (fn [_]
+           (reset! menu* false)
+           (some-> (mf/ref-val input-ref) dom/click)))
+
+        on-pick-folder
+        (mf/use-fn
+         (fn [_]
+           (reset! menu* false)
+           (some-> (mf/ref-val folder-ref) dom/click)))
+
+        on-folder-change
+        (mf/use-fn
+         (mf/deps add-folder)
+         (fn [event]
+           (let [target (dom/get-target event)
+                 picked (js/Array.from (.-files ^js target))]
+             (set! (.-value ^js target) "")
+             (add-folder picked))))
 
         on-input-change
         (mf/use-fn
@@ -588,13 +670,33 @@
               :tab-index -1
               :aria-hidden true
               :on-change on-input-change}]
+     [:input {:type "file"
+              :ref folder-ref
+              ;; folder picker: the browser returns every file inside
+              :webkitdirectory ""
+              :multiple true
+              :class (stl/css :file-input)
+              :tab-index -1
+              :aria-hidden true
+              :on-change on-folder-change}]
      [:div {:class (stl/css :composer-actions)}
-      [:> icon-button* {:variant "ghost"
-                        :type "button"
-                        :icon i/add
-                        :disabled (not connected)
-                        :aria-label (tr "penforge.chat.attach.files")
-                        :on-click on-pick}]
+      [:div {:class (stl/css :attach-menu-wrapper)}
+       [:> icon-button* {:variant "ghost"
+                         :type "button"
+                         :icon i/add
+                         :disabled (not connected)
+                         :aria-label (tr "penforge.chat.attach.menu")
+                         :aria-pressed menu-open
+                         :on-click toggle-menu}]
+       [:> dropdown-menu* {:show menu-open
+                           :on-close close-menu
+                           :class (stl/css :attach-menu)}
+        [:> attach-menu-item* {:icon i/document
+                               :label (tr "penforge.chat.attach.pick-file")
+                               :on-click on-pick}]
+        [:> attach-menu-item* {:icon i/folder
+                               :label (tr "penforge.chat.attach.pick-folder")
+                               :on-click on-pick-folder}]]]
       [:> button* {:variant "primary"
                    :type "submit"
                    :disabled (or (not connected) busy (empty? (.trim text)))}

@@ -23,6 +23,19 @@ const attachment = z.discriminatedUnion("kind", [
         size: z.number().int().nonnegative(),
         base64: base64.optional(),
     }),
+    z.object({
+        kind: z.literal("folder"),
+        name: z.string().min(1).max(255),
+        files: z
+            .array(
+                z.object({
+                    path: z.string().min(1).max(1024),
+                    size: z.number().int().nonnegative(),
+                    base64: base64.optional(),
+                })
+            )
+            .max(1000),
+    }),
 ]);
 
 /**

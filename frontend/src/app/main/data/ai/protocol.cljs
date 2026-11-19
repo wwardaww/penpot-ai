@@ -60,12 +60,26 @@
    [:base64 {:optional true} :string]
    [:path {:optional true} :string]])
 
+(def schema:folder-attachment
+  "A folder attached by the user: every file in it is source material.
+  `:base64` of each file goes to the daemon; stored history entries
+  carry the folder's `:path` and the files without bytes."
+  [:map {:title "FolderAttachment"}
+   [:kind [:= "folder"]]
+   [:name :string]
+   [:files [:vector [:map
+                     [:path :string]
+                     [:size :int]
+                     [:base64 {:optional true} :string]]]]
+   [:path {:optional true} :string]])
+
 (def schema:attachment
   [:multi {:dispatch :kind :title "Attachment"}
    ["node" schema:node-attachment]
    ["comment" schema:comment-attachment]
    ["image" schema:image-attachment]
-   ["file" schema:file-attachment]])
+   ["file" schema:file-attachment]
+   ["folder" schema:folder-attachment]])
 
 (def file-limits
   "Limits of file attachments; mirror of `FILE_ATTACHMENT_LIMITS` in
@@ -85,6 +99,14 @@
                :text (* 1024 1024)}
    :max-files 10
    :max-total-bytes (* 20 1024 1024)})
+
+(def folder-limits
+  "Limits of folder attachments; mirror of `FOLDER_ATTACHMENT_LIMITS` in
+  `agent-protocol.ts`. A folder's bytes count toward `file-limits`
+  `:max-total-bytes`."
+  {:max-files 300
+   :max-file-bytes (* 10 1024 1024)
+   :skipped #{".git" "node_modules" ".DS_Store" "Thumbs.db" "desktop.ini" "__MACOSX"}})
 
 ;; --- Client -> daemon
 
@@ -430,6 +452,14 @@
    :mime mime
    :size size
    :base64 base64})
+
+(defn folder-attachment
+  "Build a folder attachment from its name and files (`:path`, `:size`,
+  `:base64`)."
+  [name files]
+  {:kind "folder"
+   :name name
+   :files (mapv #(select-keys % [:path :size :base64]) files)})
 
 (defn node-attachment
   "Build a node attachment from a shape."

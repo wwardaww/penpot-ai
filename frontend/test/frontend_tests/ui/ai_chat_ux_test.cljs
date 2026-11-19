@@ -119,6 +119,48 @@
   (let [pending (vec (repeat 10 {:kind "file" :size 1}))]
     (t/is (= [:count] (mapv :code (:problems (files/check-files pending [{:name "a.txt" :mime "text/plain" :size 1}])))))))
 
+(defn- browser-file
+  "Stand-in for a browser `File` picked with a folder input."
+  [relative-path size]
+  #js {:name (last (str/split relative-path "/"))
+       :webkitRelativePath relative-path
+       :size size})
+
+(t/deftest picked-folders-keep-their-tree-without-tool-folders
+  (let [{:keys [name files skipped]}
+        (files/folder-entries #js [(browser-file "brand/logo.svg" 10)
+                                   (browser-file "brand/icons/home.png" 20)
+                                   (browser-file "brand/.git/HEAD" 1)
+                                   (browser-file "brand/web/node_modules/x/index.js" 5)
+                                   (browser-file "brand/.DS_Store" 2)])]
+    (t/is (= "brand" name))
+    (t/is (= ["logo.svg" "icons/home.png"] (mapv :path files)))
+    (t/is (= [10 20] (mapv :size files)))
+    (t/is (= 3 skipped))))
+
+(t/deftest folders-are-checked-whole-against-the-limits
+  (let [mb (* 1024 1024)
+        ok {:name "brand" :files [{:path "a.png" :size 10} {:path "b/c.svg" :size 5}]}]
+    (t/is (= {:name "brand" :files (:files ok) :size 15}
+             (:accepted (files/check-folder [] ok))))
+    (t/is (= [:folder-empty] (mapv :code (:problems (files/check-folder [] {:name "e" :files []})))))
+    (t/is (= [[:folder-count "many" 300]]
+             (mapv (juxt :code :name :limit)
+                   (:problems (files/check-folder [] {:name "many"
+                                                       :files (vec (repeat 301 {:path "a" :size 1}))})))))
+    (t/is (= [[:folder-size "video.mp4" 10]]
+             (mapv (juxt :code :name :limit)
+                   (:problems (files/check-folder [] {:name "v" :files [{:path "video.mp4" :size (* 11 mb)}]})))))
+    (t/is (= [:total]
+             (mapv :code (:problems (files/check-folder [{:kind "file" :size (* 15 mb)}
+                                                         {:kind "folder" :size (* 4 mb)}]
+                                                        {:name "x" :files [{:path "a" :size (* 2 mb)}]}))))
+          "files, folders and reserved room share the total")
+    (t/is (= [:total]
+             (mapv :code (:problems (files/check-files [{:kind "folder" :size (* 19 mb)}]
+                                                       [{:name "a.png" :mime "image/png" :size (* 2 mb)}]))))
+          "a pending folder counts for later files too")))
+
 ;; --- Status
 
 (t/deftest elapsed-time-reads-like-a-clock
@@ -186,7 +228,10 @@
                                 :size 3 :base64 "AAAA"}]
                  :entries [{:kind :user :id "u1" :text "build this"
                             :attachments [{:kind "file" :name "spec.pdf" :mime "application/pdf"
-                                           :size 9 :path ".penforge/uploads/x-spec.pdf"}]}
+                                           :size 9 :path ".penforge/uploads/x-spec.pdf"}
+                                          {:kind "folder" :name "brand-kit"
+                                           :path ".penforge/sources/x-brand-kit"
+                                           :files [{:path "a.svg" :size 1} {:path "b.png" :size 2}]}]}
                            {:kind :tool :id "t1" :tool-name "penforge_canvas_check" :status :error
                             :summary "English" :code "boards-overlap" :params {:names ["Android" "Android"]}}
                            {:kind :tool :id "t2" :tool-name "penforge_canvas_check" :status :done
@@ -206,6 +251,10 @@
           "a refused file is worded by the client")
     (t/is (str/includes? markup "DESIGN.md"))
     (t/is (str/includes? markup "spec.pdf") "history entries show their files")
+    (t/is (str/includes? markup "penforge.chat.attach.folder-label brand-kit 2")
+          "history entries show their folders with the file count")
+    (t/is (str/includes? markup "webkitdirectory=\"\"")
+          "the folder picker is a directory input")
     (t/is (str/includes? markup "data-testid=\"ai-chat-status\""))
     (t/is (str/includes? markup "type=\"file\""))
     (t/is (str/includes? markup "accept=\"") "the picker offers the accepted types")))

@@ -3,7 +3,12 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
-import type { Attachment, FileAttachment } from "@penpot/mcp-common";
+import {
+    FOLDER_ATTACHMENT_LIMITS,
+    type Attachment,
+    type FileAttachment,
+    type FolderAttachment,
+} from "@penpot/mcp-common";
 import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import { AttachmentPrompt } from "./AttachmentPrompt";
 import { UploadRefusedError, UploadStore } from "./UploadStore";
@@ -174,4 +179,133 @@ test("long text files are cut and point at the saved file", async () => {
     const input = await new AttachmentPrompt(null).build("read", [file("big.txt", "text/plain", text)]);
     assert.match(input.text, /Only the first 100000 characters are shown/);
     assert.ok(!input.text.includes("x".repeat(AttachmentPrompt.MAX_TEXT_CHARS + 1)));
+});
+
+// --- Folders
+
+function folder(name: string, files: Record<string, Buffer>): FolderAttachment {
+    return {
+        kind: "folder",
+        name,
+        files: Object.entries(files).map(([path, bytes]) => ({
+            path,
+            size: bytes.length,
+            base64: bytes.toString("base64"),
+        })),
+    };
+}
+
+function sources(): string[] {
+    try {
+        return readdirSync(join(workspace.metaDir, UploadStore.SOURCES_FOLDER));
+    } catch {
+        return [];
+    }
+}
+
+test("folders are saved under .penforge/sources with their tree, any file type, no bytes kept", async () => {
+    const svg = Buffer.from("<svg/>", "utf8");
+    const code = Buffer.from("export const x = 1;\n", "utf8");
+    const [saved] = (await new UploadStore(workspace).saveAll([
+        folder("Brand kit", { "logo.svg": svg, "icons/home.png": PNG, "src/app.tsx": code }),
+    ])) as FolderAttachment[];
+
+    assert.match(saved.path!, /^\.penforge\/sources\/\d{8}T\d{6}-[0-9a-f]{6}-Brand_kit$/);
+    assert.deepEqual(saved.files, [
+        { path: "logo.svg", size: svg.length },
+        { path: "icons/home.png", size: PNG.length },
+        { path: "src/app.tsx", size: code.length },
+    ]);
+    assert.deepEqual(readFileSync(join(workspace.root, saved.path!, "icons", "home.png")), PNG);
+    assert.deepEqual(readFileSync(join(workspace.root, saved.path!, "src", "app.tsx")), code);
+    assert.equal(sources().length, 1);
+});
+
+test("folder paths cannot leave the folder", async () => {
+    for (const path of ["../secret.txt", "a/../../b.txt", "/etc/passwd", "C:/Windows/x.txt", String.raw`\\server\x`]) {
+        await assert.rejects(
+            new UploadStore(workspace).saveAll([folder("f", { [path]: Buffer.from("x") })]),
+            (error: unknown) => error instanceof UploadRefusedError && error.reason === "folder-path"
+        );
+    }
+    assert.deepEqual(sources(), []);
+});
+
+test("folder path segments are made safe and clashes get a number", () => {
+    assert.deepEqual(UploadStore.pathSegments("./a b/CON.txt"), ["a_b", "-CON.txt"]);
+    const used = new Set<string>();
+    assert.equal(UploadStore.uniquePath(["a", "x.png"], used), "a/x.png");
+    assert.equal(UploadStore.uniquePath(["a", "X.png"], used), "a/X-2.png");
+    assert.equal(UploadStore.uniquePath(["a", "x.png"], used), "a/x-3.png");
+    assert.equal(UploadStore.uniquePath(["v1.2", "README"], used), "v1.2/README");
+    assert.equal(UploadStore.uniquePath(["v1.2", "readme"], used), "v1.2/readme-2");
+});
+
+test("empty, crowded, oversized and too-large-together folders are refused before anything is written", async () => {
+    const store = new UploadStore(workspace);
+    const reasonOf = async (attachments: Attachment[]) => {
+        try {
+            await store.saveAll(attachments);
+            return "saved";
+        } catch (error) {
+            assert.ok(error instanceof UploadRefusedError);
+            return error.reason;
+        }
+    };
+    assert.equal(await reasonOf([folder("empty", {})]), "folder-empty");
+
+    const many: Record<string, Buffer> = {};
+    for (let i = 0; i <= FOLDER_ATTACHMENT_LIMITS.maxFiles; i++) {
+        many[`f${i}.txt`] = Buffer.from("x");
+    }
+    assert.equal(await reasonOf([folder("many", many)]), "folder-count");
+
+    const big = Buffer.alloc(FOLDER_ATTACHMENT_LIMITS.maxFileBytes + 1);
+    assert.equal(await reasonOf([folder("big", { "video.mp4": big })]), "folder-file-size");
+
+    // a file of the message and a folder share the total limit
+    const half = Buffer.alloc(9 * 1024 * 1024);
+    const pdf = Buffer.concat([PDF, Buffer.alloc(9 * 1024 * 1024)]);
+    assert.equal(
+        await reasonOf([
+            file("spec.pdf", "application/pdf", pdf),
+            folder("assets", { "a.bin": half, "b.bin": Buffer.alloc(3 * 1024 * 1024) }),
+        ]),
+        "files-total"
+    );
+
+    const truncated = folder("cut", { "a.txt": Buffer.from("hello") });
+    truncated.files[0].size = 99;
+    assert.equal(await reasonOf([truncated]), "file-incomplete");
+
+    assert.deepEqual(sources(), []);
+    assert.deepEqual(uploads(), []);
+});
+
+test("an attached folder reaches Claude as its path and file list, not inline", async () => {
+    const input = await new AttachmentPrompt(null).build("use these", [
+        {
+            kind: "folder",
+            name: "Brand kit",
+            path: ".penforge/sources/1-Brand_kit",
+            files: [
+                { path: "logo.svg", size: 6 },
+                { path: "icons/home.png", size: 12 },
+            ],
+        },
+    ]);
+    assert.deepEqual(input.images, []);
+    assert.match(input.text, /Folder "Brand kit" \(2 files, 18 bytes, saved at \.penforge\/sources\/1-Brand_kit\/\)/);
+    assert.match(input.text, /Every file in it is source material/);
+    assert.match(input.text, /\n {2}- icons\/home\.png \(12 bytes\)/);
+});
+
+test("long folder lists are cut with a hint to use Glob", () => {
+    const files = Array.from({ length: AttachmentPrompt.MAX_LISTED_FOLDER_FILES + 5 }, (_, i) => ({
+        path: `f${i}.txt`,
+        size: 1,
+    }));
+    const lines = AttachmentPrompt.folderLines({ kind: "folder", name: "big", files });
+    assert.equal(lines.length, AttachmentPrompt.MAX_LISTED_FOLDER_FILES + 2);
+    assert.match(lines.at(-1)!, /and 5 more files \(use Glob on the folder\)/);
 });

@@ -106,8 +106,9 @@
 (defn- wire-attachment
   "An attachment as the daemon receives it: no client-only keys."
   [attachment]
-  (if (= "file" (:kind attachment))
-    (dissoc attachment :id)
+  (case (:kind attachment)
+    "file" (dissoc attachment :id)
+    "folder" (dissoc attachment :id :size)
     attachment))
 
 (defn- history->entry

@@ -10,6 +10,9 @@
 @use "ds/_utils.scss" as *;
 @use "ds/mixins.scss" as *;
 
+// Only for the shared menu placeholders (%menu-dropdown, %menu-item-base).
+@use "refactor/common-refactor.scss" as deprecated;
+
 .panel {
   display: flex;
   flex-direction: column;
@@ -366,6 +369,33 @@
 
 .file-input {
   display: none;
+}
+
+.attach-menu-wrapper {
+  position: relative;
+}
+
+.attach-menu {
+  @extend %menu-dropdown;
+
+  inset-inline-start: 0;
+  inset-block-end: calc(100% + var(--sp-xs));
+  min-inline-size: px2rem(180);
+}
+
+.attach-menu-item {
+  @extend %menu-item-base;
+
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--sp-s);
+  white-space: nowrap;
+}
+
+.attach-menu-icon {
+  flex-shrink: 0;
+  color: var(--color-foreground-secondary);
 }
 
 .problems {

@@ -104,7 +104,45 @@ export const FILE_ATTACHMENT_LIMITS = {
     maxTotalBytes: 20 * 1024 * 1024,
 } as const;
 
-export type Attachment = NodeAttachment | CommentAttachment | ImageAttachment | FileAttachment;
+/** File inside an attached folder. */
+export interface FolderAttachmentFile {
+    /** path inside the folder, "/" separated (e.g. "icons/home.svg") */
+    path: string;
+    /** size of the file in bytes */
+    size: number;
+    /** file bytes, base64 encoded (no data URL prefix); client to daemon only */
+    base64?: string;
+}
+
+/**
+ * Folder the user attached to a chat message: every file in it is source material for the request.
+ *
+ * The client sends every file with its path inside the folder; the daemon stores the folder in the
+ * project (`.penforge/sources/`) and tells Claude where it is, so Claude reads the files it needs
+ * with its own tools instead of getting them all inline. Any file type is accepted. The folder's
+ * bytes count toward {@link FILE_ATTACHMENT_LIMITS} `maxTotalBytes` with the message's files.
+ * Stored history entries carry `path` and the file list without bytes.
+ */
+export interface FolderAttachment {
+    kind: "folder";
+    /** name of the folder the user picked */
+    name: string;
+    files: FolderAttachmentFile[];
+    /** where the daemon stored the folder, relative to the project folder; set by the daemon */
+    path?: string;
+}
+
+/** Limits of folder attachments (the total size limit is the one of {@link FILE_ATTACHMENT_LIMITS}). */
+export const FOLDER_ATTACHMENT_LIMITS = {
+    /** most files in one folder */
+    maxFiles: 300,
+    /** largest file in a folder */
+    maxFileBytes: 10 * 1024 * 1024,
+    /** folder and file names the client leaves out (tool folders and system files) */
+    skipped: [".git", "node_modules", ".DS_Store", "Thumbs.db", "desktop.ini", "__MACOSX"],
+} as const;
+
+export type Attachment = NodeAttachment | CommentAttachment | ImageAttachment | FileAttachment | FolderAttachment;
 
 // ---------------------------------------------------------------------------------------------
 // client -> daemon

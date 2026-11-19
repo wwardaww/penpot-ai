@@ -103,6 +103,9 @@ export class ConversationStore {
             const { base64: _bytes, ...rest } = attachment;
             return rest;
         }
+        if (attachment.kind === "folder") {
+            return { ...attachment, files: attachment.files.map(({ path, size }) => ({ path, size })) };
+        }
         return attachment;
     }
 }
