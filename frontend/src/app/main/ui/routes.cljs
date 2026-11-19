@@ -69,7 +69,8 @@
            [:nitrate-entry])
          (when (contains? cf/flags :ai)
            [:penforge-pair
-            :penforge-chat])
+            :penforge-chat
+            :dashboard-apps])
          (when *assert*
            [:debug-icons-preview
             :debug-playground]))))
@@ -135,7 +136,8 @@
     ["/fonts/providers"      :dashboard-font-providers]
     ["/libraries"            :dashboard-libraries]
     ["/files"                :dashboard-files]
-    ["/deleted" :dashboard-deleted]]
+    ["/deleted" :dashboard-deleted]
+    ["/apps"                 :dashboard-apps]]
 
    ["/workspace" :workspace]])
 

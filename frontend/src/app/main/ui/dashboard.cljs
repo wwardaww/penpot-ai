@@ -30,6 +30,7 @@
    [app.main.ui.dashboard.import]
    [app.main.ui.dashboard.layout-toggle :as lt]
    [app.main.ui.dashboard.libraries :refer [libraries-page*]]
+   [app.main.ui.dashboard.penforge.apps.page :refer [apps-page*]]
    [app.main.ui.dashboard.projects :refer [projects-section*]]
    [app.main.ui.dashboard.search :refer [search-page*]]
    [app.main.ui.dashboard.sidebar :refer [sidebar*]]
@@ -154,6 +155,9 @@
 
        :dashboard-settings
        [:> team-settings-page* {:team team :profile profile}]
+
+       :dashboard-apps
+       [:> apps-page* {:team team}]
 
        :dashboard-deleted
        [:> deleted-section* {:team team

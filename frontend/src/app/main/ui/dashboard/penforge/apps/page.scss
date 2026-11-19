@@ -1,0 +1,53 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+@use "dashboard/common/header";
+
+.dashboard-container {
+  flex: 1 0 0;
+  margin-inline-end: var(--sp-l);
+  overflow-y: auto;
+  inline-size: 100%;
+  border-block-start: $b-1 solid var(--color-background-quaternary);
+}
+
+.apps-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-l);
+  padding: var(--sp-l);
+}
+
+.intro {
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.connection {
+  max-inline-size: $sz-520;
+}
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-m);
+  color: var(--color-foreground-primary);
+}
+
+.muted {
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax($sz-352, 1fr));
+  gap: var(--sp-l);
+  align-items: start;
+}

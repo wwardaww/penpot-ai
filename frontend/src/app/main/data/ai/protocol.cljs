@@ -142,6 +142,25 @@
     [:map [:type :string] [:rid {:optional true} :string] [:project-id :string]]]
 
    ["preview.stop"
+    [:map [:type :string] [:rid {:optional true} :string] [:project-id :string]]]
+
+   ;; W33: built apps on the dashboard
+   ["apps.list"
+    [:map [:type :string] [:rid :string] [:team-id {:optional true} :string]]]
+
+   ["apps.start"
+    [:map [:type :string] [:rid :string] [:project-id :string]]]
+
+   ["apps.stop"
+    [:map [:type :string] [:rid :string] [:project-id :string]]]
+
+   ["apps.logs"
+    [:map [:type :string] [:rid :string] [:project-id :string]]]
+
+   ["apps.phone.start"
+    [:map [:type :string] [:rid :string] [:project-id :string] [:confirmed [:= true]]]]
+
+   ["apps.phone.stop"
     [:map [:type :string] [:rid {:optional true} :string] [:project-id :string]]]])
 
 ;; --- Daemon -> client
@@ -239,6 +258,36 @@
      [:project-id :string]
      [:stream [:enum "stdout" "stderr" "system"]]
      [:text :string]]]
+
+   ;; W33: built apps on the dashboard (items checked by app.main.data.ai.apps)
+   ["apps.list"
+    [:map [:type :string] [:rid :string] [:apps [:vector :any]]]]
+
+   ["apps.status"
+    [:map
+     [:type :string]
+     [:project-id :string]
+     [:state :string]
+     [:url {:optional true} :string]
+     [:reason {:optional true} :string]
+     [:message {:optional true} :string]
+     [:exposure {:optional true} :string]]]
+
+   ["apps.logs"
+    [:map [:type :string] [:rid :string] [:project-id :string] [:lines [:vector :any]]]]
+
+   ["apps.phone"
+    [:map
+     [:type :string]
+     [:project-id :string]
+     [:state :string]
+     [:url {:optional true} :string]
+     [:host {:optional true} :string]
+     [:port {:optional true} :int]
+     [:qr {:optional true} [:map [:size :int] [:rows [:vector :string]]]]
+     [:expires-at {:optional true} :string]
+     [:code {:optional true} :string]
+     [:message {:optional true} :string]]]
 
    ["error"
     [:map

@@ -27,6 +27,7 @@
    [app.main.ui.dashboard.comments :refer [comments-icon* comments-section]]
    [app.main.ui.dashboard.inline-edition :refer [inline-edition]]
    [app.main.ui.dashboard.organization-team-switch :refer [organization-team-switch*]]
+   [app.main.ui.dashboard.penforge.apps.nav :refer [apps-nav-item*]]
    [app.main.ui.dashboard.project-menu :refer [project-menu-items*]]
    [app.main.ui.dashboard.subscription :refer [dashboard-cta*
                                                nitrate-current-plan*
@@ -352,7 +353,8 @@
           [:> link* {:action go-drafts
                      :class (stl/css :sidebar-link)
                      :keyboard-action go-drafts-with-key}
-           [:span {:class (stl/css :element-title)} (tr "labels.drafts")]]]]]
+           [:span {:class (stl/css :element-title)} (tr "labels.drafts")]]]
+         [:> apps-nav-item* {:current-section section :team-id team-id :classes {:item (stl/css :sidebar-nav-item) :current (stl/css :current) :link (stl/css :sidebar-link) :title (stl/css :element-title)}}]]]
 
        [:div {:class (stl/css :sidebar-content-section)}
         [:div {:class (stl/css :sidebar-section-title)}
