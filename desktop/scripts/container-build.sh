@@ -7,6 +7,8 @@
 # <work-dir> holds src/ (the source tree the orchestrator streams in) and
 # out/ (what it copies back to Windows). Steps:
 #   sync              move src.new/ (fresh tar extract) over src/, keeping caches
+#   sync-incremental  the changed files were extracted into src/ directly: delete
+#                     the ones in removed-list, restore executable bits
 #   backend           backend uberjar -> out/backend/{penpot.jar,log4j2.xml,version.txt}
 #   backend-templates also prefetch builtin-templates into out/backend-templates
 #                     (upstream bundle step; the desktop app does not ship them)
@@ -104,11 +106,22 @@ do_sync() {
     rm -rf "$WORK/src.new"
     # every pnpm-workspace.yaml points at <repo>/.pnpm-store
     [[ -e "$SRC/.pnpm-store" ]] || ln -s "$STORE" "$SRC/.pnpm-store"
-    # tar on Windows loses the executable bit: restore it from the git index
-    # (the orchestrator writes the list of 100755 paths to exec-list)
+    restore_exec_bits
+}
+
+# tar on Windows loses the executable bit: restore it from the git index
+# (the orchestrator writes the list of 100755 paths to exec-list)
+restore_exec_bits() {
     if [[ -f "$WORK/exec-list" ]]; then
         (cd "$SRC" && tr '\n' '\0' < "$WORK/exec-list" | xargs -0 -r chmod +x 2>/dev/null || true)
     fi
+}
+
+do_sync_incremental() {
+    if [[ -s "$WORK/removed-list" ]]; then
+        (cd "$SRC" && tr '\n' '\0' < "$WORK/removed-list" | xargs -0 -r rm -f --)
+    fi
+    restore_exec_bits
 }
 
 do_backend() {

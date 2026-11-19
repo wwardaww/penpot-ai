@@ -220,20 +220,50 @@ async function sendSource() {
         .split("\0").filter((f) => f && existsSync(join(REPO, f)));
     const execs = git("ls-files", "-s", "--", ...paths).split("\n")
         .filter((l) => l.startsWith("100755")).map((l) => l.split("\t")[1]);
-    const list = join(BUILD, "source-files.txt");
     mkdirSync(BUILD, { recursive: true });
-    writeFileSync(list, files.join("\n"));
-    const prep = COLD ? `rm -rf ${WORK};` : "";
-    spawnSync("docker", docker("bash", "-c", `${prep} mkdir -p ${WORK} && rm -rf ${WORK}/src.new && mkdir -p ${WORK}/src.new && cat > ${WORK}/exec-list`), { input: execs.join("\n") });
-    const receiver = spawn("docker", docker("tar", "-x", "-C", `${WORK}/src.new`), { stdio: ["pipe", "inherit", "inherit"] });
-    const received = new Promise((ok) => receiver.on("close", ok));
-    await step("source-to-container", systemTar(), ["-c", "-f", "-", "-T", list], { cwd: REPO, pipeTo: receiver });
-    const code = await received;
-    if (code !== 0) {
-        throw new Error(`tar -x in the container failed (${code})`);
+
+    // Incremental upload: the manifest (size + mtime per file) of the last upload is
+    // kept on both sides under one id; when the container still holds that upload,
+    // only new or changed files travel and removed ones are deleted there.
+    const manifestFile = join(BUILD, "source-manifest.json");
+    const signatures = Object.fromEntries(files.map((f) => {
+        const st = statSync(join(REPO, f));
+        return [f, `${st.size}:${Math.round(st.mtimeMs)}`];
+    }));
+    let previous;
+    try {
+        previous = JSON.parse(readFileSync(manifestFile, "utf8"));
+    } catch {
+        previous = undefined;
     }
-    // sync runs from the fresh copy (src/ may not exist yet)
-    await step("container:sync", "docker", docker("bash", "-l", `${WORK}/src.new/desktop/scripts/container-build.sh`, "sync", WORK, VERSION));
+    const remoteId = COLD ? "" : spawnSync("docker", docker("cat", `${WORK}/src/.penforge-source-id`), { encoding: "utf8" }).stdout?.trim();
+    const incremental = Boolean(!COLD && previous && remoteId && previous.id === remoteId);
+    const send = incremental ? files.filter((f) => previous.files[f] !== signatures[f]) : files;
+    const removed = incremental ? Object.keys(previous.files).filter((f) => !(f in signatures)) : [];
+    const id = createHash("sha256").update(`${Date.now()}:${Math.random()}`).digest("hex").slice(0, 16);
+    const target = incremental ? `${WORK}/src` : `${WORK}/src.new`;
+    log(incremental ? `upload: ${send.length} changed, ${removed.length} removed files` : `upload: all ${files.length} files`);
+
+    const list = join(BUILD, "source-files.txt");
+    writeFileSync(list, send.join("\n"));
+    const prep = COLD ? `rm -rf ${WORK};` : "";
+    const fresh = incremental ? "" : `rm -rf ${WORK}/src.new && mkdir -p ${WORK}/src.new &&`;
+    spawnSync("docker", docker("bash", "-c", `${prep} mkdir -p ${WORK} && ${fresh} cat > ${WORK}/exec-list`), { input: execs.join("\n") });
+    spawnSync("docker", docker("bash", "-c", `cat > ${WORK}/removed-list`), { input: removed.join("\n") });
+    if (send.length > 0) {
+        const receiver = spawn("docker", docker("tar", "-x", "-C", target), { stdio: ["pipe", "inherit", "inherit"] });
+        const received = new Promise((ok) => receiver.on("close", ok));
+        await step("source-to-container", systemTar(), ["-c", "-f", "-", "-T", list], { cwd: REPO, pipeTo: receiver });
+        const code = await received;
+        if (code !== 0) {
+            throw new Error(`tar -x in the container failed (${code})`);
+        }
+    }
+    // a full sync runs from the fresh copy (src/ may not exist yet)
+    const script = `${WORK}/${incremental ? "src" : "src.new"}/desktop/scripts/container-build.sh`;
+    await step("container:sync", "docker", docker("bash", "-l", script, incremental ? "sync-incremental" : "sync", WORK, VERSION));
+    spawnSync("docker", docker("bash", "-c", `printf %s ${id} > ${WORK}/src/.penforge-source-id`));
+    writeFileSync(manifestFile, JSON.stringify({ id, files: signatures }));
 }
 
 async function copyOut(parts) {
