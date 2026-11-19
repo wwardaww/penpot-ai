@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Penforge: build the Windows desktop app in one command (Git Bash or
+# PowerShell via `bash`, from the repository root or a worktree).
+#
+#   scripts/penforge-desktop-build            fast local build: unpacked app in
+#                                             desktop/release/win-unpacked/Penforge.exe
+#   scripts/penforge-desktop-build --release  NSIS installer, maximum compression
+#   scripts/penforge-desktop-build --help     every option
+#
+# Backend and frontend build in the running devenv container (one JVM at a
+# time, heap PENFORGE_SHADOW_XMX, default 1536m); parts whose sources did not
+# change since the last build are skipped. Timing table: --measure.
+# Details: desktop/scripts/desktop-build.mjs.
+
+set -euo pipefail
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    sed -n '1,/^import /p' "$(dirname "$0")/../desktop/scripts/desktop-build.mjs" | sed '$d' | sed 's|^// \{0,1\}||'
+    exit 0
+fi
+
+exec node "$(dirname "$0")/../desktop/scripts/desktop-build.mjs" "$@"
