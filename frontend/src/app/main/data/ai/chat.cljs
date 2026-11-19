@@ -27,6 +27,9 @@
     from the next message's context (W25)
   - `:outbox` attachments of sent messages until they go out, by message
     id (file bytes are kept out of the timeline)
+  - `:pending-action` the message action (W37) waiting for its
+    `chat.changed`: `{:rid :action :message-id :entries}` (`:entries` =
+    the timeline before an edit, put back if the daemon refuses it)
 
   `apply-message` is the pure reducer of daemon messages; every event
   of this namespace goes through it or through small pure helpers."
@@ -241,6 +244,15 @@
     (and (some? rid) (= rid (:history-rid chat)))
     (assoc chat :history-status :error)
 
+    ;; A refused message action (W37): an edit gets its timeline back.
+    (and (some? rid) (= rid (get-in chat [:pending-action :rid])))
+    (let [{:keys [entries]} (:pending-action chat)]
+      (-> chat
+          (dissoc :pending-action)
+          (cond-> (some? entries) (assoc :entries entries :status :idle))
+          (append-entry (d/without-nils {:kind :error :id (str (uuid/next)) :code code
+                                         :message message}))))
+
     (contains? (:pending-runs chat) rid)
     (let [{:keys [silent]} (get-in chat [:pending-runs rid])]
       (-> chat
@@ -252,6 +264,52 @@
     (append-entry chat (d/without-nils {:kind :error :id (str (uuid/next)) :code code :message message
                                         :reason reason :params params}))))
 
+(defn- user-entry-index
+  [entries message-id]
+  (find-entry-index entries #(and (= :user (:kind %)) (= message-id (:id %)))))
+
+(defn drop-turn
+  "The timeline without the user message `message-id` and its turn (the
+  entries up to the next user message): a deleted message (W37)."
+  [entries message-id]
+  (if-let [start (user-entry-index entries message-id)]
+    (let [next-user (loop [index (inc start)]
+                      (cond
+                        (>= index (count entries)) index
+                        (= :user (:kind (nth entries index))) index
+                        :else (recur (inc index))))]
+      (into (subvec entries 0 start) (subvec entries next-user)))
+    entries))
+
+(defn drop-from
+  "The timeline without the user message `message-id` and everything
+  after it: an edited or reverted message (W37)."
+  [entries message-id]
+  (if-let [start (user-entry-index entries message-id)]
+    (subvec entries 0 start)
+    entries))
+
+(defn- apply-chat-changed
+  [chat {:keys [rid action message-id design] :as msg}]
+  (if (active-conversation? chat msg)
+    (let [chat (cond-> chat
+                 (= rid (get-in chat [:pending-action :rid]))
+                 (dissoc :pending-action))]
+      (case action
+        "delete"
+        (update chat :entries drop-turn message-id)
+
+        "revert"
+        (-> chat
+            (update :entries drop-from message-id)
+            (append-entry {:kind :notice
+                           :id (str "reverted-" rid)
+                           :code (if (= "restored" design) "reverted" "reverted-unchanged")}))
+
+        ;; edit: the timeline was cut when the edit was sent
+        chat))
+    chat))
+
 (defn apply-message
   "Reduce a daemon message into the chat state."
   [chat msg]
@@ -260,6 +318,7 @@
     "chat.tool"          (apply-chat-tool chat msg)
     "chat.done"          (apply-chat-done chat msg)
     "chat.history"       (apply-chat-history chat msg)
+    "chat.changed"       (apply-chat-changed chat msg)
     "permission.request" (append-entry chat {:kind :permission
                                              :id (:request-id msg)
                                              :title (:title msg)
@@ -291,6 +350,34 @@
            (assoc-in [:outbox id] (mapv wire-attachment attachments)))
          (assoc :attachments [])
          (assoc :status :streaming)))))
+
+(defn edit-user-message
+  "The timeline cut at the user message `message-id`, followed by its
+  edited copy `new-id` with `text` (same attachments, sent again by the
+  daemon), and a turn started (W37). Unknown ids change nothing."
+  [chat message-id new-id text rid]
+  (let [entries (:entries chat)]
+    (if-let [index (user-entry-index entries message-id)]
+      (let [old (nth entries index)]
+        (-> chat
+            (assoc :pending-action {:rid rid :action :edit :message-id message-id :entries entries})
+            (update :entries drop-from message-id)
+            (append-entry (d/without-nils
+                           {:kind :user
+                            :id new-id
+                            :text text
+                            :ts (now-str)
+                            :attachments (not-empty (:attachments old))}))
+            (assoc :status :streaming)))
+      chat)))
+
+(defn can-act?
+  "True when the user may edit, delete or revert messages now: connected,
+  no turn or action running."
+  [chat connected]
+  (and connected
+       (not= :streaming (:status chat))
+       (nil? (:pending-action chat))))
 
 (defn add-attachments
   "Add attachments to the pending list, skipping nodes already there."
@@ -528,6 +615,7 @@
       (cond-> (working? chat) (assoc-in [:activity :interrupted] true))
       (assoc :status :idle)
       (assoc :outbox {})
+      (dissoc :pending-action)
       (assoc :pending-runs {})
       (update :runs (fn [runs]
                       (update-vals runs #(cond-> %
@@ -717,9 +805,73 @@
                                                   :conversation-id conversation-id
                                                   :text text
                                                   :attachments (get outbox id)
-                                                  :selection-dismissed (state-selection-dismissed? state)}))
+                                                  :selection-dismissed (state-selection-dismissed? state)
+                                                  :message-id id}))
                    (clear-outbox id))
             (rx/empty)))))))
+
+;; --- Message actions (W37)
+
+(defn edit-message
+  "Send the user message `message-id` again with `text`: the later
+  messages are replaced by the new answer."
+  [message-id text]
+  (let [new-id (str (uuid/next))
+        text   (some-> text str .trim)]
+    (ptk/reify ::edit-message
+      ptk/UpdateEvent
+      (update [_ state]
+        (let [chat (get-chat state)]
+          (if (and (seq text) (can-act? chat (connected? state)))
+            (update-chat state edit-user-message message-id new-id text new-id)
+            state)))
+
+      ptk/WatchEvent
+      (watch [_ state _]
+        (let [{:keys [conversation-id pending-action]} (get-chat state)]
+          (if (= new-id (:rid pending-action))
+            (rx/of (client/send (proto/chat-edit {:rid new-id
+                                                  :conversation-id conversation-id
+                                                  :message-id message-id
+                                                  :new-message-id new-id
+                                                  :text text})))
+            (rx/empty)))))))
+
+(defn- message-action
+  "Ask the daemon for `action` (`:delete` or `:revert`) on the user
+  message `message-id`; the timeline changes when `chat.changed` comes."
+  [action message-id]
+  (let [rid (proto/next-rid)]
+    (ptk/reify ::message-action
+      ptk/UpdateEvent
+      (update [_ state]
+        (let [chat (get-chat state)]
+          (if (and (can-act? chat (connected? state))
+                   (user-entry-index (:entries chat) message-id))
+            (update-in state [:penforge :chat] assoc :pending-action
+                       {:rid rid :action action :message-id message-id})
+            state)))
+
+      ptk/WatchEvent
+      (watch [_ state _]
+        (let [{:keys [conversation-id pending-action]} (get-chat state)
+              request {:rid rid :conversation-id conversation-id :message-id message-id}]
+          (if (= rid (:rid pending-action))
+            (rx/of (client/send (case action
+                                  :delete (proto/chat-delete request)
+                                  :revert (proto/chat-revert request))))
+            (rx/empty)))))))
+
+(defn delete-message
+  "Drop the user message `message-id` and its answer."
+  [message-id]
+  (message-action :delete message-id))
+
+(defn revert-message
+  "Put the design back to before the user message `message-id` and drop
+  it and every later message. The UI asks the user first."
+  [message-id]
+  (message-action :revert message-id))
 
 (defn- mark-cancelled
   [chat]

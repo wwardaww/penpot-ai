@@ -1,9 +1,38 @@
-import { appendFile, readFile } from "fs/promises";
+import { appendFile, readFile, rename, writeFile } from "fs/promises";
 import type { Attachment, ChatHistoryEntry } from "@penpot/mcp-common";
 import type { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 
 /** Line of a conversation file. */
-type ConversationRecord = ({ type: "message" } & ChatHistoryEntry) | { type: "session"; sessionId: string; ts: string };
+type ConversationRecord =
+    | ({ type: "message" } & ChatHistoryEntry)
+    | { type: "session"; sessionId: string; ts: string }
+    /** W19 checkpoint a turn saved before its first change (W37), linked to the turn's user message */
+    | { type: "checkpoint"; messageId: string; checkpointId: string; ts: string };
+
+/**
+ * How much of a conversation a message action drops: the user message and every later message
+ * (`from`: edit, revert), or the user message and its answer only (`turn`: delete).
+ */
+export type ConversationCutMode = "from" | "turn";
+
+/** What a message action drops from a conversation (see {@link ConversationStore.planCut}). */
+export class ConversationCut {
+    constructor(
+        /** the user message the action is about */
+        public readonly target: ChatHistoryEntry,
+        /** the dropped user and assistant messages, oldest first (the target first) */
+        public readonly removed: ChatHistoryEntry[],
+        /** checkpoints the dropped turns saved, oldest first */
+        public readonly checkpoints: string[],
+        /** the records the conversation file keeps */
+        readonly kept: readonly unknown[]
+    ) {}
+
+    /** Ids of the dropped messages. */
+    public removedIds(): string[] {
+        return this.removed.map((entry) => entry.messageId);
+    }
+}
 
 /**
  * Store of chat conversations, one JSON Lines file per conversation
@@ -46,6 +75,79 @@ export class ConversationStore {
         return (await this.records(conversationId))
             .filter((record): record is { type: "message" } & ChatHistoryEntry => record.type === "message")
             .map(({ type: _type, ...entry }) => entry);
+    }
+
+    /**
+     * Links the W19 checkpoint a turn saved to the turn's user message.
+     */
+    public async setCheckpoint(conversationId: string, messageId: string, checkpointId: string): Promise<void> {
+        await this.append(conversationId, {
+            type: "checkpoint",
+            messageId,
+            checkpointId,
+            ts: new Date().toISOString(),
+        });
+    }
+
+    /**
+     * Whether a conversation holds a message with this id.
+     */
+    public async hasMessage(conversationId: string, messageId: string): Promise<boolean> {
+        return (await this.records(conversationId)).some(
+            (record) => record.type === "message" && record.messageId === messageId
+        );
+    }
+
+    /**
+     * Works out what a message action drops, without changing the file.
+     *
+     * @param conversationId - the conversation
+     * @param messageId - a user message of it
+     * @param mode - drop every message from it on (`from`), or it and its answer (`turn`)
+     * @returns the cut, or null when the conversation has no such user message
+     */
+    public async planCut(
+        conversationId: string,
+        messageId: string,
+        mode: ConversationCutMode
+    ): Promise<ConversationCut | null> {
+        const records = await this.records(conversationId);
+        const start = records.findIndex(
+            (record) => record.type === "message" && record.role === "user" && record.messageId === messageId
+        );
+        if (start < 0) {
+            return null;
+        }
+        let end = records.length;
+        if (mode === "turn") {
+            const next = records.findIndex(
+                (record, index) => index > start && record.type === "message" && record.role === "user"
+            );
+            end = next < 0 ? records.length : next;
+        }
+        const dropped = records.slice(start, end);
+        const removed = dropped
+            .filter((record): record is { type: "message" } & ChatHistoryEntry => record.type === "message")
+            .map(({ type: _type, ...entry }) => entry);
+        const checkpoints = dropped
+            .filter((record) => record.type === "checkpoint")
+            .map((record) => (record as { checkpointId: string }).checkpointId);
+        // every session is dropped: Claude's session remembers the dropped turns
+        const kept = [...records.slice(0, start), ...records.slice(end)].filter((record) => record.type !== "session");
+        return new ConversationCut(removed[0], removed, checkpoints, kept);
+    }
+
+    /**
+     * Applies a cut: rewrites the conversation file with the kept records (atomically, through a
+     * temporary file). The conversation keeps no Claude session afterwards, so the next turn starts
+     * a new one.
+     */
+    public async applyCut(conversationId: string, cut: ConversationCut): Promise<void> {
+        const file = this.file(conversationId);
+        const temp = `${file}.tmp`;
+        const content = cut.kept.map((record) => `${JSON.stringify(record)}\n`).join("");
+        await writeFile(temp, content, "utf8");
+        await rename(temp, file);
     }
 
     /**

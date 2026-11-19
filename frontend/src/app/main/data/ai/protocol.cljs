@@ -135,7 +135,9 @@
      [:conversation-id :string]
      [:text :string]
      [:attachments {:optional true} [:vector schema:attachment]]
-     [:selection-dismissed {:optional true} :boolean]]]
+     [:selection-dismissed {:optional true} :boolean]
+     ;; W37: id of the user message, so it can be edited, deleted or reverted
+     [:message-id {:optional true} :string]]]
 
    ["chat.cancel"
     [:map [:type :string] [:conversation-id :string]]]
@@ -183,7 +185,29 @@
     [:map [:type :string] [:rid :string] [:project-id :string] [:confirmed [:= true]]]]
 
    ["apps.phone.stop"
-    [:map [:type :string] [:rid {:optional true} :string] [:project-id :string]]]])
+    [:map [:type :string] [:rid {:optional true} :string] [:project-id :string]]]
+
+   ;; W37: message actions in the chat
+   ["chat.edit"
+    [:map
+     [:type :string]
+     [:rid :string]
+     [:conversation-id :string]
+     [:message-id :string]
+     [:text :string]
+     [:new-message-id {:optional true} :string]
+     [:selection-dismissed {:optional true} :boolean]]]
+
+   ["chat.delete"
+    [:map [:type :string] [:rid :string] [:conversation-id :string] [:message-id :string]]]
+
+   ["chat.revert"
+    [:map
+     [:type :string]
+     [:rid :string]
+     [:conversation-id :string]
+     [:message-id :string]
+     [:confirmed [:= true]]]]])
 
 ;; --- Daemon -> client
 
@@ -311,6 +335,18 @@
      [:code {:optional true} :string]
      [:message {:optional true} :string]]]
 
+   ;; W37: reply to chat.edit / chat.delete / chat.revert
+   ["chat.changed"
+    [:map
+     [:type :string]
+     [:rid :string]
+     [:conversation-id :string]
+     [:action [:enum "edit" "delete" "revert"]]
+     [:message-id :string]
+     [:removed [:vector :string]]
+     [:design {:optional true} [:enum "restored" "unchanged"]]
+     [:checkpoint-id {:optional true} :string]]]
+
    ["error"
     [:map
      [:type :string]
@@ -383,7 +419,7 @@
     (assoc :project-name project-name)))
 
 (defn chat-send
-  [{:keys [rid conversation-id text attachments selection-dismissed]}]
+  [{:keys [rid conversation-id text attachments selection-dismissed message-id]}]
   (cond-> {:type "chat.send"
            :rid (or rid (next-rid))
            :conversation-id conversation-id
@@ -392,7 +428,43 @@
     (assoc :attachments (vec attachments))
 
     selection-dismissed
+    (assoc :selection-dismissed true)
+
+    (some? message-id)
+    (assoc :message-id message-id)))
+
+(defn chat-edit
+  "Send the user message `message-id` again with `text` (W37); the daemon
+  drops it and every later message first."
+  [{:keys [rid conversation-id message-id text new-message-id selection-dismissed]}]
+  (cond-> {:type "chat.edit"
+           :rid (or rid (next-rid))
+           :conversation-id conversation-id
+           :message-id message-id
+           :text text}
+    (some? new-message-id)
+    (assoc :new-message-id new-message-id)
+
+    selection-dismissed
     (assoc :selection-dismissed true)))
+
+(defn chat-delete
+  "Drop the user message `message-id` and its answer (W37)."
+  [{:keys [rid conversation-id message-id]}]
+  {:type "chat.delete"
+   :rid (or rid (next-rid))
+   :conversation-id conversation-id
+   :message-id message-id})
+
+(defn chat-revert
+  "Put the design back to before the user message `message-id` and drop
+  it and every later message (W37). Send it only after the user said yes."
+  [{:keys [rid conversation-id message-id]}]
+  {:type "chat.revert"
+   :rid (or rid (next-rid))
+   :conversation-id conversation-id
+   :message-id message-id
+   :confirmed true})
 
 (defn chat-cancel
   [conversation-id]

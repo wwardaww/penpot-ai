@@ -65,6 +65,7 @@ export class ClientMessageSchema {
             text: z.string().max(200_000),
             attachments: z.array(attachment).max(50).optional(),
             selectionDismissed: z.boolean().optional(),
+            messageId: id.optional(),
         }),
         z.object({ type: z.literal("chat.cancel"), conversationId: id }),
         z.object({ type: z.literal("chat.history"), rid: id, conversationId: id }),
@@ -90,6 +91,24 @@ export class ClientMessageSchema {
         z.object({ type: z.literal("apps.logs"), rid: id, projectId: id }),
         z.object({ type: z.literal("apps.phone.start"), rid: id, projectId: id, confirmed: z.literal(true) }),
         z.object({ type: z.literal("apps.phone.stop"), rid: id.optional(), projectId: id }),
+        // W37: message actions in the chat
+        z.object({
+            type: z.literal("chat.edit"),
+            rid: id,
+            conversationId: id,
+            messageId: id,
+            text: z.string().max(200_000),
+            newMessageId: id.optional(),
+            selectionDismissed: z.boolean().optional(),
+        }),
+        z.object({ type: z.literal("chat.delete"), rid: id, conversationId: id, messageId: id }),
+        z.object({
+            type: z.literal("chat.revert"),
+            rid: id,
+            conversationId: id,
+            messageId: id,
+            confirmed: z.literal(true),
+        }),
     ]);
 
     /**

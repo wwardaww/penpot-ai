@@ -12,6 +12,8 @@ import type {
     WorkflowToolsApi,
     WorkflowWorkspaceApi,
 } from "@penpot/mcp-common";
+import { W19ChatCheckpoints } from "../chat/TurnCheckpoints";
+import type { TurnSetup } from "../chat/TurnRunner";
 import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import { WorkflowRegistry } from "../workflows/WorkflowRegistry";
 import { workflow as restoreWorkflow } from "../workflows/checkpoint-restore";
@@ -424,4 +426,40 @@ test("the checkpoint workflows are registered", () => {
     for (const name of ["checkpoint-create", "checkpoint-restore", "checkpoint-list", "checkpoint-diff"]) {
         assert.ok(names.includes(name), name);
     }
+});
+
+// --- chat turns (W37)
+
+function chatSetup(): TurnSetup {
+    return {
+        context: makeContext().ctx.context,
+        workspace,
+        tools: penpot,
+        permissions: { decide: async () => ({ allow: true }) },
+    };
+}
+
+test("a chat turn's checkpoint restores the design and the code", async () => {
+    writeFileSync(join(workspace.appSrcDir, "index.html"), "<h1>v1</h1>");
+    const chat = new W19ChatCheckpoints();
+
+    const id = await chat.save(chatSetup(), "Before chat: “paint it teal”");
+    assert.equal(id, "cp-1");
+    const [saved] = await new CheckpointStore(workspace).list();
+    assert.equal(saved.workflow, "chat");
+    assert.equal(saved.label, "Before chat: “paint it teal”");
+
+    penpot.design = "design v2";
+    writeFileSync(join(workspace.appSrcDir, "index.html"), "<h1>v2</h1>");
+    await chat.restore(chatSetup(), id!);
+
+    assert.equal(penpot.design, "design v1");
+    assert.equal(readFileSync(join(workspace.appSrcDir, "index.html"), "utf8"), "<h1>v1</h1>");
+});
+
+test("a chat checkpoint that Penpot cannot restore fails the restore", async () => {
+    const chat = new W19ChatCheckpoints();
+    const id = await chat.save(chatSetup(), "Before chat: x");
+    penpot.restoreError = "refused";
+    await assert.rejects(chat.restore(chatSetup(), id!));
 });
