@@ -36,6 +36,12 @@
          :canvas-h  0
          :dpr       1}))
 
+(defn get-snapshot-canvas
+  "Offscreen canvas the viewer renders boards into (Penforge animations
+  draw their frames through it), or nil."
+  []
+  (:os-canvas @viewer-snapshot))
+
 (defn- reset-viewer-snapshot! []
   (reset! viewer-snapshot
           {:os-canvas nil

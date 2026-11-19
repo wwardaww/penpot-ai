@@ -13,6 +13,7 @@
    [app.common.types.shape-tree :as ctt]
    [app.common.types.shape.interactions :as ctsi]
    [app.common.uuid :as uuid]
+   [app.config :as cf]
    [app.main.data.common :as dcm]
    [app.main.data.workspace.interactions :as dwi]
    [app.main.refs :as refs]
@@ -26,6 +27,7 @@
    [app.main.ui.ds.controls.numeric-input :refer [numeric-input*]]
    [app.main.ui.ds.foundations.assets.icon :as i]
    [app.main.ui.ds.product.empty-state :refer [empty-state*]]
+   [app.main.ui.workspace.sidebar.options.menus.animations.animations :refer [animations-menu*]]
    [app.util.dom :as dom]
    [app.util.i18n :as i18n :refer [tr]]
    [app.util.keyboard :as kbd]
@@ -774,6 +776,10 @@
      (when framed-shape?
        [:> interactions* {:interactions interactions
                           :shape shape}])
+
+     ;; Penforge (W31): layer animations
+     (when (and shape (contains? cf/flags :ai))
+       [:> animations-menu* {:shape shape}])
 
      (when (= (count interactions) 0)
        [:div {:class (stl/css :section)}

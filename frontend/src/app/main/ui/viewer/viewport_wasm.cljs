@@ -9,7 +9,9 @@
   (:require
    [app.common.files.helpers :as cfh]
    [app.common.geom.point :as gpt]
+   [app.config :as cf]
    [app.main.render-viewer-wasm :as rwv]
+   [app.main.ui.viewer.animations.player :as anim]
    [app.main.ui.viewer.shapes :as shapes]
    [app.main.ui.viewer.viewport-common :as vpc]
    [app.render-wasm.api :as wasm.api]
@@ -154,6 +156,22 @@
      (when has-fixed? fixed-layer-ref)
      not-fixed-include-ids fixed-include-ids fixed-clear-fills-ids
      delta)
+
+    ;; Penforge (W31): layer animations
+    (anim/use-viewer-animations
+     {:enabled (contains? cf/flags :ai)
+      :objects objects
+      :frame-id frame-id
+      :scale scale
+      :render-size (-> size
+                       (update :x + (:x delta 0))
+                       (update :y + (:y delta 0)))
+      :passes (cond-> [{:canvas-ref not-fixed-wasm-ref
+                        :include-ids not-fixed-include-ids}]
+                has-fixed?
+                (conj {:canvas-ref fixed-wasm-ref
+                       :include-ids fixed-include-ids
+                       :clear-fills-ids fixed-clear-fills-ids}))})
 
     [:& (mf/provider shapes/base-frame-ctx) {:value (get prepared-all (:id base))}
      [:& (mf/provider shapes/frame-offset-ctx) {:value offset}

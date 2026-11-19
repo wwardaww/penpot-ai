@@ -5,7 +5,7 @@ mod fonts;
 pub mod gpu_state;
 pub mod grid_layout;
 mod images;
-mod options;
+pub(crate) mod options;
 pub mod pdf;
 pub mod raster;
 mod resources;
