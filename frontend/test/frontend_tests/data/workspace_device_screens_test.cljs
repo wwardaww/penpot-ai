@@ -150,12 +150,15 @@
            (rx/filter dch/commit?)
            (rx/map deref)
            (rx/mapcat
-            (fn [{:keys [save-undo? undo-changes redo-changes undo-group tags stack-undo?]}]
+            (fn [{:keys [save-undo? undo-changes redo-changes undo-group tags stack-undo?
+                         selected-before translation?]}]
               (if (and save-undo? (seq undo-changes))
                 (rx/of (dwu/append-undo {:undo-changes undo-changes
                                          :redo-changes redo-changes
                                          :undo-group undo-group
-                                         :tags tags}
+                                         :tags tags
+                                         :selected-before selected-before
+                                         :translation (boolean translation?)}
                                         stack-undo?))
                 (rx/empty))))
            (rx/take-until (rx/filter #(= :the/end %) stream))))))
