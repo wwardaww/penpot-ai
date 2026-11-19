@@ -10,7 +10,9 @@
   (:require
    ["react-dom/server" :as rds]
    [app.main.ui.dashboard.penforge.design-systems.page :as page]
+   [app.main.ui.workspace.ai.design-system.fig :as fig]
    [app.main.ui.workspace.ai.design-system.start :as start]
+   [beicon.v2.core :as rx]
    [cljs.test :as t :include-macros true]
    [cuerdas.core :as str]
    [rumext.v2 :as mf]))
@@ -71,3 +73,39 @@
       (t/is (str/includes? html "data-testid=\"design-system-card\""))
       (t/is (str/includes? html "Acme"))
       (t/is (str/includes? html "background-color:#2B59C3")))))
+
+(def ^:private progress
+  {:kind :progress :payload {:stage :import}})
+
+(t/deftest fig-job-answers-the-imported-file-id
+  (t/async
+    done
+    (let [values (atom [])]
+      (->> (fig/job-file-id (rx/from [progress
+                                      {:kind :start}
+                                      {:status "completed" :result {:file-ids ["f-1" "f-2"]}}
+                                      {:status "completed" :result {:file-ids ["late"]}}]))
+           (rx/subs! #(swap! values conj %)
+                     (fn [cause]
+                       (t/is false (str "unexpected error " cause))
+                       (done))
+                     (fn []
+                       (t/is (= ["f-1"] @values))
+                       (done)))))))
+
+(t/deftest fig-job-failure-is-an-error
+  (t/async
+    done
+    (->> (fig/job-file-id (rx/from [progress {:status "failed" :error {:code "x"}}]))
+         (rx/subs! (fn [value]
+                     (t/is false (str "unexpected value " value)))
+                   (fn [cause]
+                     (t/is (= "the import failed" (ex-message cause)))
+                     (done))
+                   (fn []
+                     (t/is false "completed without an error")
+                     (done))))))
+
+(t/deftest fig-job-without-a-file-is-an-error
+  (t/is (thrown? js/Error (fig/completed-file-id {:status "completed" :result {:file-ids []}})))
+  (t/is (nil? (fig/completed-file-id progress))))
