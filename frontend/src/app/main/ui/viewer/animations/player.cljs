@@ -97,6 +97,17 @@
         (finally
           (reset! wasm/disable-request-render? prev))))))
 
+(defn- without-render-requests
+  "Runs `thunk` with render requests blocked: the viewer draws boards
+  itself, a workspace-style render must not start on its canvas."
+  [thunk]
+  (let [prev @wasm/disable-request-render?]
+    (reset! wasm/disable-request-render? true)
+    (try
+      (thunk)
+      (finally
+        (reset! wasm/disable-request-render? prev)))))
+
 ;; --- Pointer → layer
 
 (defn- page-point
@@ -185,6 +196,7 @@
         hidden?   (and (some? canvas) (has-enter-animation? objects frame-id))
         show      (fn [] (when (some? canvas) (dom/set-style! canvas "opacity" "1")))
         backend   {:get-objects (fn [] (:objects (mf/ref-val ctx-ref)))
+                   :guard without-render-requests
                    :draw (fn []
                            (when @alive*
                              (some-> (mf/ref-val ctx-ref) (draw-passes))

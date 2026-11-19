@@ -111,9 +111,9 @@
   [id state]
   (ptk/reify ::play-state-preview
     ptk/EffectEvent
-    (effect [_ st _]
+    (effect [_ app-state _]
       (when (render/renderer-ready?)
-        (let [objects (dsh/lookup-page-objects st)
+        (let [objects (dsh/lookup-page-objects app-state)
               shape   (get objects id)
               anim    (spec/get-shape-animations shape)
               st-spec (get-in anim [:states state])]

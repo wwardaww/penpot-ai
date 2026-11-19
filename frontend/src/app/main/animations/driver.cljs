@@ -17,6 +17,8 @@
     :draw         () → draws after a frame was written
     :begin / :end () → around a playing run (optional)
     :interrupted? (objects) → true to stop (optional)
+    :guard        (thunk) → runs the renderer writes of a frame (optional;
+                  View mode blocks render requests while writing)
 
   Source (map):
     :values   (fn [now]) → {layer-id values}
@@ -47,13 +49,19 @@
 
 (declare ^:private schedule)
 
+(defn- guarded
+  [backend thunk]
+  (if-let [guard (:guard backend)]
+    (guard thunk)
+    (thunk)))
+
 (defn- finish
   [key]
   (when-let [{:keys [backend render-state]} (get @players key)]
     (let [{:keys [get-objects draw end]} backend]
       (try
         (when (render/renderer-ready?)
-          (render/restore (get-objects) render-state)
+          (guarded backend #(render/restore (get-objects) render-state))
           (when end (end))
           (draw))
         (catch :default cause
@@ -79,7 +87,7 @@
           :else
           (let [{:keys [values absolute]} (collect sources now)
                 new-state (try
-                            (render/apply-frame current values absolute render-state)
+                            (guarded backend #(render/apply-frame current values absolute render-state))
                             (catch :default cause
                               (log/error :hint "animation frame failed" :cause cause)
                               nil))
@@ -111,7 +119,7 @@
                     (do
                       ;; Persistent player at rest: give the real values
                       ;; back and wait for the next source.
-                      (render/restore current (:render-state p))
+                      (guarded backend #(render/restore current (:render-state p)))
                       (draw)
                       (swap! players update key assoc :render-state render/empty-state :raf nil))
                     :else (schedule key)))))))))))
