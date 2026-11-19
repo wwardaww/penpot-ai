@@ -13038,3 +13038,124 @@ msgstr "Right screen"
 #: src/app/main/data/workspace/device_screens.cljs
 msgid "penforge.devices.state.spanned"
 msgstr "Spanned"
+
+# penforge:W29
+#: src/app/main/data/ai/design_system.cljs
+msgid "penforge.design-systems.default-name"
+msgstr "Design system"
+
+#: src/app/main/data/ai/design_system.cljs
+msgid "penforge.design-systems.create-failed"
+msgstr "The design system could not be created. Try again."
+
+#: src/app/main/data/ai/actions/design_system.cljs
+msgid "penforge.design-systems.action.open"
+msgstr "Design system"
+
+#: src/app/main/data/ai/actions/design_system.cljs, src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.action.publish"
+msgstr "Publish as library"
+
+#: src/app/main/ui/dashboard/penforge/design_systems/page.cljs
+msgid "penforge.design-systems.title"
+msgstr "Design Systems"
+
+#: src/app/main/ui/dashboard/penforge/design_systems/page.cljs
+msgid "penforge.design-systems.new"
+msgstr "+ Design System"
+
+#: src/app/main/ui/dashboard/penforge/design_systems/page.cljs
+msgid "penforge.design-systems.empty"
+msgstr "No design systems yet. Create one: upload a DESIGN.md or describe your brand, and the AI builds the colors, text styles, tokens, components and icons."
+
+#: src/app/main/ui/dashboard/penforge/design_systems/page.cljs
+msgid "penforge.design-systems.card.components"
+msgstr "%s components"
+
+#: src/app/main/ui/dashboard/penforge/design_systems/page.cljs
+msgid "penforge.design-systems.card.tokens"
+msgstr "%s tokens"
+
+#: src/app/main/ui/dashboard/penforge/design_systems/page.cljs
+msgid "penforge.design-systems.card.shared"
+msgstr "Shared library"
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.start.title"
+msgstr "Design system"
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.start.hint"
+msgstr "Upload a DESIGN.md or describe your brand"
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.start.hint-again"
+msgstr "Upload a new DESIGN.md or describe the changes to rebuild it"
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.start.upload"
+msgstr "Upload DESIGN.md"
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.start.describe-label"
+msgstr "Describe your brand"
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.start.describe-placeholder"
+msgstr "A calm fintech brand: deep blue, rounded corners, Inter…"
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.start.create"
+msgstr "Create design system"
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.start.rebuild"
+msgstr "Rebuild from description"
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.design-md.too-large"
+msgstr "This DESIGN.md is larger than 256 KB."
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.icons.title"
+msgstr "Icons"
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.icons.url-label"
+msgstr "GitHub link of an icon set"
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.icons.github"
+msgstr "Import from GitHub"
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.icons.fig"
+msgstr "Import from .fig"
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.fig.uploading"
+msgstr "Uploading the .fig file…"
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.fig.importing"
+msgstr "Reading the .fig file…"
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.fig.reading"
+msgstr "Looking for icons…"
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.fig.sent"
+msgstr "%s icons found; importing them"
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.fig.no-icons"
+msgstr "No icons were found in this .fig file."
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.fig.failed"
+msgstr "The .fig file could not be read."
+
+#: src/app/main/ui/workspace/ai/design_system/start.cljs
+msgid "penforge.design-systems.published"
+msgstr "Published as a shared library"

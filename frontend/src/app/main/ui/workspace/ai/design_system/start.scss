@@ -1,0 +1,93 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/typography.scss" as t;
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+
+.card {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: var(--sp-s);
+  padding: var(--sp-m);
+  border: $b-1 solid var(--color-background-quaternary);
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-s);
+}
+
+.title {
+  margin: 0;
+  color: var(--color-foreground-primary);
+}
+
+.name {
+  @include t.use-typography("body-small");
+
+  overflow: hidden;
+  color: var(--color-foreground-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hint,
+.status {
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.status-error {
+  color: var(--color-accent-error);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+}
+
+.section-title {
+  margin: 0;
+  color: var(--color-foreground-primary);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-xs);
+}
+
+.field {
+  @include t.use-typography("body-medium");
+
+  inline-size: 100%;
+  padding: var(--sp-s);
+  border: $b-1 solid var(--color-background-quaternary);
+  border-radius: $br-8;
+  background-color: var(--color-background-primary);
+  color: var(--color-foreground-primary);
+
+  &:focus {
+    border-color: var(--color-accent-primary);
+    outline: none;
+  }
+}
+
+.description {
+  min-block-size: $sz-64;
+  resize: vertical;
+}
+
+.file-input {
+  display: none;
+}

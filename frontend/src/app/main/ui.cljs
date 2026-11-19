@@ -153,6 +153,7 @@
         :dashboard-recent
         :dashboard-files
         :dashboard-libraries
+        :dashboard-design-systems
         :dashboard-fonts
         :dashboard-font-providers
         :dashboard-members

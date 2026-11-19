@@ -24,6 +24,7 @@
    [app.main.ui.workspace.ai.chat.files :as files]
    [app.main.ui.workspace.ai.chat.markdown :refer [markdown*]]
    [app.main.ui.workspace.ai.chat.status :refer [work-status*]]
+   [app.main.ui.workspace.ai.design-system.start :refer [design-system-start*]]
    [app.main.ui.workspace.ai.detached.placeholder :refer [ref:detached? detach-button* detached-placeholder*]]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
@@ -632,6 +633,7 @@
       [:> detach-button* {}]]
 
      [:> connection-banner* {:connection connection}]
+     [:> design-system-start* {}]
 
      (when (or connected (seq entries))
        [:> timeline* {:entries entries
