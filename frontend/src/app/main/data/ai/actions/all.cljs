@@ -25,11 +25,11 @@
    [app.main.data.ai.actions.prototype]
    [app.main.data.ai.actions.publish]
    [app.main.data.ai.actions.token-sync]
+   ;; W36: name dialog of "Create design system from this file"
+   [app.main.ui.dashboard.penforge.design-systems.from-file]
    ;; W15: registers the audit results modal
    [app.main.ui.workspace.ai.audit.panel]
    [app.main.ui.workspace.ai.build.actions]
-   ;; W36: name dialog of "Create design system from this file"
-   [app.main.ui.dashboard.penforge.design-systems.from-file]
    ;; W19: AI history dialog; requires app.main.data.ai.actions.checkpoints
    [app.main.ui.workspace.ai.checkpoints.history]
    ;; W20: Share panel modal (ZIP, GitHub, Vercel, Netlify, phone, accounts)
