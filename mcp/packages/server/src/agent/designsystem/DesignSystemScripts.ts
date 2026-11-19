@@ -21,6 +21,10 @@ export interface DesignSystemMarker {
     publishAsked?: boolean;
     /** last icon import */
     icons?: { count: number; source: string; license: string | null; importedAt: string };
+    /** W36: the project file this design system was made from (set by the client at copy time) */
+    source?: { fileId: string; projectId: string; revn: number };
+    /** W36: ISO 8601, set when `design-system-extract` applied its proposals */
+    extractedAt?: string;
 }
 
 /** Token added by W29 on top of W22's DESIGN.md plan. */
