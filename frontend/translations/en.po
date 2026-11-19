@@ -12965,3 +12965,64 @@ msgstr "Stopped."
 #: src/app/main/ui/workspace/ai/prototype/dialog.cljs
 msgid "penforge.prototype.error"
 msgstr "Could not wire the prototype: %s"
+
+# penforge:W28
+#: src/app/main/ui/workspace/device_screens.cljs
+msgid "penforge.devices.trigger"
+msgstr "Devices"
+
+#: src/app/main/ui/workspace/device_screens.cljs
+msgid "penforge.devices.title"
+msgstr "Add a device screen board"
+
+#: src/app/main/ui/workspace/device_screens.cljs
+msgid "penforge.devices.group.phones"
+msgstr "Phones"
+
+#: src/app/main/ui/workspace/device_screens.cljs
+msgid "penforge.devices.group.tablets"
+msgstr "Tablets"
+
+#: src/app/main/ui/workspace/device_screens.cljs
+msgid "penforge.devices.group.foldables"
+msgstr "Foldables"
+
+#: src/app/main/ui/workspace/device_screens.cljs
+msgid "penforge.devices.breakpoints"
+msgstr "Add breakpoint layouts"
+
+#: src/app/main/ui/workspace/device_screens.cljs
+msgid "penforge.devices.breakpoints-hint"
+msgstr "Tablets and foldables get one board per state (portrait and landscape, folded and unfolded, each screen) to lay out apart."
+
+#: src/app/main/data/workspace/device_screens.cljs
+msgid "penforge.devices.state.portrait"
+msgstr "Portrait"
+
+#: src/app/main/data/workspace/device_screens.cljs
+msgid "penforge.devices.state.landscape"
+msgstr "Landscape"
+
+#: src/app/main/data/workspace/device_screens.cljs
+msgid "penforge.devices.state.folded"
+msgstr "Folded"
+
+#: src/app/main/data/workspace/device_screens.cljs
+msgid "penforge.devices.state.unfolded"
+msgstr "Unfolded"
+
+#: src/app/main/data/workspace/device_screens.cljs
+msgid "penforge.devices.state.cover"
+msgstr "Cover screen"
+
+#: src/app/main/data/workspace/device_screens.cljs
+msgid "penforge.devices.state.left-screen"
+msgstr "Left screen"
+
+#: src/app/main/data/workspace/device_screens.cljs
+msgid "penforge.devices.state.right-screen"
+msgstr "Right screen"
+
+#: src/app/main/data/workspace/device_screens.cljs
+msgid "penforge.devices.state.spanned"
+msgstr "Spanned"

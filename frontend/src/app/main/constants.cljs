@@ -4,7 +4,9 @@
 ;;
 ;; Copyright (c) KALEIDOS SUBSIDIARY SL
 
-(ns app.main.constants)
+(ns app.main.constants
+  (:require
+   [app.main.devices :as devices]))
 
 (def viewport-width 4000)
 (def viewport-height 4000)
@@ -32,7 +34,7 @@
    :grid-alignment true
    :background "var(--app-white)"})
 
-(def size-presets
+(def ^:private base-size-presets
   [{:name "APPLE"}
    {:name "iPhone 16"
     :width 393
@@ -314,6 +316,13 @@
    {:name "Plugin cover"
     :width 1390
     :height 724}])
+
+(def size-presets
+  "Board size presets of the design tab: the device catalog sizes
+  (`app.main.devices`) the base list lacks, first, then the base list."
+  (into (devices/size-preset-entries
+         (into #{} (keep #(when (:width %) (:name %))) base-size-presets))
+        base-size-presets))
 
 (def max-input-length 255)
 

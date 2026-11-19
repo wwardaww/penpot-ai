@@ -1,0 +1,164 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+@use "ds/_utils.scss" as *;
+@use "ds/spacing.scss" as *;
+@use "ds/typography.scss" as t;
+@use "ds/z-index.scss" as *;
+
+// Rendered inside the top toolbar (the floating island) and positioned
+// out of it, to its left, so the island keeps its place and size.
+.device-screens {
+  --menu-border-color: var(--color-background-quaternary);
+  --menu-background-color: var(--color-background-primary);
+  --trigger-foreground-color: var(--color-foreground-secondary);
+  --trigger-background-color: transparent;
+
+  position: absolute;
+  inset-block-start: calc(-1 * #{$b-2});
+  inset-inline-end: calc(100% + #{$b-2} + var(--sp-s));
+  display: flex;
+  align-items: center;
+  padding: var(--sp-m);
+  border-radius: $br-8;
+  border: $b-2 solid var(--menu-border-color);
+  background-color: var(--menu-background-color);
+  z-index: var(--z-index-panels);
+  cursor: default;
+}
+
+.trigger {
+  @include t.use-typography("body-small");
+
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs);
+  block-size: $sz-32;
+  padding-inline: var(--sp-s);
+  border: none;
+  border-radius: $br-8;
+  appearance: none;
+  white-space: nowrap;
+  color: var(--trigger-foreground-color);
+  background-color: var(--trigger-background-color);
+
+  &:hover,
+  &.open {
+    --trigger-foreground-color: var(--color-accent-primary);
+    --trigger-background-color: var(--color-background-tertiary);
+  }
+
+  &:focus-visible {
+    outline: $b-1 solid var(--color-accent-primary);
+  }
+}
+
+.trigger-icon {
+  flex-shrink: 0;
+  color: currentcolor;
+  stroke: currentcolor;
+}
+
+.trigger-label {
+  color: currentcolor;
+}
+
+.panel {
+  position: absolute;
+  inset-block-start: calc(100% + #{$b-2} + var(--sp-xs));
+  inset-inline-end: calc(-1 * #{$b-2});
+  display: flex;
+  flex-direction: column;
+  inline-size: $sz-284;
+  max-block-size: $sz-500;
+  border-radius: $br-8;
+  border: $b-2 solid var(--menu-border-color);
+  background-color: var(--menu-background-color);
+  z-index: var(--z-index-dropdown);
+  overflow: hidden;
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  padding: var(--sp-s);
+  overflow-y: auto;
+}
+
+.group-title {
+  @include t.use-typography("headline-small");
+
+  padding: var(--sp-xs) var(--sp-s);
+  margin: 0;
+  text-transform: uppercase;
+  color: var(--color-foreground-secondary);
+}
+
+.group-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.device {
+  @include t.use-typography("body-small");
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-s);
+  inline-size: 100%;
+  block-size: $sz-28;
+  padding-inline: var(--sp-s);
+  border: none;
+  border-radius: $br-6;
+  appearance: none;
+  text-align: start;
+  color: var(--color-foreground-primary);
+  background-color: transparent;
+
+  &:hover,
+  &:focus-visible {
+    outline: none;
+    background-color: var(--color-background-tertiary);
+
+    .device-size {
+      color: var(--color-accent-primary);
+    }
+  }
+}
+
+.device-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-size {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-foreground-secondary);
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  padding: var(--sp-m);
+  border-block-start: $b-1 solid var(--menu-border-color);
+}
+
+.footer-hint {
+  @include t.use-typography("body-small");
+
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
