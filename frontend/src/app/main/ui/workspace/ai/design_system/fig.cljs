@@ -56,7 +56,7 @@
                      nil)))))
        (vec)))
 
-(defn- completed-file-id
+(defn completed-file-id
   "File id of a finished import job, or an error."
   [{:keys [status result error]}]
   (case status
@@ -65,6 +65,16 @@
     "failed"    (throw (ex-info "the import failed" {:error error}))
     "cancelled" (throw (ex-info "the import was cancelled" {}))
     nil))
+
+(defn job-file-id
+  "The file id of an import job, from the emissions of
+  `app.main.data.jobs/watch-job`: one value when it completes, an error
+  when it fails or is cancelled; progress emissions are skipped."
+  [job-events]
+  (->> job-events
+       (rx/map completed-file-id)
+       (rx/filter some?)
+       (rx/take 1)))
 
 (defn- delete-file!
   [file-id]
@@ -98,9 +108,7 @@
                   (rx/mapcat (fn [{job-id :id}]
                                (rx/concat
                                 (rx/of (set-status :importing))
-                                (->> (dj/watch-job ws-conn job-id)
-                                     (rx/keep completed-file-id)
-                                     (rx/take 1)
+                                (->> (job-file-id (dj/watch-job ws-conn job-id))
                                      (rx/mapcat
                                       (fn [file-id]
                                         (rx/concat
