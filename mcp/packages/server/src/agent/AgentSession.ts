@@ -4,6 +4,7 @@ import type { WebSocket, RawData } from "ws";
 import type { AgentContext, ClientMessage, ContextSetMessage, DaemonMessage } from "@penpot/mcp-common";
 import { createLogger } from "../logger";
 import { AgentError, type AgentClient } from "./AgentClient";
+import type { AppsService } from "./apps/AppsService";
 import type { ChatService } from "./chat/ChatService";
 import type { TurnSetup } from "./chat/TurnRunner";
 import { ClientMessageSchema } from "./ClientMessageSchema";
@@ -34,6 +35,8 @@ export interface AgentSessionDeps {
     authTimeoutMs: number;
     /** access control of a hosting mode; replaces {@link verifyToken} when set */
     gate?: SessionGate;
+    /** built apps on the dashboard (W33) */
+    apps?: AppsService;
 }
 
 /** WebSocket close code for policy violations (bad or missing authentication). */
@@ -241,7 +244,26 @@ export class AgentSession implements AgentClient {
                 return this.deps.previews.start(this, message);
             case "preview.stop":
                 return this.deps.previews.stop(this, message);
+            case "apps.list":
+                return this.apps().list(this, message);
+            case "apps.start":
+                return this.apps().start(this, message);
+            case "apps.stop":
+                return this.apps().stop(this, message);
+            case "apps.logs":
+                return this.apps().logs(this, message);
+            case "apps.phone.start":
+                return this.apps().phoneStart(this, message);
+            case "apps.phone.stop":
+                return this.apps().phoneStop(this, message);
         }
+    }
+
+    private apps(): AppsService {
+        if (!this.deps.apps) {
+            throw new AgentError("not-implemented", "Built apps are not available in this daemon");
+        }
+        return this.deps.apps;
     }
 
     private async setContext(message: ContextSetMessage): Promise<void> {
