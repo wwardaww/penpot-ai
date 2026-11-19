@@ -7,7 +7,9 @@
 (ns frontend-tests.data.workspace-device-screens-test
   "Device screen catalog, board placement and the add-boards event."
   (:require
+   [app.common.data :as d]
    [app.common.files.helpers :as cfh]
+   [app.common.math :as mth]
    [app.common.test-helpers.files :as cthf]
    [app.common.test-helpers.ids-map :as cthi]
    [app.common.test-helpers.shapes :as cths]
@@ -229,3 +231,134 @@
        [(dwds/add-device-boards :no-such-device {})]
        (fn [state]
          (t/is (empty? (new-boards state))))))))
+
+;; --- Resize every screen (W37)
+
+(defn- b
+  [id x y w h]
+  {:id id :x x :y y :width w :height h})
+
+(t/deftest board-rows-groups-by-vertical-band
+  (let [rows (dwds/board-rows [(b :c 1000 0 400 800)
+                               (b :a 0 0 400 800)
+                               (b :d 0 900 400 800)
+                               (b :b 500 10 400 780)])]
+    (t/is (= [[:a :b :c] [:d]]
+             (mapv #(mapv :id (:items %)) rows)))))
+
+(t/deftest reflow-keeps-gaps-and-row-order
+  ;; two rows of 400x800 boards, gap 100 both ways, resized to 440x956
+  (let [boxes  [(b :a 0 0 400 800) (b :b 500 0 400 800) (b :c 1000 0 400 800)
+                (b :d 0 900 400 800) (b :e 500 900 400 800)]
+        placed (d/index-by :id (dwds/reflow-boards boxes 440 956))]
+    (t/is (= [0 540 1080] (map #(get-in placed [% :x]) [:a :b :c])))
+    (t/is (= [0 0 0] (map #(get-in placed [% :y]) [:a :b :c])))
+    (t/is (= [0 540] (map #(get-in placed [% :x]) [:d :e])))
+    (t/is (= [1056 1056] (map #(get-in placed [% :y]) [:d :e])) "956 + 100 gap")
+    (t/is (every? #(= [440 956] [(:width %) (:height %)]) (vals placed)))))
+
+(t/deftest reflow-keeps-each-gap-and-row-left-edge
+  (let [boxes  [(b :a 50 0 400 800) (b :b 610 0 400 800)]
+        placed (d/index-by :id (dwds/reflow-boards boxes 300 600))]
+    (t/is (= 50 (get-in placed [:a :x])) "row keeps its left edge")
+    (t/is (= 510 (get-in placed [:b :x])) "50 + 300 + the old 160 gap")))
+
+(t/deftest reflow-separates-overlapping-boards
+  (let [boxes  [(b :a 0 0 400 800) (b :b 300 0 400 800)]
+        placed (d/index-by :id (dwds/reflow-boards boxes 400 800))]
+    (t/is (= 500 (get-in placed [:b :x])) "overlap becomes the default gap")))
+
+(t/deftest reflow-leaves-a-fitting-grid-alone
+  (let [boxes [(b :a 0 0 440 956) (b :b 540 0 440 956)]]
+    (t/is (= boxes (dwds/reflow-boards boxes 440 956)))))
+
+(t/deftest reflow-grows-rows-without-overlap
+  ;; phones become tablets: the second row moves down
+  (let [boxes  [(b :a 0 0 400 800) (b :b 0 900 400 800)]
+        placed (d/index-by :id (dwds/reflow-boards boxes 1024 1366))]
+    (t/is (= 1466 (get-in placed [:b :y])))
+    (t/is (<= (+ (get-in placed [:a :y]) 1366) (get-in placed [:b :y])))))
+
+(defn- grid-file
+  "Six 400x800 screens in two rows of three (gap 100) and a rect inside
+  the first one."
+  []
+  (-> (cthf/sample-file :file1 :page-label :page1)
+      (cths/add-sample-shape :s1 :type :frame :x 0 :y 0 :width 400 :height 800)
+      (cths/add-sample-shape :s2 :type :frame :x 500 :y 0 :width 400 :height 800)
+      (cths/add-sample-shape :s3 :type :frame :x 1000 :y 0 :width 400 :height 800)
+      (cths/add-sample-shape :s4 :type :frame :x 0 :y 900 :width 400 :height 800)
+      (cths/add-sample-shape :s5 :type :frame :x 500 :y 900 :width 400 :height 800)
+      (cths/add-sample-shape :s6 :type :frame :x 1000 :y 900 :width 400 :height 800)
+      (cths/add-sample-shape :r1 :type :rect :parent-label :s1
+                             :x 10 :y 10 :width 50 :height 50)))
+
+(defn- screens
+  [state]
+  (->> (dwds/screen-boards (dsh/lookup-page-objects state))
+       (map (fn [s] (mapv mth/round [(:x s) (:y s) (:width s) (:height s)])))
+       (sort)))
+
+(t/deftest resize-screens-resizes-all-in-one-undo-step
+  (t/async
+    done
+    (let [store (ths/setup-store (grid-file) {:renderer :svg})
+          check-undo
+          (fn []
+            (ths/run-store
+             store done [dwu/undo]
+             (fn [state]
+               (t/is (= [[0 0 400 800] [0 900 400 800] [500 0 400 800]
+                         [500 900 400 800] [1000 0 400 800] [1000 900 400 800]]
+                        (screens state))
+                     "one undo restores every screen"))))]
+      (ths/run-store
+       store check-undo
+       [(watch-undo-stack)
+        (dwds/pick-device :iphone-16-pro-max {})]
+       (fn [state]
+         (t/is (= [[0 0 440 956] [0 1056 440 956] [540 0 440 956]
+                   [540 1056 440 956] [1080 0 440 956] [1080 1056 440 956]]
+                  (screens state)))
+         (t/is (= 6 (count (dwds/screen-boards (dsh/lookup-page-objects state))))
+               "no board added")
+         (let [rect (get (dsh/lookup-page-objects state) (cthi/id :r1))]
+           (t/is (= [10 10] (mapv mth/round [(:x rect) (:y rect)]))
+                 "children follow constraints"))
+         (t/is (= 1 (count (get-in state [:workspace-undo :items])))))))))
+
+(t/deftest pick-device-on-an-empty-page-adds-a-board
+  (t/async
+    done
+    (let [store (ths/setup-store (cthf/sample-file :file1 :page-label :page1)
+                                 {:renderer :svg})]
+      (ths/run-store
+       store done
+       [(dwds/pick-device :iphone-16-pro-max {})]
+       (fn [state]
+         (t/is (= [[0 0 440 956]] (screens state))))))))
+
+(t/deftest pick-device-with-states-still-adds-breakpoint-boards
+  (t/async
+    done
+    (let [store (ths/setup-store (sample-file) {:renderer :svg})]
+      (ths/run-store
+       store done
+       [(dwds/pick-device :galaxy-z-fold-8 {:with-states true})]
+       (fn [state]
+         (t/is (= 2 (count (new-boards state))))
+         (t/is (= [300 200] (let [b1 (get (dsh/lookup-page-objects state)
+                                          (cthi/id :board1))]
+                              [(:width b1) (:height b1)]))
+               "existing screen untouched"))))))
+
+(t/deftest pick-device-phone-with-states-on-resizes
+  (t/async
+    done
+    (let [store (ths/setup-store (sample-file) {:renderer :svg})]
+      (ths/run-store
+       store done
+       [(dwds/pick-device :iphone-17-pro {:with-states true})]
+       (fn [state]
+         (t/is (empty? (new-boards state)))
+         (t/is (= [[0 0 402 874]] (screens state))))))))

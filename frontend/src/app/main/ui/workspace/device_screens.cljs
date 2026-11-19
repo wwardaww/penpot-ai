@@ -5,9 +5,9 @@
 ;; Copyright (c) KALEIDOS SUBSIDIARY SL
 
 (ns app.main.ui.workspace.device-screens
-  "Device screen picker: floats left of the top toolbar island and adds
-  a board of a real device's screen size (`app.main.devices`) to the
-  canvas.
+  "Device screen picker: floats left of the top toolbar island and
+  resizes every screen of the page to a real device's screen size
+  (`app.main.devices`), or adds a board of that size to an empty page.
 
   It is the island's sibling in the viewport, not its child: the island
   is centered with `left: 50%`, so the picker puts its right edge at
@@ -26,7 +26,7 @@
    [app.main.ui.ds.controls.switch :refer [switch*]]
    [app.main.ui.ds.foundations.assets.icon :as i :refer [icon*]]
    [app.util.dom :as dom]
-   [app.util.i18n :refer [tr]]
+   [app.util.i18n :as i18n :refer [tr]]
    [okulary.core :as l]
    [rumext.v2 :as mf]))
 
@@ -79,6 +79,23 @@
           [:span {:class (stl/css :device-name)} (:name device)]
           [:span {:class (stl/css :device-size)} (size-label device)]]])]]))
 
+(def ^:private screen-count-ref
+  "How many screens (top-level boards) the current page has."
+  (l/derived (fn [objects] (count (dwds/screen-boards objects)))
+             refs/workspace-page-objects))
+
+(mf/defc picker-scope*
+  "One line on what a pick does: resize the page's screens, or add a
+  board when there is none."
+  {::mf/private true}
+  []
+  (let [screens (mf/deref screen-count-ref)]
+    [:p {:class (stl/css :scope)
+         :data-testid "device-screens-scope"}
+     (if (pos? screens)
+       (tr "penforge.devices.scope.resize" (i18n/c screens))
+       (tr "penforge.devices.scope.add"))]))
+
 (mf/defc device-picker*
   {::mf/private true}
   []
@@ -112,7 +129,7 @@
                         (dom/get-data "device-id")
                         (keyword))]
              (reset! open* false)
-             (st/emit! (dwds/add-device-boards id {:with-states with-states})))))]
+             (st/emit! (dwds/pick-device id {:with-states with-states})))))]
 
     (mf/with-effect []
       (when-let [island (find-island (mf/ref-val container-ref))]
@@ -145,6 +162,7 @@
       [:div {:class (stl/css :panel)
              :role "dialog"
              :aria-label (tr "penforge.devices.title")}
+       [:> picker-scope*]
        [:div {:class (stl/css :groups)}
         (for [group devices/groups]
           [:> device-group* {:key (dm/str group)

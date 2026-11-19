@@ -12981,7 +12981,7 @@ msgstr "Devices"
 
 #: src/app/main/ui/workspace/device_screens.cljs
 msgid "penforge.devices.title"
-msgstr "Add a device screen board"
+msgstr "Device screen size"
 
 #: src/app/main/ui/workspace/device_screens.cljs
 msgid "penforge.devices.group.phones"
@@ -13001,7 +13001,7 @@ msgstr "Add breakpoint layouts"
 
 #: src/app/main/ui/workspace/device_screens.cljs
 msgid "penforge.devices.breakpoints-hint"
-msgstr "Tablets and foldables get one board per state (portrait and landscape, folded and unfolded, each screen) to lay out apart."
+msgstr "A tablet or foldable adds one board per state (portrait and landscape, folded and unfolded, each screen) to lay out apart, instead of resizing the screens."
 
 #: src/app/main/data/workspace/device_screens.cljs
 msgid "penforge.devices.state.portrait"
@@ -13657,3 +13657,70 @@ msgstr "The AI is not connected."
 #: src/app/main/data/ai/actions/design_system_extract.cljs
 msgid "penforge.design-system-extract.error.generic"
 msgstr "Something went wrong while looking at the project. Try again."
+
+# penforge:W37
+#: src/app/main/ui/workspace/device_screens.cljs
+msgid "penforge.devices.scope.resize"
+msgid_plural "penforge.devices.scope.resize"
+msgstr[0] "Picking a device resizes the screen on this page."
+msgstr[1] "Picking a device resizes all %s screens on this page."
+
+#: src/app/main/ui/workspace/device_screens.cljs
+msgid "penforge.devices.scope.add"
+msgstr "This page has no screens yet: picking a device adds one."
+
+#: src/app/main/ui/workspace/ai/chat/markdown.cljs
+msgid "penforge.chat.markdown.code"
+msgstr "code"
+
+#: src/app/main/ui/workspace/ai/chat/markdown.cljs
+msgid "penforge.chat.markdown.copy-code"
+msgstr "Copy code"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.message.actions"
+msgstr "Message actions"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.message.edit"
+msgstr "Edit"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.message.edit-label"
+msgstr "Edit your message"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.message.send-edit"
+msgstr "Send"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.message.cancel"
+msgstr "Cancel"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.message.delete"
+msgstr "Delete"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.message.revert"
+msgstr "Revert the design to before this message"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.message.revert-question"
+msgstr "This undoes the AI's changes after this message and removes the later messages. Revert?"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.message.revert-confirm"
+msgstr "Revert"
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.message.reverted"
+msgstr "The design is back to how it was before that message."
+
+#: src/app/main/ui/workspace/ai/chat/panel.cljs
+msgid "penforge.chat.message.reverted-unchanged"
+msgstr "Messages removed. The AI had not changed the design since then."
+
+#: src/app/main/data/ai/actions/checkpoints.cljs
+msgid "penforge.checkpoints.workflow.chat"
+msgstr "AI chat"
