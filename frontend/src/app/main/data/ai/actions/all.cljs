@@ -19,6 +19,7 @@
    [app.main.data.ai.actions.comments]
    [app.main.data.ai.actions.design-md]
    [app.main.data.ai.actions.design-system]
+   [app.main.data.ai.actions.design-system-extract]
    [app.main.data.ai.actions.detached]
    [app.main.data.ai.actions.generate]
    [app.main.data.ai.actions.prototype]
@@ -27,6 +28,8 @@
    ;; W15: registers the audit results modal
    [app.main.ui.workspace.ai.audit.panel]
    [app.main.ui.workspace.ai.build.actions]
+   ;; W36: name dialog of "Create design system from this file"
+   [app.main.ui.dashboard.penforge.design-systems.from-file]
    ;; W19: AI history dialog; requires app.main.data.ai.actions.checkpoints
    [app.main.ui.workspace.ai.checkpoints.history]
    ;; W20: Share panel modal (ZIP, GitHub, Vercel, Netlify, phone, accounts)

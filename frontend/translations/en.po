@@ -13441,3 +13441,194 @@ msgstr "Copied"
 #: src/app/main/data/ai/apps.cljs
 msgid "penforge.apps.tab.starting"
 msgstr "Starting your app…"
+
+# penforge:W36
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.default-name"
+msgstr "%s Design System"
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.copy-failed"
+msgstr "The design system could not be made. Your file was not changed. Try again."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs, src/app/main/ui/dashboard/file_menu.cljs
+msgid "penforge.design-system-extract.action"
+msgstr "Create design system from this file"
+
+#: src/app/main/ui/dashboard/project_menu.cljs
+msgid "penforge.design-system-extract.action-project"
+msgstr "Create design system from this project"
+
+#: src/app/main/ui/dashboard/penforge/design_systems/from_file.cljs
+msgid "penforge.design-system-extract.dialog.title"
+msgstr "Create a design system"
+
+#: src/app/main/ui/dashboard/penforge/design_systems/from_file.cljs
+msgid "penforge.design-system-extract.dialog.hint"
+msgstr "The AI makes a copy in Design Systems and turns it into a design system. Your file stays as it is."
+
+#: src/app/main/ui/dashboard/penforge/design_systems/from_file.cljs
+msgid "penforge.design-system-extract.dialog.name"
+msgstr "Name"
+
+#: src/app/main/ui/dashboard/penforge/design_systems/from_file.cljs
+msgid "penforge.design-system-extract.dialog.pick-file"
+msgstr "Start from this file"
+
+#: src/app/main/ui/dashboard/penforge/design_systems/from_file.cljs
+msgid "penforge.design-system-extract.dialog.no-files"
+msgstr "This project has no files yet."
+
+#: src/app/main/ui/dashboard/penforge/design_systems/from_file.cljs
+msgid "penforge.design-system-extract.dialog.create"
+msgstr "Create"
+
+#: src/app/main/ui/workspace/ai/design_system/extract/card.cljs
+msgid "penforge.design-system-extract.title"
+msgstr "Make it a design system"
+
+#: src/app/main/ui/workspace/ai/design_system/extract/card.cljs
+msgid "penforge.design-system-extract.not-connected"
+msgstr "Connect the AI to look at this copy of your project."
+
+#: src/app/main/ui/workspace/ai/design_system/extract/card.cljs
+msgid "penforge.design-system-extract.read-only"
+msgstr "Only editors can make the design system."
+
+#: src/app/main/ui/workspace/ai/design_system/extract/card.cljs
+msgid "penforge.design-system-extract.looking"
+msgstr "Looking at what your project already has…"
+
+#: src/app/main/ui/workspace/ai/design_system/extract/card.cljs
+msgid "penforge.design-system-extract.stats"
+msgstr "I looked at %s screens, %s components, %s colors and %s text styles. Here is what I plan to do. Uncheck what you want to keep as it is."
+
+#: src/app/main/ui/workspace/ai/design_system/extract/card.cljs
+msgid "penforge.design-system-extract.nothing"
+msgstr "Nothing to tidy up: the design system pages will be built as they are."
+
+#: src/app/main/ui/workspace/ai/design_system/extract/card.cljs
+msgid "penforge.design-system-extract.retry"
+msgstr "Try again"
+
+#: src/app/main/ui/workspace/ai/design_system/extract/card.cljs
+msgid "penforge.design-system-extract.check-all"
+msgstr "Check all"
+
+#: src/app/main/ui/workspace/ai/design_system/extract/card.cljs
+msgid "penforge.design-system-extract.check-none"
+msgstr "Uncheck all"
+
+#: src/app/main/ui/workspace/ai/design_system/extract/card.cljs
+msgid "penforge.design-system-extract.applying"
+msgstr "Building your design system…"
+
+#: src/app/main/ui/workspace/ai/design_system/extract/card.cljs
+msgid "penforge.design-system-extract.apply"
+msgid_plural "penforge.design-system-extract.apply"
+msgstr[0] "Apply 1 change"
+msgstr[1] "Apply %s changes"
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.section.colors"
+msgstr "Colors"
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.section.text"
+msgstr "Text styles"
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.section.tokens"
+msgstr "Spacing, corners and shadows"
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.section.components"
+msgstr "Components"
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.section.icons"
+msgstr "Icons"
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.section.cleanup"
+msgstr "Not used"
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.proposal.color-token"
+msgstr "%s is used %s times; I will make it the token %s."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.proposal.color-token-library"
+msgstr "The color “%s” (%s) becomes the token %s."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.proposal.merge-colors"
+msgstr "%s colors are almost the same (%s); I will keep one, %s."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.proposal.text-style"
+msgstr "Text in %s %s px (weight %s) is used %s times; I will make it the text style “%s”."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.proposal.spacing-token"
+msgstr "A space of %s px is used %s times; I will make it the token %s."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.proposal.radius-token"
+msgstr "Corners of %s px are used %s times; I will make them the token %s."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.proposal.shadow-token"
+msgstr "A shadow (blur %s px) is used %s times; I will make it the token %s."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.proposal.component"
+msgstr "“%s” is drawn %s times on %s screens but is not a component; I will make it a component."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.proposal.component-variants"
+msgstr "“%s” is drawn %s times on %s screens but is not a component; I will make it a component with %s variants."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.proposal.rename-component"
+msgstr "The component “%s” has no real name; I will call it “%s”."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.proposal.group-components"
+msgstr "%s components (%s) belong together; I will put them in the group “%s”."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.proposal.icons"
+msgstr "I found %s icons; I will collect them in the Icons group (24 px, one color token)."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.proposal.unused-color"
+msgstr "The color “%s” is not used anywhere; I will leave it out."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.proposal.unused-typography"
+msgstr "The text style “%s” is not used anywhere; I will leave it out."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.proposal.unused-component"
+msgstr "The component “%s” is not used anywhere; I will leave it out."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.error.not-a-copy"
+msgstr "This file is not a copy made for a design system, so nothing was changed."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.error.plan-changed"
+msgstr "The file changed after the list was made. Check the new list and apply again."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.error.cancelled"
+msgstr "Stopped. Nothing more was changed."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.error.not-connected"
+msgstr "The AI is not connected."
+
+#: src/app/main/data/ai/actions/design_system_extract.cljs
+msgid "penforge.design-system-extract.error.generic"
+msgstr "Something went wrong while looking at the project. Try again."

@@ -1,0 +1,89 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+@use "ds/_utils.scss" as *;
+@use "ds/typography.scss" as *;
+
+// Only for the modal placeholders (%modal-overlay-base,
+// %modal-container-base), until the modals move to the DS modal.
+@use "refactor/common-refactor.scss" as deprecated;
+
+.modal-overlay {
+  @extend %modal-overlay-base;
+}
+
+.modal-dialog {
+  @extend %modal-container-base;
+
+  inline-size: px2rem(480);
+  max-inline-size: px2rem(480);
+}
+
+// Goes on the tooltip wrapper of the close icon button.
+.close-btn {
+  position: absolute;
+  inset-block-start: var(--sp-s);
+  inset-inline-end: var(--sp-xs);
+}
+
+.modal-title {
+  @include use-typography("headline-medium");
+
+  margin-block-end: var(--sp-xl);
+  color: var(--color-foreground-primary);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-l);
+}
+
+.hint,
+.label {
+  color: var(--color-foreground-secondary);
+}
+
+.label {
+  @include use-typography("body-small");
+
+  margin-block-end: var(--sp-xs);
+}
+
+.files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  max-block-size: px2rem(240);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: none;
+}
+
+.file-row {
+  @include use-typography("body-medium");
+
+  display: flex;
+  align-items: center;
+  gap: var(--sp-s);
+  color: var(--color-foreground-primary);
+  cursor: pointer;
+}
+
+.file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-s);
+}

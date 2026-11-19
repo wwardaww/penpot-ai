@@ -17,6 +17,7 @@
    [app.main.router :as rt]
    [app.main.store :as st]
    [app.main.ui.context :as ctx]
+   [app.main.ui.dashboard.penforge.design-systems.from-file :as pf-dsx]
    [app.main.ui.ds.layout.menu :refer [menu* menu-item* menu-separator* sub-menu*]]
    [app.util.i18n :as i18n :refer [tr]]
    [beicon.v2.core :as rx]
@@ -299,6 +300,11 @@
        (when (and (not is-search-page?) can-edit)
          [:> menu-item* {:id "file-duplicate" :on-action on-duplicate}
           (tr "dashboard.duplicate")])
+
+       (when (and (not is-search-page?) can-edit (pf-dsx/file-entry-visible? file (:projects current-team)))
+         [:> menu-item* {:id "penforge-design-system-from-file"
+                         :on-action #(pf-dsx/open-for-file file (:projects current-team) current-team-id)}
+          (tr "penforge.design-system-extract.action")])
 
        (when (and (not is-lib-page?)
                   (not is-search-page?)

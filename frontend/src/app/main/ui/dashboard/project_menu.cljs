@@ -13,6 +13,7 @@
    [app.main.refs :as refs]
    [app.main.store :as st]
    [app.main.ui.context :as ctx]
+   [app.main.ui.dashboard.penforge.design-systems.from-file :as pf-dsx]
    [app.main.ui.ds.layout.menu :refer [menu* menu-item* menu-separator* sub-menu*]]
    [app.util.i18n :as i18n :refer [tr]]
    [rumext.v2 :as mf]))
@@ -104,6 +105,11 @@
                           :id (str "move-to-" (:id team))
                           :on-action (on-move (:id team))}
            (:name team)])])
+
+     (when (pf-dsx/project-entry-visible? project)
+       [:> menu-item* {:id "penforge-design-system-from-project"
+                       :on-action #(pf-dsx/open-for-project project)}
+        (tr "penforge.design-system-extract.action-project")])
 
      (when (some? on-import-click)
        [:> menu-item* {:id "file-import" :on-action on-import-click}
