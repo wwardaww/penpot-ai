@@ -6,19 +6,28 @@
 // Checksums are verified (Azul metadata API, Maven .sha1). Downloads are kept in
 // .cache/downloads (inside the worktree) and reused.
 //
+// PENFORGE_RUNTIME_CACHE=<dir> (set by scripts/desktop-build.mjs): the finished
+// JRE and PostgreSQL folders are kept there, one per version/target (older ones
+// are deleted), and copied into build/runtime; then no download, checksum call
+// or jlink run happens again. The archives are deleted once unpacked.
+// build/runtime-native.json records what build/runtime holds, so an unchanged
+// runtime is not even copied.
+//
 // Usage: node scripts/fetch-runtime.mjs [--target win-x64|mac-arm64|mac-x64|linux-x64] [--keep-downloads]
 // jlink runs on the host, so the target must match the host OS and arch.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
+import { cpSync, createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const CACHE = join(ROOT, ".cache", "downloads");
+const RUNTIME_CACHE = process.env.PENFORGE_RUNTIME_CACHE;
+const CACHE = RUNTIME_CACHE ? join(RUNTIME_CACHE, "downloads") : join(ROOT, ".cache", "downloads");
 const RUNTIME = join(ROOT, "build", "runtime");
+const NATIVE_STAMP = join(ROOT, "build", "runtime-native.json");
 
 const ZULU = "zulu26.32.203-ca-jdk26.0.2.1";
 const PG_VERSION = "17.5.0";
@@ -109,11 +118,11 @@ function single(dir) {
     return entries.length === 1 && statSync(join(dir, entries[0])).isDirectory() ? join(dir, entries[0]) : dir;
 }
 
-async function fetchJre(target) {
+async function fetchJre(target, out) {
     const spec = TARGETS[target];
     const archive = await download(`https://cdn.azul.com/zulu/bin/${spec.zulu}`, join(CACHE, spec.zulu));
     await verify(archive, "sha256", await zuluSha256(spec.zulu));
-    const jdkDir = join(ROOT, ".cache", "jdk");
+    const jdkDir = join(dirname(out), `${ZULU}.jdk.tmp`);
     extract(archive, jdkDir);
     let home = single(jdkDir);
     // macOS archives nest the JDK under <name>/zulu-26.jdk/Contents/Home
@@ -121,7 +130,6 @@ async function fetchJre(target) {
     if (macHome) {
         home = join(home, macHome, "Contents", "Home");
     }
-    const out = join(RUNTIME, "jre");
     rmSync(out, { recursive: true, force: true });
     run(join(home, "bin", `jlink${spec.exe}`), [
         "--add-modules", JRE_MODULES.join(","),
@@ -133,17 +141,16 @@ async function fetchJre(target) {
     console.log(`jre ready in ${out}`);
 }
 
-async function fetchPostgres(target) {
+async function fetchPostgres(target, out) {
     const spec = TARGETS[target];
     const name = `embedded-postgres-binaries-${spec.pg}-${PG_VERSION}.jar`;
     const url = `https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-${spec.pg}/${PG_VERSION}/${name}`;
     const jar = await download(url, join(CACHE, name));
     const sha1 = await (await fetch(`${url}.sha1`)).text();
     await verify(jar, "sha1", sha1);
-    const jarDir = join(ROOT, ".cache", "pgjar");
+    const jarDir = join(dirname(out), `pg-${PG_VERSION}.jar.tmp`);
     extract(jar, jarDir);
     const txz = readdirSync(jarDir).find((e) => e.endsWith(".txz"));
-    const out = join(RUNTIME, "postgres");
     extract(join(jarDir, txz), out);
     rmSync(jarDir, { recursive: true, force: true });
     // pgAdmin/wx and test leftovers of the Windows build, never used by the server
@@ -166,8 +173,39 @@ if (target !== hostTarget()) {
     throw new Error(`jlink needs the target OS: host is ${hostTarget()}, target ${target}`);
 }
 mkdirSync(RUNTIME, { recursive: true });
-await fetchJre(target);
-await fetchPostgres(target);
-if (!process.argv.includes("--keep-downloads")) {
+const parts = [
+    { name: "jre", key: `jre-${ZULU}-${target}-${createHash("sha256").update(JRE_MODULES.join(",")).digest("hex").slice(0, 8)}`, fetch: fetchJre },
+    { name: "postgres", key: `postgres-${PG_VERSION}-${target}`, fetch: fetchPostgres },
+];
+const stamp = existsSync(NATIVE_STAMP) ? JSON.parse(readFileSync(NATIVE_STAMP, "utf8")) : {};
+for (const part of parts) {
+    const dest = join(RUNTIME, part.name);
+    if (stamp[part.name] === part.key && existsSync(dest)) {
+        console.log(`${part.name} up to date (${part.key})`);
+        continue;
+    }
+    if (!RUNTIME_CACHE) {
+        await part.fetch(target, dest);
+    } else {
+        const cached = join(RUNTIME_CACHE, part.key);
+        if (!existsSync(join(cached, ".complete"))) {
+            await part.fetch(target, cached);
+            writeFileSync(join(cached, ".complete"), "");
+        }
+        // keep one version per part in the cache
+        for (const entry of readdirSync(RUNTIME_CACHE)) {
+            if (entry.startsWith(`${part.name}-`) && entry !== part.key) {
+                rmSync(join(RUNTIME_CACHE, entry), { recursive: true, force: true });
+            }
+        }
+        rmSync(dest, { recursive: true, force: true });
+        cpSync(cached, dest, { recursive: true, filter: (src) => !src.endsWith(".complete") });
+        console.log(`${part.name} from cache ${cached}`);
+    }
+    stamp[part.name] = part.key;
+    writeFileSync(NATIVE_STAMP, JSON.stringify(stamp, null, 2));
+}
+if (!process.argv.includes("--keep-downloads") || RUNTIME_CACHE) {
+    // the unpacked runtime is what gets reused; the archives are only transit
     rmSync(CACHE, { recursive: true, force: true });
 }

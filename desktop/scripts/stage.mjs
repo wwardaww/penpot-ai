@@ -12,6 +12,8 @@
 // jre/ and postgres/ come from scripts/fetch-runtime.mjs.
 //
 // Usage: node scripts/stage.mjs [--backend <dir>] [--frontend <dir>] [--skip-node-builds] [--with-templates]
+//        [--no-mcp-plugin]  (the frontend bundle already carries the MCP plugin: do not
+//                            build it again with the daemon)
 //        [--parts backend,frontend,daemon,media-processor]
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -37,8 +39,12 @@ function run(command, args, cwd) {
     }
 }
 
+// PENFORGE_PNPM_STORE: one pnpm store shared by every checkout (scripts/desktop-build.mjs
+// points it at the main checkout's .pnpm-store); unset, each checkout uses its own.
+const STORE = process.env.PENFORGE_PNPM_STORE;
+
 function pnpm(args, cwd) {
-    run("corepack", ["pnpm", ...args], cwd);
+    run("corepack", ["pnpm", ...(STORE ? [`--config.store-dir=${STORE}`] : []), ...args], cwd);
 }
 
 function firstExisting(...dirs) {
@@ -123,7 +129,8 @@ function stageDaemon(skipBuild) {
     const mcp = join(REPO, "mcp");
     if (!skipBuild) {
         pnpm(["install", "--frozen-lockfile"], mcp);
-        pnpm(["--filter", "mcp-common", "--filter", "mcp-server", "--filter", "mcp-plugin", "run", "build"], mcp);
+        const plugin = process.argv.includes("--no-mcp-plugin") ? [] : ["--filter", "mcp-plugin"];
+        pnpm(["--filter", "mcp-common", "--filter", "mcp-server", ...plugin, "run", "build"], mcp);
     }
     const to = join(RUNTIME, "daemon");
     rmSync(to, { recursive: true, force: true });
@@ -154,7 +161,7 @@ function stageMediaProcessor(skipBuild) {
     cpSync(join(src, "pnpm-lock.yaml"), join(to, "pnpm-lock.yaml"));
     // unchanged package.json: the frozen lockfile must match it; --prod skips devDependencies
     cpSync(join(src, "package.json"), join(to, "package.json"));
-    writeFileSync(join(to, "pnpm-workspace.yaml"), `storeDir: ${JSON.stringify(join(REPO, ".pnpm-store"))}\nallowBuilds:\n  sharp: false\n`);
+    writeFileSync(join(to, "pnpm-workspace.yaml"), `storeDir: ${JSON.stringify(STORE ?? join(REPO, ".pnpm-store"))}\nallowBuilds:\n  sharp: false\n`);
     pnpm(["install", "--prod", "--frozen-lockfile", "--config.node-linker=hoisted"], to);
     rmSync(join(to, "pnpm-workspace.yaml"), { force: true });
 }
