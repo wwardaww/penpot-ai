@@ -11,11 +11,13 @@
   publish questions show in the chat timeline below it."
   (:require-macros [app.main.style :as stl])
   (:require
+   [app.main.data.ai.actions.design-system-extract :as dsx]
    [app.main.data.ai.design-system :as ds]
    [app.main.store :as st]
    [app.main.ui.ds.buttons.button :refer [button*]]
    [app.main.ui.ds.foundations.typography :as t]
    [app.main.ui.ds.foundations.typography.text :refer [text*]]
+   [app.main.ui.workspace.ai.design-system.extract.card :refer [design-system-extract*]]
    [app.main.ui.workspace.ai.design-system.fig :as fig]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
@@ -67,7 +69,7 @@
         md-input-ref  (mf/use-ref nil)
         fig-input-ref (mf/use-ref nil)
 
-        generated?    (some? (:generated-at marker))
+        generated?    (or (some? (:generated-at marker)) (some? (:extracted-at marker)))
         fig-busy?     (contains? #{:uploading :importing :reading} (:status fig))
         disabled?     (or (not connected) (not can-edit) (some? running))
 
@@ -234,7 +236,12 @@
         on-publish
         (mf/use-fn #(st/emit! (ds/publish)))]
 
-    (when (some? mode)
+    (cond
+      ;; W36: a copy of a project shows its proposal list first
+      (and (some? mode) (dsx/extract-pending? (:marker mode)))
+      [:> design-system-extract* {}]
+
+      (some? mode)
       [:> start-card* {:marker (:marker mode)
                        :shared (:shared mode)
                        :can-edit (:can-edit mode)

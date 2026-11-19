@@ -29,3 +29,4 @@ export { workflow as tokenSync } from "./token-sync";
 export { workflow as wirePrototype } from "./wire-prototype";
 export { workflow as designSystemGenerate } from "./design-system-generate";
 export { workflow as designSystemIcons } from "./design-system-icons";
+export { workflow as designSystemExtract } from "./design-system-extract";

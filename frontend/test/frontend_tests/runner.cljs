@@ -20,6 +20,7 @@
    [frontend-tests.data.ai-checkpoints-test]
    [frontend-tests.data.ai-cleanup-test]
    [frontend-tests.data.ai-comments-test]
+   [frontend-tests.data.ai-design-system-extract-test]
    [frontend-tests.data.ai-design-system-test]
    [frontend-tests.data.ai-detached-test]
    [frontend-tests.data.ai-generate-test]
@@ -172,6 +173,7 @@
    [frontend-tests.ui.ai-build-test]
    [frontend-tests.ui.ai-chat-ux-test]
    [frontend-tests.ui.ai-design-md-test]
+   [frontend-tests.ui.ai-design-system-extract-test]
    [frontend-tests.ui.ai-design-system-test]
    [frontend-tests.ui.ai-pair-test]
    [frontend-tests.ui.ai-preview-pane-test]
@@ -254,6 +256,7 @@
    'frontend-tests.copy-as-svg-test
    'frontend-tests.data.ai-actions-test
    'frontend-tests.data.ai-apps-test
+   'frontend-tests.data.ai-design-system-extract-test
    'frontend-tests.data.ai-design-system-test
    'frontend-tests.data.ai-ask-test
    'frontend-tests.data.ai-auto-name-test
@@ -417,6 +420,7 @@
    'frontend-tests.tokens.logic.tokens-status-test
    'frontend-tests.tokens.workspace-tokens-remap-test
    'frontend-tests.ui.ai-design-md-test
+   'frontend-tests.ui.ai-design-system-extract-test
    'frontend-tests.ui.ai-design-system-test
    'frontend-tests.ui.ai-build-test
    'frontend-tests.ui.ai-preview-pane-test
