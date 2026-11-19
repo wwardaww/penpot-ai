@@ -8,6 +8,7 @@
   (:require
    [app.main.data.ai.actions :as actions]
    [app.main.data.ai.actions.all]
+   [app.main.ui.workspace.ai.header-strip :as header-strip]
    [cljs.test :as t :include-macros true]))
 
 (defn- action
@@ -28,6 +29,17 @@
              (mapv :id (actions/get-actions registry :context-menu {}))))
     (t/is (= [:ai/header]
              (mapv :id (actions/get-actions registry :header {}))))))
+
+(t/deftest scope-items-pair-visible-actions-with-their-enabled-flag
+  (let [registry {:ai/on (action :ai/on :scopes #{:island} :order 1)
+                  :ai/off (action :ai/off :scopes #{:island} :order 2 :enabled? :ready)
+                  :ai/other (action :ai/other :scopes #{:header})}]
+    (t/is (= [[:ai/on true] [:ai/off false]]
+             (mapv (juxt (comp :id :action) :enabled)
+                   (header-strip/scope-items registry :island {}))))
+    (t/is (= [[:ai/on true] [:ai/off true]]
+             (mapv (juxt (comp :id :action) :enabled)
+                   (header-strip/scope-items registry :island {:ready true}))))))
 
 (t/deftest enabled-defaults-to-true
   (t/is (true? (actions/enabled? (action :ai/x) {})))

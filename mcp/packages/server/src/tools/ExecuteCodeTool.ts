@@ -32,6 +32,12 @@ export class ExecuteCodeArgs {
  */
 export class ExecuteCodeTool extends Tool<ExecuteCodeArgs> {
     /**
+     * Run time from which a call gets a note to split the work: the Penpot tab cannot redraw or
+     * answer the user while the code runs.
+     */
+    public static readonly SLOW_CALL_MS = 8000;
+
+    /**
      * Creates a new ExecuteCode tool instance.
      *
      * @param mcpServer - The MCP server instance
@@ -63,19 +69,40 @@ export class ExecuteCodeTool extends Tool<ExecuteCodeArgs> {
             "to track what your code is doing, but you should *only* do so only if there is an ACTUAL NEED for this! " +
             "VERY IMPORTANT: Don't use logging prematurely! NEVER log the data you are returning, as you will otherwise receive it twice!\n" +
             "VERY IMPORTANT: In general, try a simple approach first, and only if it fails, try more complex code that involves " +
-            "handling different cases (in particular error cases) and that applies logging."
+            "handling different cases (in particular error cases) and that applies logging.\n" +
+            "VERY IMPORTANT: The Penpot tab is frozen for the user while your code runs, and every shape you create or " +
+            "change costs about 20 ms. Keep each call short (at most one screen, or one section of a long screen, per " +
+            "call) and split bigger work across several calls."
         );
     }
 
     protected async executeCore(args: ExecuteCodeArgs): Promise<ToolResponse> {
         const taskParams: ExecuteCodeTaskParams = { code: args.code };
         const task = new ExecuteCodePluginTask(taskParams);
+        const started = Date.now();
         const result = await this.mcpServer.pluginBridge.executePluginTask(task, args.sessionId);
+        const note = ExecuteCodeTool.slowCallNote(Date.now() - started);
 
-        if (result.data !== undefined) {
-            return new TextResponse(JSON.stringify(result.data, null, 2));
-        } else {
-            return new TextResponse("Code executed successfully with no return value.");
+        const text =
+            result.data !== undefined
+                ? JSON.stringify(result.data, null, 2)
+                : "Code executed successfully with no return value.";
+        return new TextResponse(note ? `${text}\n\n${note}` : text);
+    }
+
+    /**
+     * Note for a call that ran {@link SLOW_CALL_MS} or longer, or null.
+     *
+     * @param elapsedMs - how long the call took, in ms
+     */
+    public static slowCallNote(elapsedMs: number): string | null {
+        if (elapsedMs < ExecuteCodeTool.SLOW_CALL_MS) {
+            return null;
         }
+        const seconds = Math.round(elapsedMs / 1000);
+        return (
+            `NOTE: this call kept the Penpot tab frozen for ${seconds} s; the user could not scroll or click ` +
+            "meanwhile. Split the remaining work into smaller calls (at most one screen per call)."
+        );
     }
 }

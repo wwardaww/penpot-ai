@@ -539,14 +539,28 @@ export class PluginBridge implements TaskDispatchHost {
             throw new Error(`Plugin instance is disconnected. Task could not be sent.`);
         }
 
-        // the socket can be open while browser-throttled plugin JS cannot run tasks
-        assertPluginResponsive(target, Date.now());
+        // the socket can be open while browser-throttled plugin JS cannot run tasks; a tab
+        // that is still running an earlier task cannot answer heartbeats either, but it is
+        // busy, not suspended: the new task waits behind the running one
+        if (!this.hasTaskInFlight(target)) {
+            assertPluginResponsive(target, Date.now());
+        }
 
         // register the task for result correlation, then send over the socket
         this.pendingTasks.set(task.id, task);
         this.taskConnections.set(task.id, target);
         target.socket.send(JSON.stringify(task.toRequest()));
         this.startTaskTimeout(task);
+    }
+
+    /** Whether a task sent to the connection has not been answered yet. */
+    private hasTaskInFlight(connection: PenpotConnection): boolean {
+        for (const taskConnection of this.taskConnections.values()) {
+            if (taskConnection === connection) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Arms the shared execution timeout for a locally or remotely dispatched task. */

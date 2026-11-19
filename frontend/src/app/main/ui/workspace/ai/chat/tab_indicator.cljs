@@ -22,15 +22,19 @@
 
 (def ^:private attribute "data-penforge-ai")
 
+;; derived from the chat alone, so the other state changes (thousands
+;; during an AI script) do not re-run the checks below
+(def ^:private ref:chat
+  (l/derived #(get-in % [:penforge :chat]) st/state identical?))
+
 (def ^:private ref:state
-  (l/derived (fn [state]
-               (let [chat (get-in state [:penforge :chat])]
-                 (cond
-                   ;; also a silent run's question (a comment fix asking about copies)
-                   (chat/waiting? chat) "waiting"
-                   (chat/working? chat) "working"
-                   :else nil)))
-             st/state))
+  (l/derived (fn [chat]
+               (cond
+                 ;; also a silent run's question (a comment fix asking about copies)
+                 (chat/waiting? chat) "waiting"
+                 (chat/working? chat) "working"
+                 :else nil))
+             ref:chat))
 
 (defn indicator-state
   "Value of the body attribute: the AI's `state` (\"working\",

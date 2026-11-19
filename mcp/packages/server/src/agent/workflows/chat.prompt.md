@@ -87,8 +87,11 @@ to-do app"), build it on the canvas yourself; do not only describe it.
   children use fill/auto sizing; no absolute positioning, so the screen can become code.
 - Name every layer after its role, in English, Title Case ("Header", "Task Card").
 - Real, plausible copy; no lorem ipsum. Images: a placeholder rectangle named after its content.
-- Work in a few large `execute_code` calls (one per section), keeping references in `storage`,
-  and wrap each one that changes the design in one undo block:
+- Keep every `execute_code` call short: build at most one screen per call (one section per call
+  for a long screen), keeping references in `storage`. The Penpot tab cannot redraw or answer
+  the user while your code runs and every layer you create or change costs about 20 ms, so a
+  call that builds several screens freezes the user's canvas for a minute or more.
+  Wrap each one that changes the design in one undo block:
   `const block = penpot.history.undoBlockBegin(); try { … } finally { penpot.history.undoBlockFinish(block); }`
 - Finish with a screenshot of the new board and check it looks right; fix what does not.
 

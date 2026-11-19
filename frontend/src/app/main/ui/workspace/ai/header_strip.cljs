@@ -22,23 +22,45 @@
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
    [app.util.keyboard :as kbd]
-   [okulary.core :as l]
    [rumext.v2 :as mf]))
+
+(defn scope-items
+  "Visible actions of `scope` in `registry` with their enabled flag for
+  the app `state`."
+  [registry scope state]
+  (->> (actions/get-actions registry scope state)
+       (mapv (fn [action]
+               {:action action
+                :enabled (actions/enabled? action state)}))))
 
 (defn- use-scope-items
   "Visible actions of `scope` with their enabled flag, kept in sync with
-  the app state."
+  the app state at most once per animation frame. The guards and
+  `:visible?`/`:enabled?` fns read the whole state, so recomputing them
+  on every state change made each change of an AI script (thousands per
+  script) pay for them; batched per frame, a running script pays
+  nothing and the menu catches up when the tab can draw again."
   [scope]
-  (let [registry  (mf/deref actions/registry)
-        items-ref (mf/with-memo [registry scope]
-                    (l/derived (fn [state]
-                                 (->> (actions/get-actions registry scope state)
-                                      (mapv (fn [action]
-                                              {:action action
-                                               :enabled (actions/enabled? action state)}))))
-                               st/state
-                               =))]
-    (mf/deref items-ref)))
+  (let [registry (mf/deref actions/registry)
+        items*   (mf/use-state #(scope-items registry scope @st/state))]
+
+    (mf/with-effect [registry scope]
+      (let [key     (js/Symbol "penforge-ai-actions")
+            frame   (volatile! nil)
+            refresh (fn []
+                      (vreset! frame nil)
+                      (let [items (scope-items registry scope @st/state)]
+                        (swap! items* #(if (= % items) % items))))]
+        (refresh)
+        (add-watch st/state key
+                   (fn [_ _ _ _]
+                     (when (nil? @frame)
+                       (vreset! frame (js/requestAnimationFrame refresh)))))
+        (fn []
+          (remove-watch st/state key)
+          (some-> @frame js/cancelAnimationFrame))))
+
+    (deref items*)))
 
 (mf/defc primary-action*
   {::mf/private true}

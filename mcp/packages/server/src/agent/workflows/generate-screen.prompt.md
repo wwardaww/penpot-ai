@@ -22,7 +22,10 @@ Build rules:
   board to a short screen name ("Login", "Order Summary").
 - Keep the board width. Grow its height when the content needs more room; never squeeze content.
 - Real, plausible copy; no lorem ipsum. Images: a placeholder rectangle named after its content.
-- Work in a few large `execute_code` calls (one per section), keeping references in `storage`.
+- Keep every `execute_code` call short: build at most one screen per call (one section per call
+  for a long screen), keeping references in `storage`. The Penpot tab cannot redraw or answer
+  the user while your code runs and every layer you create or change costs about 20 ms, so a
+  call that builds several screens freezes the user's canvas for a minute or more.
 - Wrap the body of every `execute_code` call that changes the design in one undo block, so each
   section undoes in one step:
   `const block = penpot.history.undoBlockBegin(); try { … } finally { penpot.history.undoBlockFinish(block); }`

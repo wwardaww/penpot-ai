@@ -203,3 +203,44 @@ test("a task fails at once when its plugin connection closes before answering", 
     // well within the 1s task timeout of these tests
     assert.ok(Date.now() - started < 500);
 });
+
+test("a tab busy with a task is not taken for suspended: the next task waits behind it", async () => {
+    multiUser = false;
+    const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+    sockets.push(socket);
+    await once(socket, "open");
+    // holds every task until released, like a tab running a long script
+    const held: string[] = [];
+    socket.on("message", (raw) => {
+        const request = JSON.parse(raw.toString());
+        if (request.type !== "initialized" && request.type !== "heartbeat-request") {
+            held.push(request.id);
+        }
+    });
+    const initialized = once(socket, "message", { signal: AbortSignal.timeout(1500) });
+    socket.send(JSON.stringify({ type: "initialize", session: { sessionId: "tab-1", fileId: "f", fileName: "D" } }));
+    await initialized;
+    const connection = [
+        ...(
+            bridge as unknown as { connectionsBySocket: Map<unknown, { lastHeartbeat: number }> }
+        ).connectionsBySocket.values(),
+    ][0];
+
+    const first = bridge.executePluginTask(new PluginTask("test", {}));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(held.length, 1);
+    // the long script keeps the tab from answering heartbeats
+    connection.lastHeartbeat = Date.now() - 120_000;
+    const second = bridge.executePluginTask(new PluginTask("test", {}));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(held.length, 2, "the second task is sent, not refused as suspended");
+    for (const id of held) {
+        socket.send(JSON.stringify({ id, success: true, data: id }));
+    }
+    assert.equal((await first).data, held[0]);
+    assert.equal((await second).data, held[1]);
+
+    // with nothing running, a missing heartbeat still means a suspended tab
+    connection.lastHeartbeat = Date.now() - 120_000;
+    await assert.rejects(bridge.executePluginTask(new PluginTask("test", {})), /appears to be suspended/);
+});
