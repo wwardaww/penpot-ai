@@ -30,6 +30,7 @@
    [app.main.ui.dashboard.import]
    [app.main.ui.dashboard.layout-toggle :as lt]
    [app.main.ui.dashboard.libraries :refer [libraries-page*]]
+   [app.main.ui.dashboard.penforge.design-systems.page :refer [design-systems-page*]]
    [app.main.ui.dashboard.projects :refer [projects-section*]]
    [app.main.ui.dashboard.search :refer [search-page*]]
    [app.main.ui.dashboard.sidebar :refer [sidebar*]]
@@ -142,6 +143,9 @@
        :dashboard-libraries
        [:> libraries-page* {:team team
                             :default-project default-project}]
+
+       :dashboard-design-systems
+       [:> design-systems-page* {:team team :projects projects}]
 
        :dashboard-members
        [:> team-members-page* {:team team :profile profile}]

@@ -66,6 +66,16 @@
   [id]
   (swap! registry dissoc id))
 
+(defonce guards
+  (atom {}))
+
+(defn register-guard!
+  "Register (or replace) a visibility guard: a fn of the app state and
+  an action; the action is hidden in every scope when it answers false
+  (W29: design system files hide the app actions)."
+  [id guard-fn]
+  (swap! guards assoc id guard-fn))
+
 (defn get-actions
   "Actions of the given scope that are visible for the state, in
   display order."
@@ -73,6 +83,7 @@
   (->> (vals actions)
        (filter #(contains? (:scopes %) scope))
        (filter #(if-let [visible? (:visible? %)] (visible? state) true))
+       (filter (fn [action] (every? #(% state action) (vals @guards))))
        (sort-by (juxt #(or (:order %) 100) #(str (:id %))))
        (vec)))
 

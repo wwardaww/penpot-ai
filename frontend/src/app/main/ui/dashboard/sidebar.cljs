@@ -27,6 +27,7 @@
    [app.main.ui.dashboard.comments :refer [comments-icon* comments-section]]
    [app.main.ui.dashboard.inline-edition :refer [inline-edition]]
    [app.main.ui.dashboard.organization-team-switch :refer [organization-team-switch*]]
+   [app.main.ui.dashboard.penforge.design-systems.page :as pf-ds]
    [app.main.ui.dashboard.project-menu :refer [project-menu-items*]]
    [app.main.ui.dashboard.subscription :refer [dashboard-cta*
                                                nitrate-current-plan*
@@ -371,7 +372,8 @@
                      :data-testid "libs-link-sidebar"
                      :class (stl/css :sidebar-link)
                      :keyboard-action go-libs-with-key}
-           [:span {:class (stl/css :element-title)} (tr "labels.shared-libraries")]]]]]
+           [:span {:class (stl/css :element-title)} (tr "labels.shared-libraries")]]]
+         [:> pf-ds/nav-item* {:section section :team-id team-id}]]]
 
        [:div {:class (stl/css :sidebar-content-section)
               :data-testid "pinned-projects"}

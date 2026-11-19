@@ -18,6 +18,7 @@
    [app.main.data.ai.actions.cleanup]
    [app.main.data.ai.actions.comments]
    [app.main.data.ai.actions.design-md]
+   [app.main.data.ai.actions.design-system]
    [app.main.data.ai.actions.detached]
    [app.main.data.ai.actions.generate]
    [app.main.data.ai.actions.prototype]

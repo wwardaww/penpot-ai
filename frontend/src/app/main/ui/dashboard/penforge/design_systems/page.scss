@@ -1,0 +1,143 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/typography.scss" as t;
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+@use "ds/_utils.scss" as *;
+@use "dashboard/common/header";
+
+.container {
+  flex: 1 0 0;
+  margin-inline-end: var(--sp-l);
+  padding: var(--sp-l);
+  overflow-y: auto;
+  inline-size: 100%;
+  border-block-start: $b-1 solid var(--color-background-quaternary);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(px2rem(260), 1fr));
+  gap: var(--sp-l);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  inline-size: 100%;
+  padding: var(--sp-m);
+  border: $b-1 solid var(--color-background-quaternary);
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+  color: var(--color-foreground-primary);
+  text-align: start;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--color-accent-primary);
+    outline: none;
+  }
+}
+
+.card-name {
+  @include t.use-typography("body-large");
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.swatches {
+  display: flex;
+  gap: var(--sp-xs);
+  min-block-size: px2rem(32);
+}
+
+.swatch {
+  inline-size: px2rem(32);
+  block-size: px2rem(32);
+  border: $b-1 solid var(--color-background-quaternary);
+  border-radius: $br-8;
+}
+
+.type-sample {
+  overflow: hidden;
+  color: var(--color-foreground-primary);
+  font-size: px2rem(28);
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  @include t.use-typography("body-small");
+
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-s);
+  color: var(--color-foreground-secondary);
+}
+
+.badge {
+  color: var(--color-accent-primary);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-m);
+  max-inline-size: px2rem(480);
+  color: var(--color-foreground-secondary);
+}
+
+// sidebar entry (same look as the dashboard sidebar links)
+.nav-item {
+  cursor: pointer;
+
+  &:hover {
+    background-color: var(--color-background-secondary);
+
+    .nav-title {
+      color: var(--color-accent-primary);
+    }
+  }
+}
+
+.nav-current {
+  background-color: var(--color-background-quaternary);
+
+  .nav-title {
+    color: var(--color-accent-primary);
+  }
+}
+
+.nav-link {
+  display: block;
+  padding: var(--sp-s) var(--sp-s) var(--sp-s) var(--sp-xxl);
+  inline-size: 100%;
+  font-weight: 400;
+
+  &:hover {
+    text-decoration: none;
+  }
+}
+
+.nav-title {
+  display: block;
+  overflow: hidden;
+  inline-size: px2rem(256);
+  color: var(--color-foreground-primary);
+  font-size: px2rem(14);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

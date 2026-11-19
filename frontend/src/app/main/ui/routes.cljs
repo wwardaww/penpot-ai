@@ -69,7 +69,8 @@
            [:nitrate-entry])
          (when (contains? cf/flags :ai)
            [:penforge-pair
-            :penforge-chat])
+            :penforge-chat
+            :dashboard-design-systems])
          (when *assert*
            [:debug-icons-preview
             :debug-playground]))))

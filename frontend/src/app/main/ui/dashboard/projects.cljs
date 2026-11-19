@@ -25,6 +25,7 @@
    [app.main.ui.dashboard.inline-edition :refer [inline-edition]]
    [app.main.ui.dashboard.layout-toggle :as lt :refer [layout-toggle*]]
    [app.main.ui.dashboard.penforge.create-project]
+   [app.main.ui.dashboard.penforge.design-systems.page :refer [new-design-system-button*]]
    [app.main.ui.dashboard.penforge.persona :refer [persona-gate*]]
    [app.main.ui.dashboard.penforge.platform-badge :refer [platform-badge*]]
    [app.main.ui.dashboard.project-menu :refer [project-menu*
@@ -63,6 +64,7 @@
       [:> dashboard-mcp-menu*]
       [:> layout-toggle* {:layout layout
                           :on-change on-change}]
+      [:> new-design-system-button* {:can-edit can-edit}]
       (when can-edit
         [:> button* {:variant "secondary"
                      :on-click on-click
