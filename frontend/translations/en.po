@@ -13312,3 +13312,132 @@ msgstr "Forever"
 #: src/app/main/ui/workspace/sidebar/options/menus/animations/animations.cljs
 msgid "penforge.animations.smart"
 msgstr "Smart animate to %s"
+
+# penforge:W33
+#: src/app/main/ui/dashboard/penforge/apps/nav.cljs
+msgid "penforge.apps.title"
+msgstr "Apps"
+
+#: src/app/main/ui/dashboard/penforge/apps/page.cljs
+msgid "penforge.apps.intro"
+msgstr "Apps built with Penforge on this computer. Open one to run it; it keeps running until you stop it."
+
+#: src/app/main/ui/dashboard/penforge/apps/page.cljs
+msgid "penforge.apps.refresh"
+msgstr "Refresh"
+
+#: src/app/main/ui/dashboard/penforge/apps/page.cljs
+msgid "penforge.apps.loading"
+msgstr "Looking for your apps…"
+
+#: src/app/main/ui/dashboard/penforge/apps/page.cljs
+msgid "penforge.apps.empty.title"
+msgstr "No apps yet"
+
+#: src/app/main/ui/dashboard/penforge/apps/page.cljs
+msgid "penforge.apps.empty.hint"
+msgstr "Open a file and press Build to turn the design into an app. It shows up here once it is built."
+
+#: src/app/main/ui/dashboard/penforge/apps/page.cljs
+msgid "penforge.apps.error.list"
+msgstr "Could not list the apps."
+
+#: src/app/main/ui/dashboard/penforge/apps/page.cljs
+msgid "penforge.apps.error.unavailable"
+msgstr "Apps open only from Penforge on your own computer."
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.error.not-connected"
+msgstr "The Penforge agent is not connected."
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.error.not-built"
+msgstr "This app is not built yet."
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.error.other"
+msgstr "Something went wrong. Try again."
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.state.starting"
+msgstr "Starting…"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.state.running"
+msgstr "Running"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.state.failed"
+msgstr "Failed"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.state.stopped"
+msgstr "Stopped"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.built"
+msgstr "Built %s"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.action.open"
+msgstr "Open"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.action.stop"
+msgstr "Stop"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.action.design"
+msgstr "Open design"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.action.logs"
+msgstr "Logs"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.action.folder"
+msgstr "Open folder"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.action.close"
+msgstr "Close"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.action.cancel"
+msgstr "Cancel"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.mobile-hint"
+msgstr "This app runs on phones. Open it on your phone with Expo Go."
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.phone.stopped"
+msgstr "Phone access stopped."
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.logs.loading"
+msgstr "Loading the output…"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.logs.empty"
+msgstr "No output yet. Open the app to start it."
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.logs.refresh"
+msgstr "Refresh"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.folder.hint"
+msgstr "The app's code is in this folder:"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.folder.copy"
+msgstr "Copy path"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.folder.copied"
+msgstr "Copied"
+
+#: src/app/main/data/ai/apps.cljs
+msgid "penforge.apps.tab.starting"
+msgstr "Starting your app…"

@@ -203,7 +203,8 @@ export type ClientMessage =
     | WorkflowRunMessage
     | WorkflowCancelMessage
     | PreviewStartMessage
-    | PreviewStopMessage;
+    | PreviewStopMessage
+    | AppsClientMessage;
 
 // ---------------------------------------------------------------------------------------------
 // daemon -> client
@@ -401,6 +402,7 @@ export type DaemonMessage =
     | PreviewStoppedMessage
     | PreviewStatusMessage
     | PreviewLogMessage
+    | AppsDaemonMessage
     | ErrorMessage;
 
 // ---------------------------------------------------------------------------------------------
@@ -580,3 +582,160 @@ export interface Workflow<P = Record<string, unknown>> {
     description: string;
     run(ctx: WorkflowContext, params: P): Promise<WorkflowResult | void>;
 }
+
+// ---------------------------------------------------------------------------------------------
+// built apps on the dashboard (W33)
+
+/**
+ * Request for the built apps of this computer: projects below `<PENFORGE_HOME>/projects/` whose
+ * app was built (`.penforge/map.json`). Needs no `context.set`. The reply is `apps.list`; the
+ * client then receives `apps.status` for every app until it disconnects.
+ */
+export interface AppsListMessage {
+    type: "apps.list";
+    rid: string;
+    /** only apps of this Penpot team (`project.json` `teamId`) */
+    teamId?: string;
+}
+
+/**
+ * Request to run the dev server of a built app (W09 `DevServerManager`, one per project); the
+ * client follows it with `apps.status`. Idempotent. The server keeps running until `apps.stop`
+ * (also when no tab watches it) or the daemon stops.
+ */
+export interface AppsStartMessage {
+    type: "apps.start";
+    rid: string;
+    projectId: string;
+}
+
+/** Request to stop the dev server of an app (process tree killed, port freed). */
+export interface AppsStopMessage {
+    type: "apps.stop";
+    rid: string;
+    projectId: string;
+}
+
+/** Request for the buffered dev server output of an app; the reply is `apps.logs`. */
+export interface AppsLogsMessage {
+    type: "apps.logs";
+    rid: string;
+    projectId: string;
+}
+
+/**
+ * Request to open an Expo app on a phone: the dev server restarts reachable from the local
+ * network (W20 `PhonePreview`) and `apps.phone` carries the QR code. `confirmed` must be true:
+ * the client asked the user first. The session ends on `apps.phone.stop`, `apps.stop`, client
+ * disconnect or after 30 min; the dev server then goes back to this computer only.
+ */
+export interface AppsPhoneStartMessage {
+    type: "apps.phone.start";
+    rid: string;
+    projectId: string;
+    confirmed: true;
+}
+
+/** Request to end the phone session of an app. */
+export interface AppsPhoneStopMessage {
+    type: "apps.phone.stop";
+    rid?: string;
+    projectId: string;
+}
+
+export type AppsClientMessage =
+    | AppsListMessage
+    | AppsStartMessage
+    | AppsStopMessage
+    | AppsLogsMessage
+    | AppsPhoneStartMessage
+    | AppsPhoneStopMessage;
+
+/** Who can reach an app's dev server: this computer only, or the local network (phone session). */
+export type AppExposure = "loopback" | "lan";
+
+/** Dev server state of an app; `stopped` when none runs. */
+export interface AppRunStatus {
+    state: PreviewState;
+    /** loopback URL once a port is assigned */
+    url?: string;
+    reason?: PreviewReason;
+    /** English technical detail (developer persona) */
+    message?: string;
+    exposure?: AppExposure;
+}
+
+/** Last AI checkpoint of an app's project (W19). */
+export interface AppCheckpointInfo {
+    n: number;
+    label: string;
+    at: string;
+}
+
+/** Built app, as listed on the dashboard. */
+export interface AppInfo {
+    projectId: string;
+    /** Penpot project name (`project.json`), else the stack name */
+    name: string;
+    teamId: string | null;
+    /** Penpot file the app was built from (`map.json`), for "Open design" */
+    fileId: string | null;
+    platform: Platform;
+    /** stack name and versions (`stack.json`) */
+    stack: { name: string; version: string };
+    /** Expo app: opened on a phone (QR), optionally in the browser */
+    expo: boolean;
+    /** the dev server shows the app in a browser (web apps; Expo apps with react-native-web) */
+    web: boolean;
+    /** last build (ISO time) and its `app-src` commit */
+    builtAt: string | null;
+    commit: string | null;
+    checkpoint: AppCheckpointInfo | null;
+    /** small PNG `data:` URL (`.penforge/thumbnail.png` or the newest visual QA app screenshot) */
+    thumbnail: string | null;
+    /** source of the thumbnail, relative to the project folder */
+    thumbnailPath: string | null;
+    /** project folder and `app-src/` folder on this computer (developer persona: "Open folder") */
+    path: string;
+    appPath: string;
+    status: AppRunStatus;
+}
+
+export interface AppsListReplyMessage {
+    type: "apps.list";
+    rid: string;
+    apps: AppInfo[];
+}
+
+/** Dev server state change of an app; sent to every client that listed the apps or started one. */
+export interface AppsStatusMessage extends AppRunStatus {
+    type: "apps.status";
+    projectId: string;
+}
+
+export interface AppsLogsReplyMessage {
+    type: "apps.logs";
+    rid: string;
+    projectId: string;
+    lines: { stream: "stdout" | "stderr" | "system"; text: string }[];
+}
+
+/**
+ * Phone session of an app: `starting`, `ready` (with `url` = `exp://<lan address>:<port>`, `qr`
+ * matrix, `expiresAt`), `stopped`, or `failed` (`code`: `no-phone-preview`, `no-network`,
+ * `preview-failed`, `no-app`, `busy`, `internal`; `message` in English).
+ */
+export interface AppsPhoneMessage {
+    type: "apps.phone";
+    projectId: string;
+    state: "starting" | "ready" | "stopped" | "failed";
+    url?: string;
+    host?: string;
+    port?: number;
+    qr?: { size: number; rows: string[] };
+    expiresAt?: string;
+    code?: string;
+    message?: string;
+}
+
+export type AppsDaemonMessage = AppsListReplyMessage | AppsStatusMessage | AppsLogsReplyMessage | AppsPhoneMessage;

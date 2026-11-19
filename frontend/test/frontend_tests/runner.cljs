@@ -12,6 +12,7 @@
    [frontend-tests.copy-as-svg-test]
    [frontend-tests.data.ai-actions-test]
    [frontend-tests.data.ai-adapt-test]
+   [frontend-tests.data.ai-apps-test]
    [frontend-tests.data.ai-ask-test]
    [frontend-tests.data.ai-audit-test]
    [frontend-tests.data.ai-auto-name-test]
@@ -252,6 +253,7 @@
    'frontend-tests.config-test
    'frontend-tests.copy-as-svg-test
    'frontend-tests.data.ai-actions-test
+   'frontend-tests.data.ai-apps-test
    'frontend-tests.data.ai-design-system-test
    'frontend-tests.data.ai-ask-test
    'frontend-tests.data.ai-auto-name-test

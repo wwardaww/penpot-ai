@@ -78,6 +78,8 @@ export class DevServerManager {
     private readonly pending = new Map<string, Promise<DevServer>>();
     private readonly watchers = new Map<string, Set<DevServerObserver>>();
     private readonly idleTimers = new Map<string, NodeJS.Timeout>();
+    /** listeners of every server's status (W33 dashboard); they do not keep a server alive */
+    private readonly statusListeners = new Set<(projectId: string, status: PreviewStatus) => void>();
     private readonly exitHook = () => this.killAllSync();
     private exitHookInstalled = false;
 
@@ -214,6 +216,18 @@ export class DevServerManager {
         });
     }
 
+    /**
+     * Listens to the status changes of every project's dev server. Unlike {@link watch}, a listener
+     * does not keep a server from its idle stop.
+     *
+     * @param listener - receives the project and its new status
+     * @returns a function that removes the listener
+     */
+    public onStatusChange(listener: (projectId: string, status: PreviewStatus) => void): () => void {
+        this.statusListeners.add(listener);
+        return () => this.statusListeners.delete(listener);
+    }
+
     private async launch(workspace: ProjectWorkspace, exposure: DevServerExposure): Promise<DevServer> {
         const projectId = workspace.projectId;
         const stack = await StackConfig.load(workspace, this.policy);
@@ -256,6 +270,13 @@ export class DevServerManager {
             }
         }
         this.forEachWatcher(projectId, (watcher) => watcher.onStatus(status));
+        for (const listener of [...this.statusListeners]) {
+            try {
+                listener(projectId, status);
+            } catch (error) {
+                this.logger.warn("Status listener failed: %s", error instanceof Error ? error.message : error);
+            }
+        }
     }
 
     private forEachWatcher(projectId: string, call: (watcher: DevServerObserver) => void): void {

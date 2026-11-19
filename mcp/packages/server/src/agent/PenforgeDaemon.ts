@@ -2,6 +2,7 @@ import { join } from "path";
 import { createLogger } from "../logger";
 import { AgentConfig, PENFORGE_DAEMON_VERSION } from "./AgentConfig";
 import { AgentServer, PairingToken } from "./AgentServer";
+import { AppsService } from "./apps/AppsService";
 import { ChatService } from "./chat/ChatService";
 import { TurnRunner } from "./chat/TurnRunner";
 import { DevServerManager } from "./process/DevServerManager";
@@ -59,6 +60,7 @@ export class PenforgeDaemon {
     private readonly server: AgentServer;
     private readonly publish: PublishServices;
     private readonly hosting: ServerHosting | null;
+    private readonly apps: AppsService;
 
     /**
      * @param config - the daemon configuration
@@ -80,6 +82,14 @@ export class PenforgeDaemon {
         const workspaces = this.hosting?.workspaces ?? new WorkspaceManager(config.projectsDir);
         this.previews = new PreviewService(devServers);
         const downloads = new DownloadRegistry();
+        // W33: built apps on the dashboard; local mode only (server mode runs apps in the sandbox)
+        this.apps = new AppsService(
+            devServers,
+            workspaces,
+            config.projectsDir,
+            { get: () => PublishServices.get().phone },
+            this.hosting ? "Built apps open from the desktop or local daemon only" : null
+        );
         // W18: the visual QA (workflow and chat tool) uses the same dev servers as the preview
         this.visualQa = {
             previews: new DevServerPreviewAccess(devServers, workspaces),
@@ -101,6 +111,7 @@ export class PenforgeDaemon {
                 tools: this.tools,
                 pluginSessions: parts.pluginSessions,
                 authTimeoutMs: parts.authTimeoutMs ?? 10_000,
+                apps: this.apps,
             },
             () => ({
                 service: "penforge-agent",
@@ -157,6 +168,7 @@ export class PenforgeDaemon {
         // closes the QA browsers and releases their dev servers before those stop
         await VisualQaHost.shutdown(this.visualQa);
         await this.previews.stopAll();
+        this.apps.dispose();
         await this.server.stop();
         PublishServices.uninstall(this.publish);
         await this.tools?.close();
