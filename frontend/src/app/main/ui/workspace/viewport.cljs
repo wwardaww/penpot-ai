@@ -28,6 +28,7 @@
    [app.main.ui.measurements :as msr]
    [app.main.ui.shapes.export :as use]
    [app.main.ui.workspace.ai.activity.overlay :refer [ai-activity*]]
+   [app.main.ui.workspace.device-screens :refer [device-screens*]]
    [app.main.ui.workspace.shapes :as shapes]
    [app.main.ui.workspace.shapes.path.editor :refer [path-editor*]]
    [app.main.ui.workspace.shapes.text.editor :as editor-v1]
@@ -351,6 +352,10 @@
        [:*
         (when-not hide-ui?
           [:> top-toolbar* {:layout layout}])
+
+        ;; Floats left of the toolbar island, see its stylesheet.
+        (when-not hide-ui?
+          [:> device-screens*])
 
         [:> edition-bars* {:layout layout
                            :path-editing path-editing?

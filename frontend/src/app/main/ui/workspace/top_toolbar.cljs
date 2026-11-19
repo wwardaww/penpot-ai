@@ -26,7 +26,6 @@
    [app.main.ui.context :as ctx]
    [app.main.ui.ds.buttons.icon-button :refer [icon-button*]]
    [app.main.ui.ds.foundations.assets.icon :as i]
-   [app.main.ui.workspace.device-screens :refer [device-screens*]]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
    [app.util.keyboard :as kbd]
@@ -365,10 +364,6 @@
              :class (stl/css-case :toolbar true
                                   :no-rulers (not rulers-enabled)
                                   :hidden toolbar-hidden)}
-       ;; Floats out of the island, to its left (see its stylesheet).
-       (when-not ^boolean toolbar-hidden
-         [:> device-screens*])
-
        [:ul {:class (stl/css :toolbar-options)
              :data-testid "toolbar-options"}
         [:li {:class (stl/css :toolbar-option)}

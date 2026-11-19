@@ -5,20 +5,49 @@
 ;; Copyright (c) KALEIDOS SUBSIDIARY SL
 
 (ns app.main.ui.workspace.device-screens
-  "Device screen picker: floats left of the top toolbar and adds a board
-  of a real device's screen size (`app.main.devices`) to the canvas."
+  "Device screen picker: floats left of the top toolbar island and adds
+  a board of a real device's screen size (`app.main.devices`) to the
+  canvas.
+
+  It is the island's sibling in the viewport, not its child: the island
+  is centered with `left: 50%`, so the picker puts its right edge at
+  `50% + island width / 2 + gap` and follows the island width with a
+  ResizeObserver. It hides when the island does."
   (:require-macros [app.main.style :as stl])
   (:require
    [app.common.data.macros :as dm]
    [app.main.data.workspace.device-screens :as dwds]
+   [app.main.data.workspace.path.state :as pst]
    [app.main.devices :as devices]
+   [app.main.refs :as refs]
    [app.main.store :as st]
    [app.main.ui.components.dropdown :refer [dropdown]]
+   [app.main.ui.context :as ctx]
    [app.main.ui.ds.controls.switch :refer [switch*]]
    [app.main.ui.ds.foundations.assets.icon :as i :refer [icon*]]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
+   [okulary.core :as l]
    [rumext.v2 :as mf]))
+
+(def ^:private island-hidden-ref
+  "Mirrors when the top toolbar island hides: collapsed by the user, or
+  replaced by the path edition bar."
+  (l/derived (fn [state]
+               (let [selected (get-in state [:workspace-local :selected])]
+                 (boolean
+                  (or (get-in state [:workspace-local :hide-toolbar])
+                      (and (= 1 (count selected)) (pst/editing? state))
+                      (pst/drawing? state)))))
+             st/state))
+
+(defn- find-island
+  "The top toolbar island among the siblings of `node`."
+  [node]
+  (some-> node
+          (.-parentElement)
+          (.querySelector ":scope > [role='toolbar'] [data-testid='toolbar-options']")
+          (.closest "[role='toolbar']")))
 
 (defn- group-label
   [group]
@@ -50,10 +79,15 @@
           [:span {:class (stl/css :device-name)} (:name device)]
           [:span {:class (stl/css :device-size)} (size-label device)]]])]]))
 
-(mf/defc device-screens*
-  {::mf/wrap [mf/memo]}
+(mf/defc device-picker*
+  {::mf/private true}
   []
   (let [container-ref (mf/use-ref nil)
+
+        rulers        (mf/deref refs/rulers?)
+
+        island-width* (mf/use-state nil)
+        island-width  (deref island-width*)
 
         open*         (mf/use-state false)
         open          (deref open*)
@@ -80,8 +114,19 @@
              (reset! open* false)
              (st/emit! (dwds/add-device-boards id {:with-states with-states})))))]
 
+    (mf/with-effect []
+      (when-let [island (find-island (mf/ref-val container-ref))]
+        (let [measure  #(reset! island-width* (.-width (.getBoundingClientRect island)))
+              observer (js/ResizeObserver. measure)]
+          (measure)
+          (.observe observer island)
+          #(.disconnect observer))))
+
     [:div {:ref container-ref
-           :class (stl/css :device-screens)
+           :class (stl/css-case :device-screens true
+                                :no-rulers (not rulers)
+                                :measured (some? island-width))
+           :style #js {"--island-width" (dm/str (or island-width 0) "px")}
            :data-testid "device-screens"}
      [:button {:class (stl/css-case :trigger true
                                     :open open)
@@ -111,3 +156,11 @@
                      :on-change on-states-change}]
         [:p {:class (stl/css :footer-hint)}
          (tr "penforge.devices.breakpoints-hint")]]]]]))
+
+(mf/defc device-screens*
+  {::mf/wrap [mf/memo]}
+  []
+  (let [read-only? (mf/use-ctx ctx/workspace-read-only?)
+        hidden?    (mf/deref island-hidden-ref)]
+    (when-not (or ^boolean read-only? hidden?)
+      [:> device-picker*])))

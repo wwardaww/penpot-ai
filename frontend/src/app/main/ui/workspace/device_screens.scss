@@ -11,17 +11,24 @@
 @use "ds/typography.scss" as t;
 @use "ds/z-index.scss" as *;
 
-// Rendered inside the top toolbar (the floating island) and positioned
-// out of it, to its left, so the island keeps its place and size.
+// A sibling of the top toolbar island in the viewport. The island is
+// centered (`left: 50%` minus half its width), so the right edge goes at
+// 50% + half the island width (measured, `--island-width`) + a gap. The
+// vertical position repeats the island's (top_toolbar.scss).
 .device-screens {
+  --island-width: 0px;
+  --position-y: #{$sz-28};
+  --offset-y: 0px;
   --menu-border-color: var(--color-background-quaternary);
   --menu-background-color: var(--color-background-primary);
   --trigger-foreground-color: var(--color-foreground-secondary);
   --trigger-background-color: transparent;
 
   position: absolute;
-  inset-block-start: calc(-1 * #{$b-2});
-  inset-inline-end: calc(100% + #{$b-2} + var(--sp-s));
+  inset-block-start: calc(var(--position-y) + var(--offset-y));
+  inset-inline-end: calc(50% + var(--island-width) / 2 + var(--sp-s));
+  visibility: hidden;
+  transition: inset-block-start 0.3s;
   display: flex;
   align-items: center;
   padding: var(--sp-m);
@@ -30,6 +37,15 @@
   background-color: var(--menu-background-color);
   z-index: var(--z-index-panels);
   cursor: default;
+
+  &.measured {
+    visibility: visible;
+  }
+
+  &.no-rulers {
+    --position-y: 0px;
+    --offset-y: 8px;
+  }
 }
 
 .trigger {
@@ -70,7 +86,7 @@
 
 .panel {
   position: absolute;
-  inset-block-start: calc(100% + #{$b-2} + var(--sp-xs));
+  inset-block-start: calc(100% + var(--sp-xs));
   inset-inline-end: calc(-1 * #{$b-2});
   display: flex;
   flex-direction: column;
