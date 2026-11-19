@@ -11,6 +11,7 @@
    [app.common.files.helpers :as cfh]
    [app.common.geom.shapes :as gsh]
    [app.common.types.shape.interactions :as ctsi]
+   [app.config :as cf]
    [app.main.data.viewer :as dv]
    [app.main.refs :as refs]
    [app.main.router :as rt]
@@ -25,6 +26,7 @@
    [app.main.ui.shapes.shape :refer [shape-container]]
    [app.main.ui.shapes.svg-raw :as svg-raw]
    [app.main.ui.shapes.text :as text]
+   [app.main.ui.viewer.animations.player :as anim]
    [app.util.dom :as dom]
    [app.util.object :as obj]
    [app.util.timers :as tm]
@@ -62,8 +64,13 @@
             scroll (if (:preserve-scroll interaction)
                      (dom/get-scroll-pos viewer-section)
                      0)]
-        (st/emit! (dv/set-nav-scroll scroll)
-                  (dv/go-to-frame frame-id (:animation interaction)))))
+        (if (contains? cf/flags :ai)
+          ;; Penforge (W31): exit animations and smart animate
+          (anim/navigate shape interaction frame-id
+                         #(st/emit! (dv/set-nav-scroll scroll)
+                                    (dv/go-to-frame frame-id %)))
+          (st/emit! (dv/set-nav-scroll scroll)
+                    (dv/go-to-frame frame-id (:animation interaction))))))
 
     :open-overlay
     (let [manual?                    (= :manual (:overlay-pos-type interaction))
