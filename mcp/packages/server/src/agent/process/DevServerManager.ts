@@ -11,6 +11,7 @@ import {
 } from "./DevServer";
 import { CodeExecutionGate } from "../hosting/CodeExecutionGate";
 import { CommandPolicy } from "./CommandPolicy";
+import type { DevServerTarget } from "./DevServerTarget";
 import { PortPool } from "./PortPool";
 import { StackConfig } from "./StackConfig";
 
@@ -104,12 +105,15 @@ export class DevServerManager {
     /**
      * Starts the dev server of a project, or reuses the running one.
      *
-     * @param workspace - the project workspace
+     * @param workspace - the project workspace, or another target (W39 dashboard app)
      * @param options - who may reach the server (see {@link DevServerStartOptions})
      * @returns the server's current status
      * @throws AgentError `not-configured` when the project has no generated app
      */
-    public async start(workspace: ProjectWorkspace, options: DevServerStartOptions = {}): Promise<PreviewStatus> {
+    public async start(
+        workspace: ProjectWorkspace | DevServerTarget,
+        options: DevServerStartOptions = {}
+    ): Promise<PreviewStatus> {
         // W24: closed in server mode, where generated apps run in the sandbox only
         CodeExecutionGate.check();
         const projectId = workspace.projectId;
@@ -228,9 +232,12 @@ export class DevServerManager {
         return () => this.statusListeners.delete(listener);
     }
 
-    private async launch(workspace: ProjectWorkspace, exposure: DevServerExposure): Promise<DevServer> {
+    private async launch(
+        workspace: ProjectWorkspace | DevServerTarget,
+        exposure: DevServerExposure
+    ): Promise<DevServer> {
         const projectId = workspace.projectId;
-        const stack = await StackConfig.load(workspace, this.policy);
+        const stack = await StackConfig.of(workspace, this.policy);
         const port = await this.ports.acquire();
         const server = new DevServer(
             projectId,

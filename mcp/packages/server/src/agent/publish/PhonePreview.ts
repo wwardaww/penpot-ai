@@ -5,6 +5,7 @@ import type { DevServerObserver, PreviewStatus } from "../process/DevServer";
 import type { DevServerManager } from "../process/DevServerManager";
 import { ExposureCheck } from "../process/ExposureCheck";
 import { StackConfig } from "../process/StackConfig";
+import type { DevServerTarget } from "../process/DevServerTarget";
 import type { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import { PublishError } from "./PublishError";
 
@@ -68,19 +69,19 @@ export class PhonePreview {
     /**
      * Runs a session until it is stopped.
      *
-     * @param workspace - the project
+     * @param workspace - the project, or another dev server target (W39 dashboard app)
      * @param signal - ends the session
      * @param onReady - receives the session once the phone can connect
      * @throws PublishError `no-phone-preview`, `no-network`, `preview-failed`
      */
     public async run(
-        workspace: ProjectWorkspace,
+        workspace: ProjectWorkspace | DevServerTarget,
         signal: AbortSignal,
         onReady: (session: PhoneSession) => void
     ): Promise<void> {
         let stack: StackConfig;
         try {
-            stack = await StackConfig.load(workspace, new CommandPolicy());
+            stack = await StackConfig.of(workspace, new CommandPolicy());
         } catch {
             throw new PublishError("no-app", "There is no generated app to open on a phone yet");
         }

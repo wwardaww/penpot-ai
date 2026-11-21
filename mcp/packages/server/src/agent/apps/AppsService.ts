@@ -11,11 +11,14 @@ import { createLogger } from "../../logger";
 import { AgentError, type AgentClient } from "../AgentClient";
 import type { DevServerObserver, PreviewStatus } from "../process/DevServer";
 import type { DevServerManager, PreviewWatch } from "../process/DevServerManager";
+import type { DevServerTarget } from "../process/DevServerTarget";
 import type { PhonePreview } from "../publish/PhonePreview";
 import { PublishError } from "../publish/PublishError";
 import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import type { WorkspaceManager } from "../workspace/WorkspaceManager";
-import { AppCatalog } from "./AppCatalog";
+import { AppCatalog, type AppRecord } from "./AppCatalog";
+import { RedesignedAppServer } from "./RedesignedAppServer";
+import { RedesignedApps } from "./RedesignedApps";
 
 /** Watcher that only keeps a dev server alive (status goes out through the status listener). */
 class PinObserver implements DevServerObserver {
@@ -29,12 +32,21 @@ export interface PhonePreviewSource {
     get(): PhonePreview;
 }
 
+/** App reference of an `apps.*` request. */
+interface AppRequest {
+    projectId: string;
+    appId?: string;
+}
+
 /**
- * Handler of the `apps.*` messages: the built apps of this computer on the dashboard (W33).
+ * Handler of the `apps.*` messages: the apps of this computer on the dashboard (W33), built ones
+ * and (W39) Re-Designed Existing projects.
  *
  * Lists the apps ({@link AppCatalog}), starts and stops their dev servers through the W09
  * {@link DevServerManager} (no process code of its own), and opens Expo apps on a phone through
- * the W20 {@link PhonePreview}. The requests need no `context.set`.
+ * the W20 {@link PhonePreview}. The requests need no `context.set`. A built app's dev server is
+ * the project's (shared with the workspace preview); a Re-Designed app's runs in its folder of the
+ * linked project ({@link RedesignedAppServer}) under the app id.
  *
  * An app started here is pinned: it keeps running when no tab watches it (the user opened it in a
  * new browser tab) until `apps.stop`, a failure, or the daemon stops. Clients that listed the
@@ -43,11 +55,11 @@ export interface PhonePreviewSource {
 export class AppsService {
     private readonly logger = createLogger("AppsService");
     private readonly catalog: AppCatalog;
-    /** pinned dev servers by project id */
+    /** pinned dev servers by app id */
     private readonly pins = new Map<string, PreviewWatch>();
     /** clients receiving `apps.status`, by client id */
     private readonly subscribers = new Map<string, AgentClient>();
-    /** running phone sessions by project id */
+    /** running phone sessions by app id */
     private readonly phones = new Map<string, AbortController>();
     private readonly removeListener: () => void;
 
@@ -66,7 +78,7 @@ export class AppsService {
         private readonly refusal: string | null = null
     ) {
         this.catalog = new AppCatalog(projectsDir);
-        this.removeListener = devServers.onStatusChange((projectId, status) => this.statusChanged(projectId, status));
+        this.removeListener = devServers.onStatusChange((appId, status) => this.statusChanged(appId, status));
     }
 
     /** Handles `apps.list`. */
@@ -77,54 +89,55 @@ export class AppsService {
         client.send({
             type: "apps.list",
             rid: message.rid,
-            apps: records.map((record) => AppCatalog.withStatus(record, this.runStatus(record.projectId))),
+            apps: records.map((record) => AppCatalog.withStatus(record, this.runStatus(record.appId))),
         });
     }
 
     /** Handles `apps.start`; resolves once the dev server is launched (not when it is ready). */
     public async start(client: AgentClient, message: AppsStartMessage): Promise<void> {
         this.checkAvailable();
-        const projectId = await this.builtProject(message.projectId);
+        const app = await this.app(message);
+        const appId = app.appId;
         this.subscribe(client);
-        const workspace = await this.workspaces.get(projectId);
-        this.pin(projectId);
+        const target = await this.target(app);
+        this.pin(appId);
         let status: PreviewStatus;
         try {
-            status = await this.devServers.start(workspace);
+            status = await this.devServers.start(target);
         } catch (error) {
-            this.unpin(projectId);
+            this.unpin(appId);
             throw error;
         }
         // replay for a client joining a server that runs already
-        client.send({ type: "apps.status", projectId, ...this.toRunStatus(projectId, status) });
+        client.send({ type: "apps.status", ...this.ids(appId), ...this.toRunStatus(appId, status) });
     }
 
     /** Handles `apps.stop`: ends a phone session, kills the dev server's process tree. */
     public async stop(client: AgentClient, message: AppsStopMessage): Promise<void> {
         this.checkAvailable();
-        const projectId = message.projectId;
-        if (!ProjectWorkspace.ID_PATTERN.test(projectId) || !(await this.catalog.find(projectId))) {
-            throw new AgentError("bad-request", "No built app of this project");
+        const appId = this.appIdOf(message);
+        if (!(await this.catalog.findApp(appId))) {
+            throw new AgentError("bad-request", "No app with this id");
         }
         this.subscribe(client);
-        this.phones.get(projectId)?.abort();
+        this.phones.get(appId)?.abort();
         // the pin holds the server until it is gone, so no idle stop races the kill
-        const wasRunning = await this.devServers.stop(projectId, "stopped");
-        this.unpin(projectId);
+        const wasRunning = await this.devServers.stop(appId, "stopped");
+        this.unpin(appId);
         if (!wasRunning) {
-            client.send({ type: "apps.status", projectId, state: "stopped", reason: "stopped" });
+            client.send({ type: "apps.status", ...this.ids(appId), state: "stopped", reason: "stopped" });
         }
     }
 
     /** Handles `apps.logs`. */
     public async logs(client: AgentClient, message: AppsLogsMessage): Promise<void> {
         this.checkAvailable();
-        const projectId = await this.builtProject(message.projectId);
+        const appId = (await this.app(message)).appId;
         client.send({
             type: "apps.logs",
             rid: message.rid,
-            projectId,
-            lines: this.devServers.logs(projectId).map((line) => ({ stream: line.stream, text: line.text })),
+            ...this.ids(appId),
+            lines: this.devServers.logs(appId).map((line) => ({ stream: line.stream, text: line.text })),
         });
     }
 
@@ -137,12 +150,13 @@ export class AppsService {
         if (message.confirmed !== true) {
             throw new AgentError("bad-request", "The user must agree to the local network access first");
         }
-        const projectId = await this.builtProject(message.projectId);
-        const record = await this.catalog.find(projectId);
-        if (!record?.expo) {
+        const record = await this.app(message);
+        const appId = record.appId;
+        const ids = this.ids(appId);
+        if (!record.expo) {
             client.send({
                 type: "apps.phone",
-                projectId,
+                ...ids,
                 state: "failed",
                 code: "no-phone-preview",
                 message: "This app has no phone preview",
@@ -150,22 +164,22 @@ export class AppsService {
             return;
         }
         const phone = this.phone.get();
-        const workspace = await this.workspaces.get(projectId);
-        this.phones.get(projectId)?.abort();
+        const target = await this.target(record);
+        this.phones.get(appId)?.abort();
         const own = new AbortController();
-        this.phones.set(projectId, own);
+        this.phones.set(appId, own);
         const signal = AbortSignal.any([own.signal, client.closed]);
         this.subscribe(client);
-        this.pin(projectId);
-        client.send({ type: "apps.phone", projectId, state: "starting" });
+        this.pin(appId);
+        client.send({ type: "apps.phone", ...ids, state: "starting" });
         try {
-            await phone.run(workspace, signal, (session) => {
-                client.send({ type: "apps.phone", projectId, state: "ready", ...session });
+            await phone.run(target, signal, (session) => {
+                client.send({ type: "apps.phone", ...ids, state: "ready", ...session });
             });
-            client.send({ type: "apps.phone", projectId, state: "stopped" });
+            client.send({ type: "apps.phone", ...ids, state: "stopped" });
         } catch (error) {
             if (signal.aborted) {
-                client.send({ type: "apps.phone", projectId, state: "stopped" });
+                client.send({ type: "apps.phone", ...ids, state: "stopped" });
             } else {
                 const known = error instanceof PublishError;
                 if (!known) {
@@ -173,15 +187,15 @@ export class AppsService {
                 }
                 client.send({
                     type: "apps.phone",
-                    projectId,
+                    ...ids,
                     state: "failed",
                     code: known ? error.code : "internal",
                     message: error instanceof Error ? error.message : String(error),
                 });
             }
         } finally {
-            if (this.phones.get(projectId) === own) {
-                this.phones.delete(projectId);
+            if (this.phones.get(appId) === own) {
+                this.phones.delete(appId);
             }
         }
     }
@@ -189,11 +203,12 @@ export class AppsService {
     /** Handles `apps.phone.stop`. */
     public async phoneStop(client: AgentClient, message: AppsPhoneStopMessage): Promise<void> {
         this.checkAvailable();
-        const session = this.phones.get(message.projectId);
+        const appId = this.appIdOf(message);
+        const session = this.phones.get(appId);
         if (session) {
             session.abort();
         } else {
-            client.send({ type: "apps.phone", projectId: message.projectId, state: "stopped" });
+            client.send({ type: "apps.phone", ...this.ids(appId), state: "stopped" });
         }
     }
 
@@ -208,7 +223,7 @@ export class AppsService {
         this.removeListener();
     }
 
-    /** Projects whose dev server is pinned (for tests). */
+    /** Apps whose dev server is pinned (for tests). */
     public get pinnedProjects(): string[] {
         return [...this.pins.keys()];
     }
@@ -219,23 +234,46 @@ export class AppsService {
         }
     }
 
-    private async builtProject(projectId: string): Promise<string> {
-        if (!ProjectWorkspace.ID_PATTERN.test(projectId)) {
+    /** The app id a request names: `appId`, else the project id (its built app). */
+    private appIdOf(message: AppRequest): string {
+        if (!ProjectWorkspace.ID_PATTERN.test(message.projectId)) {
             throw new AgentError("bad-request", "Invalid project id");
         }
-        if (!(await this.catalog.find(projectId))) {
-            throw new AgentError("not-configured", "There is no built app for this project");
+        const appId = message.appId ?? message.projectId;
+        if ((RedesignedApps.projectOf(appId) ?? appId) !== message.projectId) {
+            throw new AgentError("bad-request", "The app does not belong to the project");
         }
-        return projectId;
+        return appId;
     }
 
-    private runStatus(projectId: string): AppRunStatus {
-        const status = this.devServers.status(projectId);
-        return status ? this.toRunStatus(projectId, status) : { state: "stopped" };
+    /** The app a request names. */
+    private async app(message: AppRequest): Promise<AppRecord> {
+        const app = await this.catalog.findApp(this.appIdOf(message));
+        if (!app) {
+            throw new AgentError("not-configured", "There is no app with this id");
+        }
+        return app;
     }
 
-    private toRunStatus(projectId: string, status: PreviewStatus): AppRunStatus {
-        const exposure = this.devServers.exposureOf(projectId);
+    /** What the dev server runs for: the project's generated app, or the Re-Designed app folder. */
+    private async target(app: AppRecord): Promise<ProjectWorkspace | DevServerTarget> {
+        return app.redesign
+            ? new RedesignedAppServer(app.appId, app.redesign.root, app.redesign.appDir)
+            : this.workspaces.get(app.projectId);
+    }
+
+    /** The ids of `apps.*` replies for an app id (a dev server key). */
+    private ids(appId: string): { projectId: string; appId: string } {
+        return { projectId: RedesignedApps.projectOf(appId) ?? appId, appId };
+    }
+
+    private runStatus(appId: string): AppRunStatus {
+        const status = this.devServers.status(appId);
+        return status ? this.toRunStatus(appId, status) : { state: "stopped" };
+    }
+
+    private toRunStatus(appId: string, status: PreviewStatus): AppRunStatus {
+        const exposure = this.devServers.exposureOf(appId);
         return {
             state: status.state,
             url: status.url,
@@ -245,16 +283,16 @@ export class AppsService {
         };
     }
 
-    private pin(projectId: string): void {
-        if (!this.pins.has(projectId)) {
-            this.pins.set(projectId, this.devServers.watch(projectId, new PinObserver()));
+    private pin(appId: string): void {
+        if (!this.pins.has(appId)) {
+            this.pins.set(appId, this.devServers.watch(appId, new PinObserver()));
         }
     }
 
-    private unpin(projectId: string): void {
-        const pin = this.pins.get(projectId);
+    private unpin(appId: string): void {
+        const pin = this.pins.get(appId);
         if (pin) {
-            this.pins.delete(projectId);
+            this.pins.delete(appId);
             pin.dispose();
         }
     }
@@ -267,16 +305,16 @@ export class AppsService {
         client.closed.addEventListener("abort", () => this.subscribers.delete(client.id), { once: true });
     }
 
-    private statusChanged(projectId: string, status: PreviewStatus): void {
+    private statusChanged(appId: string, status: PreviewStatus): void {
         // a server that failed or stopped by itself is not kept any more; a phone session's
         // restart (stopped with reason `restarting`) keeps the pin
         if ((status.state === "failed" || status.state === "stopped") && status.reason !== "restarting") {
-            this.unpin(projectId);
+            this.unpin(appId);
         }
         if (this.subscribers.size === 0) {
             return;
         }
-        const message = { type: "apps.status" as const, projectId, ...this.toRunStatus(projectId, status) };
+        const message = { type: "apps.status" as const, ...this.ids(appId), ...this.toRunStatus(appId, status) };
         for (const client of this.subscribers.values()) {
             client.send(message);
         }

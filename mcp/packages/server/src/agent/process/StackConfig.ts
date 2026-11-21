@@ -3,6 +3,7 @@ import { AgentError } from "../AgentClient";
 import { PathGuard } from "../workspace/pathGuard";
 import type { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import { CommandPolicy } from "./CommandPolicy";
+import type { DevServerTarget } from "./DevServerTarget";
 
 /** Content of `.penforge/stack.json` as far as the dev server is concerned (see `wiki/architecture.md` §4). */
 interface StackFile {
@@ -70,6 +71,17 @@ export class StackConfig {
             throw new AgentError("not-configured", "There is no generated app for this project yet");
         }
         return StackConfig.parse(file, workspace.appSrcDir, policy);
+    }
+
+    /**
+     * Reads the stack settings of a project's generated app, or of another dev server target.
+     *
+     * @param target - the project workspace, or a {@link DevServerTarget} (W39)
+     * @param policy - rules for the dev command
+     * @throws AgentError as {@link load}, or as the target's {@link DevServerTarget.devStack}
+     */
+    public static of(target: ProjectWorkspace | DevServerTarget, policy: CommandPolicy): Promise<StackConfig> {
+        return "devStack" in target ? target.devStack(policy) : StackConfig.load(target, policy);
     }
 
     /**

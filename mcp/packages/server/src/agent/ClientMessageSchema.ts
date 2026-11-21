@@ -84,13 +84,19 @@ export class ClientMessageSchema {
         z.object({ type: z.literal("workflow.cancel"), runId: id }),
         z.object({ type: z.literal("preview.start"), rid: id.optional(), projectId: id }),
         z.object({ type: z.literal("preview.stop"), rid: id.optional(), projectId: id }),
-        // W33: built apps on the dashboard
+        // W33: built apps on the dashboard (W39: `appId` names a Re-Designed app)
         z.object({ type: z.literal("apps.list"), rid: id, teamId: id.optional() }),
-        z.object({ type: z.literal("apps.start"), rid: id, projectId: id }),
-        z.object({ type: z.literal("apps.stop"), rid: id, projectId: id }),
-        z.object({ type: z.literal("apps.logs"), rid: id, projectId: id }),
-        z.object({ type: z.literal("apps.phone.start"), rid: id, projectId: id, confirmed: z.literal(true) }),
-        z.object({ type: z.literal("apps.phone.stop"), rid: id.optional(), projectId: id }),
+        z.object({ type: z.literal("apps.start"), rid: id, projectId: id, appId: id.optional() }),
+        z.object({ type: z.literal("apps.stop"), rid: id, projectId: id, appId: id.optional() }),
+        z.object({ type: z.literal("apps.logs"), rid: id, projectId: id, appId: id.optional() }),
+        z.object({
+            type: z.literal("apps.phone.start"),
+            rid: id,
+            projectId: id,
+            appId: id.optional(),
+            confirmed: z.literal(true),
+        }),
+        z.object({ type: z.literal("apps.phone.stop"), rid: id.optional(), projectId: id, appId: id.optional() }),
         // W37: message actions in the chat
         z.object({
             type: z.literal("chat.edit"),
