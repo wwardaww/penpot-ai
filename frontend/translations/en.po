@@ -13724,3 +13724,191 @@ msgstr "Messages removed. The AI had not changed the design since then."
 #: src/app/main/data/ai/actions/checkpoints.cljs
 msgid "penforge.checkpoints.workflow.chat"
 msgstr "AI chat"
+
+# penforge:W30
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.fix.color"
+msgstr "\"%s\" used %s; the system has %s %s, so I used that."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.fix.typography"
+msgstr "\"%s\" used %s; the system's text style \"%s\" is %s, so I used that."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.fix.radius"
+msgstr "\"%s\" had radius %s; the system has %s = %s, so I used that."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.fix.spacing"
+msgstr "\"%s\" had spacing %s; the system has %s = %s, so I used that."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.fix.component"
+msgstr "\"%s\" was drawn by hand; the system has the component \"%s\", so I used it."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.fix.swap"
+msgstr "\"%s\" used \"%s\"; the system has \"%s\", so I used that."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.finding.off-color"
+msgstr "\"%s\" uses %s, far from every system color (closest: %s %s)."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.finding.off-typography"
+msgstr "\"%s\" uses %s; no system text style is close (closest: \"%s\")."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.finding.off-radius"
+msgstr "\"%s\" has radius %s, far from the system's values (closest: %s = %s)."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.finding.off-spacing"
+msgstr "\"%s\" has spacing %s, far from the system's values (closest: %s = %s)."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.finding.off-shadow"
+msgstr "\"%s\" has a shadow that is not one of the system's shadows."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.finding.local-component"
+msgstr "\"%s\" uses \"%s\", which the design system does not have."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.error.not-linked"
+msgstr "This project uses no design system yet. Pick one first."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.error.not-allowed"
+msgstr "A design system cannot use itself."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.error.link-failed"
+msgstr "The design system could not be linked. Check that it is published as a shared library."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.error.no-items"
+msgstr "There is nothing left to add."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.error.timeout"
+msgstr "The design system tab did not finish in time. Try again."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.error.library-not-updated"
+msgstr "The new components have not reached this file yet. The next check will use them."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.error.wrong-file"
+msgstr "This tab shows another file than the design system."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.error.task-missing"
+msgstr "This request to add items is no longer there."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.error.cancelled"
+msgstr "Stopped."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.error.internal"
+msgstr "Something went wrong with the design system. Please try again."
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.action.pick"
+msgstr "Use a design system…"
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.action.apply"
+msgstr "Apply design system"
+
+#: src/app/main/data/ai/actions/redesign.cljs
+msgid "penforge.design-system-binding.action.check"
+msgstr "Check against design system"
+
+#: src/app/main/ui/workspace/ai/design_system/binding/picker.cljs
+msgid "penforge.design-system-binding.picker.title"
+msgstr "Design system"
+
+#: src/app/main/ui/workspace/ai/design_system/binding/picker.cljs
+msgid "penforge.design-system-binding.picker.hint"
+msgstr "The AI uses only this system's colors, text styles, tokens and components."
+
+#: src/app/main/ui/workspace/ai/design_system/binding/picker.cljs
+msgid "penforge.design-system-binding.picker.switch-hint"
+msgstr "Switching asks whether to restyle this file with the new system."
+
+#: src/app/main/ui/workspace/ai/design_system/binding/picker.cljs
+msgid "penforge.design-system-binding.picker.current"
+msgstr "In use"
+
+#: src/app/main/ui/workspace/ai/design_system/binding/picker.cljs
+msgid "penforge.design-system-binding.picker.not-published"
+msgstr "Publish it first"
+
+#: src/app/main/ui/workspace/ai/design_system/binding/picker.cljs
+msgid "penforge.design-system-binding.picker.empty"
+msgstr "No design systems yet. Create one in Design Systems on the dashboard."
+
+#: src/app/main/ui/workspace/ai/design_system/binding/picker.cljs
+msgid "penforge.design-system-binding.picker.none"
+msgstr "None"
+
+#: src/app/main/ui/workspace/ai/design_system/binding/picker.cljs
+msgid "penforge.design-system-binding.picker.use"
+msgstr "Use this design system"
+
+#: src/app/main/ui/workspace/ai/design_system/binding/picker.cljs
+msgid "penforge.design-system-binding.field.label"
+msgstr "Design system (optional)"
+
+#: src/app/main/ui/workspace/ai/design_system/binding/card.cljs
+msgid "penforge.design-system-binding.card.title"
+msgstr "Design system"
+
+#: src/app/main/ui/workspace/ai/design_system/binding/card.cljs
+msgid "penforge.design-system-binding.missing.hint"
+msgstr "The design needs these, but the design system does not have them."
+
+#: src/app/main/ui/workspace/ai/design_system/binding/card.cljs
+msgid "penforge.design-system-binding.missing.keep"
+msgstr "Don't add"
+
+#: src/app/main/ui/workspace/ai/design_system/binding/card.cljs
+msgid "penforge.design-system-binding.missing.add"
+msgstr "Add to design system"
+
+#: src/app/main/ui/workspace/ai/design_system/binding/card.cljs
+msgid "penforge.design-system-binding.missing.working"
+msgstr "Working on the design system…"
+
+#: src/app/main/ui/workspace/ai/design_system/binding/card.cljs
+msgid "penforge.design-system-binding.task.pending"
+msgstr "%s items from \"%s\" are waiting to be added."
+
+#: src/app/main/ui/workspace/ai/design_system/binding/card.cljs
+msgid "penforge.design-system-binding.task.building"
+msgstr "Adding the items to this design system…"
+
+#: src/app/main/ui/workspace/ai/design_system/binding/card.cljs
+msgid "penforge.design-system-binding.task.done"
+msgstr "Added %s items for \"%s\". This tab closes by itself."
+
+#: src/app/main/ui/workspace/ai/design_system/binding/card.cljs
+msgid "penforge.design-system-binding.fixed.title"
+msgid_plural "penforge.design-system-binding.fixed.title"
+msgstr[0] "Matched 1 thing to the design system"
+msgstr[1] "Matched %s things to the design system"
+
+#: src/app/main/ui/workspace/ai/design_system/binding/card.cljs
+msgid "penforge.design-system-binding.fixed.linked"
+msgid_plural "penforge.design-system-binding.fixed.linked"
+msgstr[0] "1 value already matched and now uses the system's styles."
+msgstr[1] "%s values already matched and now use the system's styles."
+
+#: src/app/main/ui/workspace/ai/design_system/binding/card.cljs
+msgid "penforge.design-system-binding.missing.title"
+msgid_plural "penforge.design-system-binding.missing.title"
+msgstr[0] "1 item is not in the design system"
+msgstr[1] "%s items are not in the design system"

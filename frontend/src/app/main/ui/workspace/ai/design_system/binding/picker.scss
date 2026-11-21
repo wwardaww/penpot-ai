@@ -1,0 +1,113 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
+@use "ds/_utils.scss" as *;
+@use "ds/typography.scss" as *;
+
+// Only for the modal placeholders (%modal-overlay-base,
+// %modal-container-base), until the modals move to the DS modal.
+@use "refactor/common-refactor.scss" as deprecated;
+
+.modal-overlay {
+  @extend %modal-overlay-base;
+}
+
+.modal-dialog {
+  @extend %modal-container-base;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-l);
+  inline-size: px2rem(480);
+  max-inline-size: px2rem(480);
+}
+
+// Goes on the tooltip wrapper of the close icon button.
+.close-btn {
+  position: absolute;
+  inset-block-start: var(--sp-s);
+  inset-inline-end: var(--sp-xs);
+}
+
+.modal-title {
+  @include use-typography("headline-medium");
+
+  color: var(--color-foreground-primary);
+}
+
+.hint {
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  max-block-size: px2rem(320);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.row-label {
+  @include use-typography("body-medium");
+
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sp-s);
+  color: var(--color-foreground-primary);
+  cursor: pointer;
+}
+
+.row-disabled .row-label {
+  color: var(--color-foreground-secondary);
+  cursor: default;
+}
+
+.row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.swatches {
+  display: flex;
+  gap: var(--sp-xxs);
+}
+
+.swatch {
+  inline-size: px2rem(16);
+  block-size: px2rem(16);
+  border: $b-1 solid var(--color-background-quaternary);
+  border-radius: $br-4;
+}
+
+.badge {
+  @include use-typography("body-small");
+
+  color: var(--color-accent-primary);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+}
+
+.field-label {
+  color: var(--color-foreground-secondary);
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-s);
+}

@@ -35,4 +35,7 @@
    ;; W20: Share panel modal (ZIP, GitHub, Vercel, Netlify, phone, accounts)
    [app.main.ui.workspace.ai.publish.share]
    ;; W18: visual QA report panel; its events ns registers :ai/visual-qa
-   [app.main.ui.workspace.ai.qa.panel]))
+   [app.main.ui.workspace.ai.qa.panel]
+   ;; W30: design system binding (actions, watcher) and its picker modal
+   [app.main.data.ai.actions.redesign]
+   [app.main.ui.workspace.ai.design-system.binding.picker]))
