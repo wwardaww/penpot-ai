@@ -18,7 +18,6 @@
   (:require
    [app.main.data.ai.linked :as linked]
    [app.main.ui.ds.buttons.button :refer [button*]]
-   [app.main.ui.ds.buttons.icon-button :refer [icon-button*]]
    [app.main.ui.ds.foundations.assets.icon :as i :refer [icon*]]
    [app.main.ui.ds.foundations.typography :as t]
    [app.main.ui.ds.foundations.typography.text :refer [text*]]
@@ -147,12 +146,14 @@
 
        [:*
         [:div {:class (stl/css :path-row)}
-         [:> icon-button* {:variant "ghost"
-                           :type "button"
-                           :icon i/arrow-up
-                           :disabled (or disabled (not loaded) (nil? path))
-                           :aria-label (tr "penforge.folder-browser.up")
-                           :on-click on-up}]
+         ;; a plain button: the DS icon button's tooltip needs a DOM portal
+         [:button {:type "button"
+                   :class (stl/css :up-button)
+                   :disabled (or disabled (not loaded) (nil? path))
+                   :title (tr "penforge.folder-browser.up")
+                   :aria-label (tr "penforge.folder-browser.up")
+                   :on-click on-up}
+          [:> icon* {:icon-id i/arrow-up :size "s"}]]
          [:input {:type "text"
                   :class (stl/css :path-input)
                   :value input

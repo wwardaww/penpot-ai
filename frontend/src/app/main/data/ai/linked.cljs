@@ -207,9 +207,10 @@
 ;; --- Desktop app
 
 (defn desktop-bridge
-  "The desktop app's folder dialog bridge, or nil in a browser."
+  "The desktop app's folder dialog bridge, or nil in a browser and
+  where there is no window (node tests)."
   []
-  (let [bridge (unchecked-get js/window "penforgeDesktopBridge")]
+  (let [bridge (some-> js/globalThis (unchecked-get "penforgeDesktopBridge"))]
     (when (and (some? bridge) (fn? (unchecked-get bridge "chooseFolder")))
       bridge)))
 
