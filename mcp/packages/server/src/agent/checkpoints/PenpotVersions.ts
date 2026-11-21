@@ -1,5 +1,6 @@
 import type { WorkflowToolsApi } from "@penpot/mcp-common";
 import type { CheckpointFileVersion } from "./types";
+import { ExecuteCodeReply } from "../changes/ExecuteCodeReply";
 
 /** Reply of the restore code run in the plugin. */
 interface RestoreReply {
@@ -139,7 +140,8 @@ return result;`
             throw new Error(result.text || "The Penpot plugin could not run the code");
         }
         try {
-            return JSON.parse(result.text) as T;
+            // W34: the plugin answers `{result, log}` (plus a note after slow calls)
+            return ExecuteCodeReply.parse(result.text) as T;
         } catch {
             throw new Error(result.text || "The Penpot plugin returned no data");
         }

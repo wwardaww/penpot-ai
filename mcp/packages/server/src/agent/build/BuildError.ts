@@ -4,14 +4,15 @@ import type { WorkflowContext } from "@penpot/mcp-common";
  * Failure of the build pipeline whose message is already worded for the user's persona.
  *
  * Workflows report it as a `failed` event (`{code, message}`) before the run ends. Clients
- * translate by `code` (`no-boards`, `plan-failed`, `stale-plan`, `busy`, `gave-up`); `message`
+ * translate by `code` (`no-boards`, `plan-failed`, `stale-plan`, `busy`, `gave-up`, W34
+ * `no-build`); `message`
  * is the English fallback (for developers it holds the technical detail). Any other error stays
  * technical and is shown to developers only.
  */
 export class BuildError extends Error {
     constructor(
         message: string,
-        public readonly code: "no-boards" | "plan-failed" | "stale-plan" | "busy" | "gave-up"
+        public readonly code: "no-boards" | "plan-failed" | "stale-plan" | "busy" | "gave-up" | "no-build"
     ) {
         super(message);
         this.name = "BuildError";
