@@ -22,6 +22,7 @@
    [app.main.ui.ds.foundations.assets.icon :refer [icon*] :as i]
    [app.main.ui.ds.foundations.typography :as t]
    [app.main.ui.ds.foundations.typography.text :refer [text*]]
+   [app.main.ui.workspace.ai.animations.play :as anim-play]
    [app.main.ui.workspace.ai.chat.banner :refer [connection-banner*]]
    [app.main.ui.workspace.ai.chat.files :as files]
    [app.main.ui.workspace.ai.chat.markdown :refer [markdown*]]
@@ -314,6 +315,10 @@
     (let [{:keys [board source layers]} params]
       (tr "penforge.chat.check.style-differs" board source (str/join ", " layers)))
 
+    ;; W32: layers the turn animated
+    "animations-set"
+    (anim-play/step-text params)
+
     summary))
 
 (mf/defc tool-entry*
@@ -332,7 +337,9 @@
          (str tool-name (when detail (str "\n" detail)))]]
        [:div {:class (stl/css :tool-line)}
         status-icon
-        [:span {:class (stl/css :tool-summary)} summary]])]))
+        [:span {:class (stl/css :tool-summary)} summary]])
+     (when (= anim-play/code (:code entry))
+       [:> anim-play/animation-play* {:entry entry}])]))
 
 (defn- get-error-text
   [{:keys [code message reason params]}]

@@ -13724,3 +13724,47 @@ msgstr "Messages removed. The AI had not changed the design since then."
 #: src/app/main/data/ai/actions/checkpoints.cljs
 msgid "penforge.checkpoints.workflow.chat"
 msgstr "AI chat"
+
+# penforge:W32
+
+#: src/app/main/ui/workspace/ai/animations/play.cljs
+msgid "penforge.animations.step"
+msgid_plural "penforge.animations.step"
+msgstr[0] "Animated 1 layer"
+msgstr[1] "Animated %s layers"
+
+#: src/app/main/ui/workspace/ai/animations/play.cljs
+msgid "penforge.animations.play"
+msgstr "Play"
+
+#: src/app/main/ui/workspace/ai/animations/play.cljs
+msgid "penforge.animations.play-other-page"
+msgstr "These layers are on another page. Open that page to play the animation."
+
+#: src/app/main/data/ai/actions/animations.cljs
+msgid "penforge.actions.animation-settings"
+msgstr "Animation settings"
+
+#: src/app/main/ui/workspace/ai/animations/settings.cljs
+msgid "penforge.animations.settings.title"
+msgstr "Animation settings"
+
+#: src/app/main/ui/workspace/ai/animations/settings.cljs
+msgid "penforge.animations.settings.initiative"
+msgstr "AI may add animations"
+
+#: src/app/main/ui/workspace/ai/animations/settings.cljs
+msgid "penforge.animations.settings.hint"
+msgstr "When on, the AI may add a few subtle animations where they help (screen entrance, list, button feedback, loading) and tells you which. When off, it animates only when you ask."
+
+#: src/app/main/ui/workspace/ai/animations/settings.cljs
+msgid "penforge.animations.settings.loading"
+msgstr "Loading the setting"
+
+#: src/app/main/ui/workspace/ai/animations/settings.cljs
+msgid "penforge.animations.settings.not-connected"
+msgstr "Connect the AI first: open the AI chat and pair it."
+
+#: src/app/main/ui/workspace/ai/animations/settings.cljs
+msgid "penforge.animations.settings.error"
+msgstr "The setting could not be saved: %s"
