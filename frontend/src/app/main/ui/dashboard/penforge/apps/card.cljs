@@ -5,10 +5,12 @@
 ;; Copyright (c) KALEIDOS SUBSIDIARY SL
 
 (ns app.main.ui.dashboard.penforge.apps.card
-  "Card of one built app on the dashboard (W33): thumbnail, name,
-  platform, stack, last build, run state and the actions Open, Stop,
-  Open design, Open on phone (Expo), and for developers Logs and the
-  app folder."
+  "Card of one app on the dashboard (W33): thumbnail, name, platform,
+  stack, last build, run state and the actions Open, Stop, Open design,
+  Open on phone (Expo), and for developers Logs and the app folder. A
+  Re-Designed Existing project (W39) also shows its Penpot project, a
+  Re-Designed badge, the branch, and why it cannot start (dependencies
+  not installed, no dev script) or runs another branch."
   (:require-macros [app.main.style :as stl])
   (:require
    [app.common.time :as ct]
@@ -23,6 +25,7 @@
    [app.util.clipboard :as clipboard]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
+   [cuerdas.core :as str]
    [rumext.v2 :as mf]))
 
 ;; --- Texts
@@ -47,11 +50,15 @@
     (tr "penforge.apps.state.stopped")))
 
 (defn- error-text
-  [{:keys [code]}]
-  (case code
-    "not-connected"  (tr "penforge.apps.error.not-connected")
-    "not-configured" (tr "penforge.apps.error.not-built")
-    (tr "penforge.apps.error.other")))
+  [{:keys [code reason]}]
+  (case reason
+    "not-installed"  (tr "penforge.apps.redesign.not-installed")
+    "no-dev-command" (tr "penforge.apps.redesign.not-runnable")
+    "folder-missing" (tr "penforge.apps.redesign.folder-missing")
+    (case code
+      "not-connected"  (tr "penforge.apps.error.not-connected")
+      "not-configured" (tr "penforge.apps.error.not-built")
+      (tr "penforge.apps.error.other"))))
 
 (defn- phone-error-text
   [code]
@@ -97,24 +104,24 @@
   "Consent, then the QR code of the phone session; closing the panel
   ends the session."
   {::mf/private true}
-  [{:keys [project-id phone developer on-close]}]
+  [{:keys [app-id phone developer on-close]}]
   (let [state (:state phone)
 
         on-accept
         (mf/use-fn
-         (mf/deps project-id)
-         #(st/emit! (apps/start-phone project-id)))
+         (mf/deps app-id)
+         #(st/emit! (apps/start-phone app-id)))
 
         on-stop
         (mf/use-fn
-         (mf/deps project-id)
-         #(st/emit! (apps/stop-phone project-id)))
+         (mf/deps app-id)
+         #(st/emit! (apps/stop-phone app-id)))
 
         on-dismiss
         (mf/use-fn
-         (mf/deps project-id on-close)
+         (mf/deps app-id on-close)
          (fn []
-           (st/emit! (apps/close-phone project-id))
+           (st/emit! (apps/close-phone app-id))
            (on-close)))]
 
     [:section {:class (stl/css :panel)
@@ -167,9 +174,9 @@
 
 (mf/defc logs-panel*
   {::mf/private true}
-  [{:keys [project-id logs]}]
-  (let [on-refresh (mf/use-fn (mf/deps project-id) #(st/emit! (apps/fetch-logs project-id)))
-        on-close   (mf/use-fn (mf/deps project-id) #(st/emit! (apps/close-logs project-id)))
+  [{:keys [app-id logs]}]
+  (let [on-refresh (mf/use-fn (mf/deps app-id) #(st/emit! (apps/fetch-logs app-id)))
+        on-close   (mf/use-fn (mf/deps app-id) #(st/emit! (apps/close-logs app-id)))
         lines      (:lines logs)]
     [:section {:class (stl/css :panel) :aria-label (tr "penforge.apps.action.logs")}
      (if (seq lines)
@@ -207,13 +214,42 @@
       [:> button* {:variant "ghost" :on-click on-close}
        (tr "penforge.apps.action.close")]]]))
 
+(mf/defc redesign-info*
+  "Branch of a Re-Designed app and why it may not start as expected."
+  {::mf/private true}
+  [{:keys [app]}]
+  (let [{:keys [branch current-branch installed runnable]} (:redesign app)]
+    [:div {:class (stl/css :redesign)}
+     [:> text* {:as "p" :typography t/body-small :class (stl/css :muted)}
+      (tr "penforge.apps.redesign.branch") " "
+      [:code {:class (stl/css :branch)} branch]]
+     (when (apps/off-branch? app)
+       [:> text* {:as "p" :typography t/body-small :class (stl/css :warning)}
+        (if (string? current-branch)
+          (tr "penforge.apps.redesign.off-branch" current-branch)
+          (tr "penforge.apps.redesign.detached"))])
+     (cond
+       (not ^boolean runnable)
+       [:> text* {:as "p" :typography t/body-small :class (stl/css :muted)}
+        (tr "penforge.apps.redesign.not-runnable")]
+
+       (not ^boolean installed)
+       [:> text* {:as "p" :typography t/body-small :class (stl/css :warning)}
+        (tr "penforge.apps.redesign.not-installed")])]))
+
 ;; --- Card
 
 (mf/defc app-card*
   [{:keys [app developer pending error logs phone connected]}]
-  (let [{:keys [project-id name team-id file-id platform stack expo web
-                built-at thumbnail status app-path]} app
+  (let [{:keys [name project-name team-id file-id platform stack expo web
+                built-at thumbnail status app-path redesign]} app
 
+        app-id     (apps/app-id app)
+        redesigned (apps/redesigned? app)
+        ;; a Re-Designed app that cannot start: the card says why
+        blocked    (and redesigned
+                        (not (and ^boolean (:installed redesign)
+                                  ^boolean (:runnable redesign))))
         state      (:state status)
         live       (apps/live? app)
         url        (apps/ready-url app)
@@ -224,7 +260,7 @@
 
         on-open
         (mf/use-fn
-         (mf/deps project-id url web expo)
+         (mf/deps app-id url web expo)
          (fn [event]
            (dom/stop-propagation event)
            (cond
@@ -232,7 +268,7 @@
              (dom/open-new-window url)
 
              ^boolean web
-             (st/emit! (apps/start-app project-id (apps/open-waiting-tab!)))
+             (st/emit! (apps/start-app app-id (apps/open-waiting-tab!)))
 
              ;; Expo app without web: it opens on a phone only
              ^boolean expo
@@ -240,10 +276,10 @@
 
         on-stop
         (mf/use-fn
-         (mf/deps project-id)
+         (mf/deps app-id)
          (fn [event]
            (dom/stop-propagation event)
-           (st/emit! (apps/stop-app project-id))))
+           (st/emit! (apps/stop-app app-id))))
 
         on-design
         (mf/use-fn
@@ -259,16 +295,16 @@
 
         on-close-phone
         (mf/use-fn
-         (mf/deps project-id phone)
+         (mf/deps app-id phone)
          (fn []
            (when (contains? #{"starting" "ready"} (:state phone))
-             (st/emit! (apps/stop-phone project-id)))
+             (st/emit! (apps/stop-phone app-id)))
            (reset! phone-open* false)))
 
         on-logs
         (mf/use-fn
-         (mf/deps project-id logs)
-         #(st/emit! (if logs (apps/close-logs project-id) (apps/fetch-logs project-id))))
+         (mf/deps app-id logs)
+         #(st/emit! (if logs (apps/close-logs app-id) (apps/fetch-logs app-id))))
 
         on-folder
         (mf/use-fn #(swap! folder* not))
@@ -277,7 +313,11 @@
 
         built
         (mf/with-memo [built-at]
-          (some-> built-at ct/inst ct/timeago))]
+          (some-> built-at ct/inst ct/timeago))
+
+        redesigned-at
+        (mf/with-memo [redesign]
+          (some-> (:updated-at redesign) not-empty ct/inst ct/timeago))]
 
     [:article {:class (stl/css :card)
                :data-testid "penforge-app-card"
@@ -296,14 +336,29 @@
                                     :state-failed (= state "failed"))}
         (if starting (state-text "starting") (state-text state))]]
 
+      (when (and (string? project-name) (not= project-name name))
+        [:> text* {:as "p" :typography t/body-small :class (stl/css :muted)}
+         (tr "penforge.apps.project" project-name)])
+
       [:div {:class (stl/css :meta)}
+       (when redesigned
+         [:span {:class (stl/css :badge :badge-redesign)}
+          (tr "penforge.apps.redesign.badge")])
        [:span {:class (stl/css-case :badge true :badge-mobile mobile)}
         (if mobile (tr "penforge.platform.mobile") (tr "penforge.platform.web"))]
        [:> text* {:as "span" :typography t/body-small :class (stl/css :muted)}
-        (:name stack)]
+        (if redesigned
+          (str/trim (str (:name stack) " " (:version stack)))
+          (:name stack))]
        (when built
          [:> text* {:as "span" :typography t/body-small :class (stl/css :muted)}
-          (tr "penforge.apps.built" built)])]
+          (tr "penforge.apps.built" built)])
+       (when redesigned-at
+         [:> text* {:as "span" :typography t/body-small :class (stl/css :muted)}
+          (tr "penforge.apps.redesign.at" redesigned-at)])]
+
+      (when redesigned
+        [:> redesign-info* {:app app}])
 
       (when (= state "failed")
         (when-let [text (reason-text (:reason status))]
@@ -322,12 +377,12 @@
        (when (or ^boolean web (not ^boolean expo))
          [:> button* {:variant "primary"
                       :icon i/play
-                      :disabled (or (not connected) starting)
+                      :disabled (or (not connected) starting (and blocked (not live)))
                       :on-click on-open}
           (if starting (tr "penforge.apps.state.starting") (tr "penforge.apps.action.open"))])
        (when ^boolean expo
          [:> button* {:variant (if ^boolean web "secondary" "primary")
-                      :disabled (not connected)
+                      :disabled (or (not connected) (and blocked (not live)))
                       :on-click on-phone}
           (tr "penforge.publish.phone.title")])
        (when live
@@ -344,11 +399,11 @@
           (tr "penforge.apps.action.folder")])]
 
       (when (or (deref phone-open*) (some? phone))
-        [:> phone-panel* {:project-id project-id
+        [:> phone-panel* {:app-id app-id
                           :phone phone
                           :developer developer
                           :on-close on-close-phone}])
       (when (and ^boolean developer (some? logs))
-        [:> logs-panel* {:project-id project-id :logs logs}])
+        [:> logs-panel* {:app-id app-id :logs logs}])
       (when (and ^boolean developer (deref folder*))
         [:> folder-panel* {:path app-path :on-close on-close-folder}])]]))

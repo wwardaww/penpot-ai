@@ -257,6 +257,10 @@ describe("code-redesign", () => {
         assert.deepEqual(result.unmatched, ["Share button on Home needs a share feature"]);
         assert.match(run.turns[0].prompt, /ONLY the look/);
         assert.match(run.turns[0].prompt, /no further instructions/);
+        // W39: the record names the app (Penpot file + app folder) for the dashboard
+        const record = JSON.parse(readFileSync(join(projectsDir, "cr-run", ".penforge", "redesign.json"), "utf8"));
+        assert.equal(record.branch, result.branch);
+        assert.deepEqual(record.apps, [{ fileId: "file-1", fileName: "File", appDir: "" }]);
 
         await codeRedesign.run(run.ctx, { action: "revert", files: ["src/api/client.ts"] });
         const reverted = run.events.at(-1)!.payload;

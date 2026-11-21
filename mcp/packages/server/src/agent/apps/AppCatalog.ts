@@ -3,20 +3,25 @@ import { join } from "path";
 import type { AppCheckpointInfo, AppInfo, AppRunStatus, Platform } from "@penpot/mcp-common";
 import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import { AppThumbnail } from "./AppThumbnail";
+import { RedesignedApps } from "./RedesignedApps";
 
-/** Built app as found on disk, without its run status. */
+/** App as found on disk, without its run status. */
 export type AppRecord = Omit<AppInfo, "status">;
 
 /**
- * Catalog of the built apps below `<PENFORGE_HOME>/projects/`.
+ * Catalog of the apps below `<PENFORGE_HOME>/projects/`: built apps (W33) and Re-Designed
+ * Existing projects (W39, {@link RedesignedApps}).
  *
  * A project counts as built when `.penforge/map.json` (written by every successful build) and
- * `.penforge/stack.json` exist. The catalog only reads: it never creates project folders or
- * repositories. Broken or missing optional files (`project.json`, `checkpoints.json`,
- * `app-src/package.json`) leave their fields empty.
+ * `.penforge/stack.json` exist; its app id is the project id. A project linked as Existing project
+ * with a `.penforge/redesign.json` gives one app per Penpot file and app folder of the Re-Design.
+ * The catalog only reads: it never creates project folders or repositories. Broken or missing
+ * optional files (`project.json`, `checkpoints.json`, `app-src/package.json`) leave their fields
+ * empty.
  */
 export class AppCatalog {
     private readonly thumbnails = new AppThumbnail();
+    private readonly redesigned = new RedesignedApps();
 
     /**
      * @param projectsDir - folder holding the project folders
@@ -24,7 +29,7 @@ export class AppCatalog {
     constructor(private readonly projectsDir: string) {}
 
     /**
-     * Lists the built apps, newest build first.
+     * Lists the apps, newest build or Re-Design first.
      *
      * @param teamId - only apps of this Penpot team
      */
@@ -33,14 +38,14 @@ export class AppCatalog {
         const ids = entries
             .filter((entry) => entry.isDirectory() && ProjectWorkspace.ID_PATTERN.test(entry.name))
             .map((entry) => entry.name);
-        const records = (await Promise.all(ids.map((id) => this.find(id)))).filter(
-            (record): record is AppRecord => record !== null && (teamId === undefined || record.teamId === teamId)
+        const records = (await Promise.all(ids.map((id) => this.projectApps(id)))).flatMap((apps) =>
+            apps.filter((record) => teamId === undefined || record.teamId === teamId)
         );
-        return records.sort((a, b) => (b.builtAt ?? "").localeCompare(a.builtAt ?? ""));
+        return records.sort((a, b) => AppCatalog.time(b).localeCompare(AppCatalog.time(a)));
     }
 
     /**
-     * Reads one built app.
+     * Reads the built app of a project.
      *
      * @param projectId - the Penpot project id
      * @returns the app, or null when the project has no built app (or the id is not valid)
@@ -49,23 +54,75 @@ export class AppCatalog {
         if (!ProjectWorkspace.ID_PATTERN.test(projectId)) {
             return null;
         }
+        return (await this.projectApps(projectId, true)).find((app) => app.redesign === null) ?? null;
+    }
+
+    /**
+     * Reads one app.
+     *
+     * @param appId - the app id: a project id (built app) or a Re-Designed app's id
+     * @returns the app, or null when there is none with this id
+     */
+    public async findApp(appId: string): Promise<AppRecord | null> {
+        if (ProjectWorkspace.ID_PATTERN.test(appId)) {
+            return this.find(appId);
+        }
+        const projectId = RedesignedApps.projectOf(appId);
+        if (projectId === null) {
+            return null;
+        }
+        return (await this.projectApps(projectId)).find((app) => app.appId === appId) ?? null;
+    }
+
+    /** The apps of one project: its built app, then its Re-Designed apps. */
+    private async projectApps(projectId: string, builtOnly = false): Promise<AppRecord[]> {
         const root = join(this.projectsDir, projectId);
+        const metaDir = join(root, ".penforge");
+        const project = AppCatalog.object(await AppCatalog.readJson(join(metaDir, "project.json")));
+        const built = await this.built(projectId, root, project);
+        const redesigned = builtOnly
+            ? []
+            : await this.redesigned
+                  .list(projectId, root, project, await AppCatalog.readJson(join(metaDir, "redesign.json")))
+                  .catch(() => []);
+        if (built === null && redesigned.length === 0) {
+            return [];
+        }
+        const thumbnail = await AppThumbnail.locate(root);
+        const shared = {
+            teamId: AppCatalog.text(project?.teamId),
+            projectName: AppCatalog.text(project?.projectName),
+            checkpoint: AppCatalog.lastCheckpoint(await AppCatalog.readJson(join(metaDir, "checkpoints.json"))),
+            thumbnail: thumbnail ? await this.thumbnails.dataUrl(thumbnail) : null,
+            thumbnailPath: thumbnail?.relativePath ?? null,
+        };
+        return [
+            ...(built ? [{ ...built, ...shared }] : []),
+            ...redesigned.map((app) => ({ ...app, ...shared, builtAt: null, commit: null })),
+        ];
+    }
+
+    /** The built app of a project, without the fields its Re-Designed apps share. */
+    private async built(
+        projectId: string,
+        root: string,
+        project: Record<string, unknown> | null
+    ): Promise<Omit<AppRecord, "teamId" | "projectName" | "checkpoint" | "thumbnail" | "thumbnailPath"> | null> {
         const metaDir = join(root, ".penforge");
         const map = AppCatalog.object(await AppCatalog.readJson(join(metaDir, "map.json")));
         const stack = AppCatalog.object(await AppCatalog.readJson(join(metaDir, "stack.json")));
         if (!map || !stack) {
             return null;
         }
-        const project = AppCatalog.object(await AppCatalog.readJson(join(metaDir, "project.json")));
         const appSrcDir = join(root, "app-src");
         const devArgv = AppCatalog.devArgv(stack);
         const expo = devArgv.includes("expo") && devArgv.includes("start");
         const platform = AppCatalog.platform(stack.platform) ?? AppCatalog.platform(project?.platform) ?? "web";
-        const thumbnail = await AppThumbnail.locate(root);
         return {
+            appId: projectId,
             projectId,
             name: AppCatalog.text(project?.projectName) ?? AppCatalog.text(stack.name) ?? projectId,
-            teamId: AppCatalog.text(project?.teamId),
+            fileName: null,
             fileId: AppCatalog.text(map.fileId) ?? AppCatalog.firstText(project?.fileIds),
             platform,
             stack: { name: AppCatalog.text(stack.name) ?? "app", version: AppCatalog.text(stack.version) ?? "" },
@@ -74,12 +131,15 @@ export class AppCatalog {
             web: expo ? await AppCatalog.hasWebRenderer(appSrcDir) : true,
             builtAt: AppCatalog.text(map.builtAt),
             commit: AppCatalog.text(map.commit),
-            checkpoint: AppCatalog.lastCheckpoint(await AppCatalog.readJson(join(metaDir, "checkpoints.json"))),
-            thumbnail: thumbnail ? await this.thumbnails.dataUrl(thumbnail) : null,
-            thumbnailPath: thumbnail?.relativePath ?? null,
             path: root,
             appPath: appSrcDir,
+            redesign: null,
         };
+    }
+
+    /** Time an app is sorted by: its build, else its last Re-Design. */
+    private static time(app: AppRecord): string {
+        return app.builtAt ?? app.redesign?.updatedAt ?? "";
     }
 
     /**

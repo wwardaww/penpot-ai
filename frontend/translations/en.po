@@ -14572,3 +14572,40 @@ msgstr "Connect the AI first: open the AI chat and pair it."
 #: src/app/main/ui/workspace/ai/animations/settings.cljs
 msgid "penforge.animations.settings.error"
 msgstr "The setting could not be saved: %s"
+
+# penforge:W39
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.project"
+msgstr "Project: %s"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.redesign.badge"
+msgstr "Re-Designed"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.redesign.at"
+msgstr "Re-Designed %s"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.redesign.branch"
+msgstr "Branch"
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.redesign.off-branch"
+msgstr "The folder has branch %s checked out, so Open runs that branch. Switch to the Re-Design branch yourself to see the new look."
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.redesign.detached"
+msgstr "The folder is not on a branch, so Open runs what is checked out. Switch to the Re-Design branch yourself to see the new look."
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.redesign.not-installed"
+msgstr "The app's dependencies are not installed. Install them in the app folder (for example with npm install), then try again."
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.redesign.not-runnable"
+msgstr "Penforge cannot start this app: it has no dev or start script it knows. Run it from its folder yourself."
+
+#: src/app/main/ui/dashboard/penforge/apps/card.cljs
+msgid "penforge.apps.redesign.folder-missing"
+msgstr "The app folder is gone. Link the project's folder again from its workspace."

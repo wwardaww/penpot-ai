@@ -666,7 +666,8 @@ export interface Workflow<P = Record<string, unknown>> {
 
 /**
  * Request for the built apps of this computer: projects below `<PENFORGE_HOME>/projects/` whose
- * app was built (`.penforge/map.json`). Needs no `context.set`. The reply is `apps.list`; the
+ * app was built (`.penforge/map.json`), and (W39) the apps of Existing projects that were
+ * Re-Designed (`.penforge/redesign.json`). Needs no `context.set`. The reply is `apps.list`; the
  * client then receives `apps.status` for every app until it disconnects.
  */
 export interface AppsListMessage {
@@ -685,6 +686,11 @@ export interface AppsStartMessage {
     type: "apps.start";
     rid: string;
     projectId: string;
+    /**
+     * the app (W39): `AppInfo.appId`; defaults to `projectId`, which names the built app of the
+     * project
+     */
+    appId?: string;
 }
 
 /** Request to stop the dev server of an app (process tree killed, port freed). */
@@ -692,6 +698,11 @@ export interface AppsStopMessage {
     type: "apps.stop";
     rid: string;
     projectId: string;
+    /**
+     * the app (W39): `AppInfo.appId`; defaults to `projectId`, which names the built app of the
+     * project
+     */
+    appId?: string;
 }
 
 /** Request for the buffered dev server output of an app; the reply is `apps.logs`. */
@@ -699,6 +710,11 @@ export interface AppsLogsMessage {
     type: "apps.logs";
     rid: string;
     projectId: string;
+    /**
+     * the app (W39): `AppInfo.appId`; defaults to `projectId`, which names the built app of the
+     * project
+     */
+    appId?: string;
 }
 
 /**
@@ -711,6 +727,11 @@ export interface AppsPhoneStartMessage {
     type: "apps.phone.start";
     rid: string;
     projectId: string;
+    /**
+     * the app (W39): `AppInfo.appId`; defaults to `projectId`, which names the built app of the
+     * project
+     */
+    appId?: string;
     confirmed: true;
 }
 
@@ -719,6 +740,11 @@ export interface AppsPhoneStopMessage {
     type: "apps.phone.stop";
     rid?: string;
     projectId: string;
+    /**
+     * the app (W39): `AppInfo.appId`; defaults to `projectId`, which names the built app of the
+     * project
+     */
+    appId?: string;
 }
 
 export type AppsClientMessage =
@@ -750,11 +776,45 @@ export interface AppCheckpointInfo {
     at: string;
 }
 
-/** Built app, as listed on the dashboard. */
+/**
+ * Re-Design of an Existing project (W38) that an app on the dashboard comes from (W39): the app
+ * runs in a folder of the linked project, on whatever branch the folder has checked out.
+ */
+export interface AppRedesignInfo {
+    /** the Penforge branch of the Re-Design */
+    branch: string;
+    /** the user's branch it started from */
+    baseBranch: string | null;
+    /** branch the linked folder has checked out now (null when detached or unknown) */
+    currentBranch: string | null;
+    /** the linked folder (`project.json` `linkedRoot`) */
+    root: string;
+    /** app folder relative to the linked folder, `/`-separated; `""` is the folder itself */
+    appDir: string;
+    /** false when no `node_modules` was found: the dependencies are not installed, start is refused */
+    installed: boolean;
+    /** false when Penforge knows no dev command for the app (no `dev`/`start` script, native app) */
+    runnable: boolean;
+    /** where the app folder comes from: the Re-Design record, or the changed files (older records) */
+    source: "record" | "changes";
+    /** last Re-Design run (ISO time) */
+    updatedAt: string;
+}
+
+/** App on the dashboard: a built app (W33) or a Re-Designed Existing project (W39). */
 export interface AppInfo {
+    /**
+     * id of the app in `apps.*` messages: the project id for a built app,
+     * `<projectId>~<8 hex>` for a Re-Designed app (one per Penpot file and app folder)
+     */
+    appId: string;
     projectId: string;
-    /** Penpot project name (`project.json`), else the stack name */
+    /** built app: Penpot project name, else the stack name; Re-Designed app: Penpot file name, else the folder name */
     name: string;
+    /** Penpot project name (`project.json`) */
+    projectName: string | null;
+    /** Penpot file name, when known (Re-Designed apps) */
+    fileName: string | null;
     teamId: string | null;
     /** Penpot file the app was built from (`map.json`), for "Open design" */
     fileId: string | null;
@@ -776,6 +836,8 @@ export interface AppInfo {
     /** project folder and `app-src/` folder on this computer (developer persona: "Open folder") */
     path: string;
     appPath: string;
+    /** the Re-Design the app comes from; null for a built app */
+    redesign: AppRedesignInfo | null;
     status: AppRunStatus;
 }
 
@@ -789,12 +851,15 @@ export interface AppsListReplyMessage {
 export interface AppsStatusMessage extends AppRunStatus {
     type: "apps.status";
     projectId: string;
+    /** the app (W39); equals `projectId` for a built app and for a workspace preview */
+    appId: string;
 }
 
 export interface AppsLogsReplyMessage {
     type: "apps.logs";
     rid: string;
     projectId: string;
+    appId: string;
     lines: { stream: "stdout" | "stderr" | "system"; text: string }[];
 }
 
@@ -806,6 +871,7 @@ export interface AppsLogsReplyMessage {
 export interface AppsPhoneMessage {
     type: "apps.phone";
     projectId: string;
+    appId: string;
     state: "starting" | "ready" | "stopped" | "failed";
     url?: string;
     host?: string;

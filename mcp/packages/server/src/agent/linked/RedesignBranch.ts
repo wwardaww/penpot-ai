@@ -1,5 +1,15 @@
-import type { LinkedProjectKind, WorkflowContext } from "@penpot/mcp-common";
+import type { LinkedProjectKind, WorkflowContext, WorkflowWorkspaceApi } from "@penpot/mcp-common";
 import { LinkedGit } from "./LinkedGit";
+
+/** App of a Re-Design (W39): a Penpot file and the app folder its run changed. */
+export interface RedesignedAppEntry {
+    /** the Penpot file, null when unknown (older records) */
+    fileId: string | null;
+    /** its name when the run happened */
+    fileName: string | null;
+    /** app folder relative to the linked folder, `/`-separated; `""` is the folder itself */
+    appDir: string;
+}
 
 /** Content of `.penforge/redesign.json`: the branch of the last Re-Design. */
 export interface RedesignRecord {
@@ -13,7 +23,15 @@ export interface RedesignRecord {
     baseCommit: string;
     createdAt: string;
     updatedAt: string;
+    /**
+     * apps the runs on this branch changed, one per Penpot file and app folder (W39; absent in
+     * records written before)
+     */
+    apps?: RedesignedAppEntry[];
 }
+
+/** A valid {@link RedesignRecord}, its `apps` checked (empty when absent). */
+export type ReadRedesignRecord = Omit<RedesignRecord, "apps"> & { apps: RedesignedAppEntry[] };
 
 /** Git plan of a Re-Design, for the confirm card. */
 export interface RedesignGitPlan {
@@ -40,6 +58,7 @@ export type RedesignBranchOutcome =
  */
 export class RedesignBranch {
     public static readonly RECORD_FILE = "redesign.json";
+    private static readonly MAX_APPS = 50;
 
     constructor(
         private readonly ctx: WorkflowContext,
@@ -155,8 +174,87 @@ export class RedesignBranch {
             baseCommit,
             createdAt: record?.branch === branch ? record.createdAt : now,
             updatedAt: now,
+            ...(record?.branch === branch && Array.isArray(record.apps) ? { apps: record.apps } : {}),
         } satisfies RedesignRecord);
         return { state: "ready", git, branch, baseBranch, baseCommit };
+    }
+
+    /**
+     * Checks the content of a `redesign.json`.
+     *
+     * @param value - the parsed file
+     * @returns the record, or null when it is not a valid one
+     */
+    public static readRecord(value: unknown): ReadRedesignRecord | null {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) {
+            return null;
+        }
+        const record = value as Partial<Record<keyof RedesignRecord, unknown>>;
+        const text = (field: unknown) => (typeof field === "string" && field.length > 0 ? field : null);
+        if (
+            (record.kind !== "existing" && record.kind !== "game") ||
+            text(record.root) === null ||
+            typeof record.branch !== "string" ||
+            !record.branch.startsWith(LinkedGit.BRANCH_PREFIX) ||
+            text(record.baseCommit) === null
+        ) {
+            return null;
+        }
+        const apps: RedesignedAppEntry[] = [];
+        for (const entry of Array.isArray(record.apps) ? record.apps.slice(0, RedesignBranch.MAX_APPS) : []) {
+            const app = typeof entry === "object" && entry !== null ? (entry as Partial<RedesignedAppEntry>) : null;
+            const appDir = RedesignBranch.relativeDir(app?.appDir);
+            if (app === null || appDir === null) {
+                continue;
+            }
+            apps.push({ fileId: text(app.fileId), fileName: text(app.fileName), appDir });
+        }
+        return {
+            kind: record.kind,
+            root: record.root as string,
+            branch: record.branch,
+            baseBranch: text(record.baseBranch),
+            baseCommit: record.baseCommit as string,
+            createdAt: text(record.createdAt) ?? "",
+            updatedAt: text(record.updatedAt) ?? text(record.createdAt) ?? "",
+            apps,
+        };
+    }
+
+    /**
+     * Records the apps a run changed (W39): they replace the earlier entries of the same Penpot file;
+     * other files' entries stay.
+     *
+     * @param workspace - the project workspace holding `redesign.json`
+     * @param file - the Penpot file of the run
+     * @param appDirs - app folders the run changed, relative to the linked folder
+     */
+    public static async recordApps(
+        workspace: WorkflowWorkspaceApi,
+        file: { fileId: string; fileName: string },
+        appDirs: readonly string[]
+    ): Promise<void> {
+        const current = await workspace.readJson<RedesignRecord | null>(RedesignBranch.RECORD_FILE, null);
+        const read = RedesignBranch.readRecord(current);
+        if (current === null || read === null) {
+            return;
+        }
+        const kept = read.apps.filter((app) => app.fileId !== file.fileId);
+        const fileName = file.fileName.trim().length > 0 ? file.fileName.trim() : null;
+        const added = appDirs.map((appDir) => ({ fileId: file.fileId, fileName, appDir }));
+        await workspace.writeJson(RedesignBranch.RECORD_FILE, {
+            ...current,
+            apps: [...added, ...kept].slice(0, RedesignBranch.MAX_APPS),
+        } satisfies RedesignRecord);
+    }
+
+    /** Normalises an app folder: relative, `/`-separated, no `.`/`..` segments; null when invalid. */
+    private static relativeDir(dir: unknown): string | null {
+        if (typeof dir !== "string" || /^([A-Za-z]:|[\\/])/.test(dir)) {
+            return null;
+        }
+        const segments = dir.split(/[\\/]+/).filter((segment) => segment !== "" && segment !== ".");
+        return segments.includes("..") ? null : segments.join("/");
     }
 
     private async record(): Promise<RedesignRecord | null> {

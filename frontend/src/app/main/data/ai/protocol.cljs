@@ -172,24 +172,30 @@
    ["preview.stop"
     [:map [:type :string] [:rid {:optional true} :string] [:project-id :string]]]
 
-   ;; W33: built apps on the dashboard
+   ;; W33: built apps on the dashboard (W39: `:app-id` names a
+   ;; Re-Designed app)
    ["apps.list"
     [:map [:type :string] [:rid :string] [:team-id {:optional true} :string]]]
 
    ["apps.start"
-    [:map [:type :string] [:rid :string] [:project-id :string]]]
+    [:map [:type :string] [:rid :string] [:project-id :string]
+     [:app-id {:optional true} :string]]]
 
    ["apps.stop"
-    [:map [:type :string] [:rid :string] [:project-id :string]]]
+    [:map [:type :string] [:rid :string] [:project-id :string]
+     [:app-id {:optional true} :string]]]
 
    ["apps.logs"
-    [:map [:type :string] [:rid :string] [:project-id :string]]]
+    [:map [:type :string] [:rid :string] [:project-id :string]
+     [:app-id {:optional true} :string]]]
 
    ["apps.phone.start"
-    [:map [:type :string] [:rid :string] [:project-id :string] [:confirmed [:= true]]]]
+    [:map [:type :string] [:rid :string] [:project-id :string]
+     [:app-id {:optional true} :string] [:confirmed [:= true]]]]
 
    ["apps.phone.stop"
-    [:map [:type :string] [:rid {:optional true} :string] [:project-id :string]]]
+    [:map [:type :string] [:rid {:optional true} :string] [:project-id :string]
+     [:app-id {:optional true} :string]]]
 
    ;; W37: message actions in the chat
    ["chat.edit"
@@ -336,6 +342,7 @@
     [:map
      [:type :string]
      [:project-id :string]
+     [:app-id {:optional true} :string]
      [:state :string]
      [:url {:optional true} :string]
      [:reason {:optional true} :string]
@@ -343,12 +350,14 @@
      [:exposure {:optional true} :string]]]
 
    ["apps.logs"
-    [:map [:type :string] [:rid :string] [:project-id :string] [:lines [:vector :any]]]]
+    [:map [:type :string] [:rid :string] [:project-id :string]
+     [:app-id {:optional true} :string] [:lines [:vector :any]]]]
 
    ["apps.phone"
     [:map
      [:type :string]
      [:project-id :string]
+     [:app-id {:optional true} :string]
      [:state :string]
      [:url {:optional true} :string]
      [:host {:optional true} :string]

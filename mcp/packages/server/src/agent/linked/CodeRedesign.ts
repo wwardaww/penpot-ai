@@ -1,4 +1,7 @@
 import type { WorkflowContext } from "@penpot/mcp-common";
+import { createLogger } from "../../logger";
+import { AppFolders } from "../apps/AppFolders";
+import { ReadOnlyGit } from "../apps/ReadOnlyGit";
 import { ensureCheckpoint } from "../checkpoints/Checkpoints";
 import { LinkedProjectPrompt } from "./LinkedProjectPrompt";
 import { LinkedToolFilter } from "./LinkedToolFilter";
@@ -57,6 +60,8 @@ export class RedesignError extends Error {
  * revert.
  */
 export class CodeRedesign {
+    private readonly logger = createLogger("CodeRedesign");
+
     constructor(private readonly ctx: WorkflowContext) {}
 
     /** Tells what a run would do: git state, branch, screens. */
@@ -80,6 +85,7 @@ export class CodeRedesign {
         }
         this.progress("checkpoint", "Saving a checkpoint");
         await ensureCheckpoint(this.ctx, "Before Re-Design", "code-redesign");
+        const headBefore = (await prepared.git.state()).head ?? prepared.baseCommit;
         this.progress("edit", "Applying the new look to the code");
         const instructions = (params.instructions ?? "").trim().slice(0, 8000);
         const answer = await this.ctx.runner.run({
@@ -100,6 +106,9 @@ export class CodeRedesign {
             }))
         );
         const outsideLook = LookGuard.check(files, instructions.length > 0 ? report.featureFiles : []);
+        if (commit !== null) {
+            await this.recordApps(root, prepared.branch, headBefore);
+        }
         return {
             action: "run",
             branch: prepared.branch,
@@ -136,6 +145,31 @@ export class CodeRedesign {
         }
         const commit = await git.revert(record.baseCommit, wanted);
         return { action: "revert", reverted: wanted, commit };
+    }
+
+    /**
+     * Records the app folders this run changed in `redesign.json` (W39), so the dashboard lists the
+     * app under the Penpot file's name without guessing. A failure only loses that hint.
+     */
+    private async recordApps(root: string, branch: string, headBefore: string): Promise<void> {
+        try {
+            const git = new ReadOnlyGit(root);
+            const head = await git.branchHead(branch);
+            if (head === null) {
+                return;
+            }
+            const appDirs = await new AppFolders(root).fromChanges(await git.changedPaths(headBefore, head));
+            await RedesignBranch.recordApps(
+                this.ctx.workspace,
+                { fileId: this.ctx.context.fileId, fileName: this.ctx.context.fileName },
+                appDirs
+            );
+        } catch (error) {
+            this.logger.warn(
+                "Could not record the Re-Designed apps: %s",
+                error instanceof Error ? error.message : error
+            );
+        }
     }
 
     private folder(): { root: string } {

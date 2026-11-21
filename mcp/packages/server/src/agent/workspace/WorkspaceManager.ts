@@ -13,6 +13,8 @@ export interface ProjectInfo extends ProjectLinkFields {
     /** persona of the last user who opened the project */
     persona: AgentContext["persona"];
     fileIds: string[];
+    /** Penpot file names by file id, as the tabs last reported them (W39; absent before) */
+    fileNames?: Record<string, string>;
     createdAt: string;
     updatedAt: string;
     /** keys other features keep in the file (e.g. W32 `aiAnimations`) */
@@ -26,6 +28,8 @@ export interface ProjectInfo extends ProjectLinkFields {
  * keeps one {@link ProjectWorkspace} per project.
  */
 export class WorkspaceManager {
+    private static readonly MAX_FILE_NAME = 250;
+
     private readonly logger = createLogger("WorkspaceManager");
     private readonly workspaces = new Map<string, Promise<ProjectWorkspace>>();
     /** Pending `project.json` updates per project, so updates from two tabs never overlap. */
@@ -130,11 +134,29 @@ export class WorkspaceManager {
         return next;
     }
 
+    /** The valid entries of a stored `fileNames` object. */
+    private static fileNames(value: unknown): Record<string, string> {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) {
+            return {};
+        }
+        return Object.fromEntries(
+            Object.entries(value).filter(
+                (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0
+            )
+        );
+    }
+
     private async recordContext(workspace: ProjectWorkspace, context: AgentContext): Promise<void> {
         const now = new Date().toISOString();
         const previous = await workspace.readJson<ProjectInfo | null>("project.json", null);
         const fileIds = new Set(previous?.fileIds ?? []);
         fileIds.add(context.fileId);
+        // W39: the dashboard names Re-Designed apps after their file
+        const fileNames = { ...WorkspaceManager.fileNames(previous?.fileNames) };
+        const fileName = typeof context.fileName === "string" ? context.fileName.trim() : "";
+        if (fileName.length > 0) {
+            fileNames[context.fileId] = fileName.slice(0, WorkspaceManager.MAX_FILE_NAME);
+        }
         const info: ProjectInfo = {
             // keeps the link (W38), `designSystem` (W30) and other fields written by
             // other features
@@ -145,6 +167,7 @@ export class WorkspaceManager {
             platform: context.projectType ?? context.platform,
             persona: context.persona,
             fileIds: [...fileIds],
+            fileNames,
             createdAt: previous?.createdAt ?? now,
             updatedAt: now,
         };
