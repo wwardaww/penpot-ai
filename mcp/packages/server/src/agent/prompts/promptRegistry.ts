@@ -6,8 +6,11 @@ import type { Persona, Platform } from "@penpot/mcp-common";
 /** Values filled into prompt templates. */
 export interface PromptVariables {
     persona: Persona;
+    /** screen platform (`web`, `mobile`), or `game` for a Game UI project (W38) */
     platform: Platform;
     projectName: string;
+    /** project type (W38), so `{{#game}}` / `{{#existing}}` sections apply */
+    projectType?: Platform;
 }
 
 /** Parts of a system prompt. */
@@ -24,7 +27,8 @@ export interface PromptRequest extends PromptVariables {
  * A system prompt is `prompts/base.md`, then `prompts/<persona>.md`, then the workflow's
  * `workflows/<name>.prompt.md`, then extra text. Templates may use the placeholders `{{persona}}`,
  * `{{platform}}` and `{{projectName}}`, and sections `{{#value}} … {{/value}}` that are kept only
- * when `value` is the current persona (`designer`, `developer`) or platform (`web`, `mobile`).
+ * when `value` is the current persona (`designer`, `developer`), platform (`web`, `mobile`, `game`) or
+ * project type (`game`, `existing`).
  */
 export class PromptRegistry {
     private static readonly NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
@@ -102,6 +106,9 @@ export class PromptRegistry {
      */
     public render(template: string, variables: PromptVariables): string {
         const active = new Set<string>([variables.persona, variables.platform]);
+        if (variables.projectType) {
+            active.add(variables.projectType);
+        }
         return template
             .replace(PromptRegistry.SECTION_PATTERN, (_match, key: string, body: string) =>
                 active.has(key) ? body : ""

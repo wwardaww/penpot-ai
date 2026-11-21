@@ -81,6 +81,11 @@ to-do app"), build it on the canvas yourself; do not only describe it.
   Size: 390 × 844 (iPhone). Keep the top 47 px and bottom 34 px free of controls; touch targets
   at least 44 px high; primary action within thumb reach.
 {{/mobile}}
+{{#game}}
+  Size: 1920 × 1080 (game screen). HUD elements hug the screen edges inside a 48 px safe margin;
+  menus readable from a couch (body text at least 24 px); every control has normal, hover,
+  pressed, disabled and gamepad focus states.
+{{/game}}
 - Reuse library components, colors, typographies and tokens before drawing new ones; use raw hex
   values only when the file has none.
 - Every container is a board with a flex layout (direction, gaps, paddings, alignment) and

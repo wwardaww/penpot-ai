@@ -6,6 +6,8 @@ import { createLogger } from "../logger";
 import { AgentError, type AgentClient } from "./AgentClient";
 import type { AppsService } from "./apps/AppsService";
 import type { ChatService } from "./chat/ChatService";
+import type { LinkService } from "./linked/LinkService";
+import { ProjectTypes } from "./linked/ProjectTypes";
 import type { TurnSetup } from "./chat/TurnRunner";
 import { ClientMessageSchema } from "./ClientMessageSchema";
 import type { SessionGate } from "./SessionGate";
@@ -37,6 +39,8 @@ export interface AgentSessionDeps {
     gate?: SessionGate;
     /** built apps on the dashboard (W33) */
     apps?: AppsService;
+    /** folder browser and project links of Game UI / Existing projects (W38) */
+    links?: LinkService;
 }
 
 /** WebSocket close code for policy violations (bad or missing authentication). */
@@ -115,8 +119,10 @@ export class AgentSession implements AgentClient {
         const tools = toolsClient?.forSession(() => this.mcpSessionId()) ?? null;
         const mcpSessionId = this.mcpSessionId();
         // runs and turns carry the tab's MCP session, so their tools reach this tab's plugin
+        // an Existing project designs for the platform detected in its code (W38)
+        const linkedContext = ProjectTypes.withLink(context, workspace.linked);
         return {
-            context: mcpSessionId ? { ...context, mcpSessionId } : context,
+            context: mcpSessionId ? { ...linkedContext, mcpSessionId } : linkedContext,
             workspace,
             permissions: this.policy.policy,
             tools,
@@ -262,7 +268,20 @@ export class AgentSession implements AgentClient {
                 return this.apps().phoneStart(this, message);
             case "apps.phone.stop":
                 return this.apps().phoneStop(this, message);
+            case "folder.list":
+                return this.links().list(this, message);
+            case "project.link":
+                return this.links().link(this, message);
+            case "project.link.status":
+                return this.links().status(this, message);
         }
+    }
+
+    private links(): LinkService {
+        if (!this.deps.links) {
+            throw new AgentError("not-implemented", "Linked folders are not available in this daemon");
+        }
+        return this.deps.links;
     }
 
     private apps(): AppsService {
@@ -274,7 +293,8 @@ export class AgentSession implements AgentClient {
 
     private async setContext(message: ContextSetMessage): Promise<void> {
         const { type: _type, ...sent } = message;
-        const context = this.deps.gate ? await this.deps.gate.authorize(sent) : sent;
+        const mapped = ProjectTypes.context(sent);
+        const context = this.deps.gate ? await this.deps.gate.authorize(mapped) : mapped;
         this.context = context;
         const workspace = this.deps.workspaces.open(context);
         this.workspace = workspace;
@@ -293,7 +313,14 @@ export class AgentSession implements AgentClient {
 
     private sendError(error: unknown, rid: string | undefined): void {
         if (error instanceof AgentError) {
-            this.send({ type: "error", rid, code: error.code, message: error.message });
+            this.send({
+                type: "error",
+                rid,
+                code: error.code,
+                message: error.message,
+                ...(error.reason !== undefined ? { reason: error.reason } : {}),
+                ...(error.params !== undefined ? { params: error.params } : {}),
+            });
             return;
         }
         this.logger.error(error, "Request failed");

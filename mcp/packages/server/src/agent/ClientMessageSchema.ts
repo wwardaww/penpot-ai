@@ -55,7 +55,7 @@ export class ClientMessageSchema {
             teamId: id,
             pageId: id,
             persona: z.enum(["designer", "developer"]),
-            platform: z.enum(["web", "mobile"]),
+            platform: z.enum(["web", "mobile", "game", "existing"]),
             mcpSessionId: z.string().min(1).max(128).optional(),
         }),
         z.object({
@@ -109,6 +109,16 @@ export class ClientMessageSchema {
             messageId: id,
             confirmed: z.literal(true),
         }),
+        // W38: folder browser and project links
+        z.object({ type: z.literal("folder.list"), rid: id, path: z.string().max(4096).optional() }),
+        z.object({
+            type: z.literal("project.link"),
+            rid: id,
+            projectId: id,
+            kind: z.enum(["game", "existing"]),
+            path: z.string().min(1).max(4096),
+        }),
+        z.object({ type: z.literal("project.link.status"), rid: id, projectId: id }),
     ]);
 
     /**

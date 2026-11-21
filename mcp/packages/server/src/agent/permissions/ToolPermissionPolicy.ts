@@ -1,3 +1,4 @@
+import { realpathSync } from "fs";
 import { homedir } from "os";
 import { isAbsolute, relative, resolve } from "path";
 import { PENPOT_MCP_SERVER_NAME } from "../runner/LocalCliRunner";
@@ -11,7 +12,8 @@ import type { PermissionAsker, PermissionPrompt } from "./PermissionBroker";
  *
  * - Penpot MCP tools are allowed; the tab's MCP session id is added when missing. Uses that delete
  *   pages, library items, tokens or comments ({@link DestructiveDesign}) need the user's permission.
- * - File tools are allowed inside the project folder; outside it the user is asked.
+ * - File tools are allowed inside the project folder and, for a Game UI / Existing project (W38),
+ *   inside its linked folder (the guard holds both); outside them the user is asked.
  * - Shell commands, web access and unknown tools need the user's permission. A permission the user
  *   asked to remember holds for the same tool and target (command name, host) for the lifetime of
  *   the policy; never for a path outside the project, nor for a command that names one.
@@ -164,8 +166,19 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
         }
         const expanded = path.startsWith("~") ? resolve(homedir(), path.slice(1).replace(/^[\\/]+/, "")) : path;
         const absolute = resolve(this.area.projectRoot, expanded);
-        const rel = relative(this.area.penforgeHome, absolute);
-        return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+        // a link inside a linked folder (W38) may point into the Penforge home: check its target too
+        return [absolute, ToolPermissionPolicy.realPath(absolute)].some((candidate) => {
+            const rel = relative(this.area!.penforgeHome, candidate);
+            return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+        });
+    }
+
+    private static realPath(path: string): string {
+        try {
+            return realpathSync.native(path);
+        } catch {
+            return path;
+        }
     }
 
     /** Tells whether a command names a secrets file or the Penforge home. */

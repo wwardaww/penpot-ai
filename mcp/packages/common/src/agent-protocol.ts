@@ -10,8 +10,18 @@
 /** UI complexity profile of the user (not a security boundary). */
 export type Persona = "designer" | "developer";
 
-/** Target platform of a Penpot project. */
-export type Platform = "web" | "mobile";
+/**
+ * Type of a Penpot project: the platform of the app it designs (`web`, `mobile`), or a project
+ * linked to a folder on this computer (W38): the UI of a Unity / Unreal game (`game`), or a new
+ * look for an existing app (`existing`).
+ */
+export type Platform = "web" | "mobile" | "game" | "existing";
+
+/** Project types linked to a folder on this computer (W38). */
+export type LinkedProjectKind = "game" | "existing";
+
+/** Platform of designed screens where a project type needs a web or mobile choice. */
+export type ScreenPlatform = "web" | "mobile";
 
 /** Status of a tool call reported by `chat.tool`. */
 export type ToolCallStatus = "running" | "done" | "error";
@@ -249,7 +259,8 @@ export type ClientMessage =
     | PreviewStartMessage
     | PreviewStopMessage
     | AppsClientMessage
-    | ChatEditClientMessage;
+    | ChatEditClientMessage
+    | LinkedClientMessage;
 
 // ---------------------------------------------------------------------------------------------
 // daemon -> client
@@ -449,6 +460,7 @@ export type DaemonMessage =
     | PreviewLogMessage
     | AppsDaemonMessage
     | ChatChangedMessage
+    | LinkedDaemonMessage
     | ErrorMessage;
 
 // ---------------------------------------------------------------------------------------------
@@ -489,7 +501,13 @@ export interface AgentContext {
     teamId: string;
     pageId: string;
     persona: Persona;
-    platform: Platform;
+    /**
+     * Platform of the screens: the project's platform, `web` for Game UI, and the detected app
+     * platform for an Existing project (W38).
+     */
+    platform: ScreenPlatform;
+    /** project type as chosen in Penpot (`context.set` `platform`); absent means `platform` */
+    projectType?: Platform;
     mcpSessionId?: string;
 }
 
@@ -584,8 +602,13 @@ export interface WorkflowWorkspaceApi {
     readonly designDir: string;
     readonly appSrcDir: string;
     readonly metaDir: string;
-    /** Resolves a path inside the project folder; throws for anything outside. */
+    /**
+     * Resolves a path inside the project folder (or an absolute path inside the linked folder of a
+     * Game UI / Existing project, W38); throws for anything outside.
+     */
     resolve(path: string): string;
+    /** the folder of this computer a Game UI / Existing project is linked to, when it exists (W38) */
+    readonly linkedRoot?: string | null;
     /** Stages and commits every change of a repo; returns the commit hash, or null if clean. */
     commitAll(repo: ProjectRepo, message: string): Promise<string | null>;
     /** Reads `.penforge/<name>`; returns `fallback` when missing. */
@@ -855,3 +878,116 @@ export interface ChatChangedMessage {
     /** revert only: the restored checkpoint */
     checkpointId?: string;
 }
+
+// ---------------------------------------------------------------------------------------------
+// linked project folders (W38): folder browser and Game UI / Existing project links
+
+/**
+ * Request to list a folder of this computer for the folder browser. Needs no `context.set`.
+ * Without `path`: the roots (drives on Windows, `/` elsewhere, and the home folder). The reply is
+ * `folder.list`; a refused path is an `error` (`bad-request`, `reason` one of
+ * {@link LinkRefusalReason}).
+ */
+export interface FolderListMessage {
+    type: "folder.list";
+    rid: string;
+    /** absolute folder path */
+    path?: string;
+}
+
+/**
+ * Request to link a project to a folder of this computer (stored in the project's
+ * `.penforge/project.json`, never in the backend). Replaces an earlier link. The reply is
+ * `project.linked`, or an `error` (`bad-request` with a {@link LinkRefusalReason}).
+ */
+export interface ProjectLinkMessage {
+    type: "project.link";
+    rid: string;
+    projectId: string;
+    kind: LinkedProjectKind;
+    /** absolute folder path */
+    path: string;
+}
+
+/** Request for a project's link; the reply is `project.linked` (`linked: false` when none). */
+export interface ProjectLinkStatusMessage {
+    type: "project.link.status";
+    rid: string;
+    projectId: string;
+}
+
+export type LinkedClientMessage = FolderListMessage | ProjectLinkMessage | ProjectLinkStatusMessage;
+
+/** Why a folder is refused for browsing or linking (client translates; `message` is English). */
+export type LinkRefusalReason =
+    | "bad-path"
+    | "folder-missing"
+    | "not-a-folder"
+    | "folder-unreadable"
+    | "folder-refused"
+    | "not-a-game"
+    | "empty-folder";
+
+/** Game engine of a Game UI folder. */
+export type GameEngine = "unity" | "unreal";
+
+/** App stack detected in an Existing project folder. */
+export interface DetectedStack {
+    platform: ScreenPlatform;
+    /** e.g. `react`, `next`, `vue`, `flutter`, `react-native`, `expo`, `ios`, `android`, `web` */
+    name: string;
+}
+
+/** What a folder looks like, from the names in it (no file content is read except manifests). */
+export interface FolderFacts {
+    /** has `.git` */
+    git: boolean;
+    /** has `Assets/` and `ProjectSettings/` */
+    unity: boolean;
+    /** has a `*.uproject` file */
+    unreal: boolean;
+    uproject: string | null;
+    /** project manifests found, e.g. `package.json`, `pubspec.yaml`, `*.xcodeproj`, `build.gradle` */
+    markers: string[];
+    /** holds no file or folder at all */
+    empty: boolean;
+    engine: GameEngine | null;
+    stack: DetectedStack | null;
+}
+
+/** Root of the folder browser. */
+export interface FolderRoot {
+    name: string;
+    path: string;
+    kind: "drive" | "home";
+}
+
+export interface FolderListReplyMessage {
+    type: "folder.list";
+    rid: string;
+    /** the listed folder (real path), null for the roots */
+    path: string | null;
+    /** parent folder, null at a root */
+    parent: string | null;
+    /** only for the roots listing; empty otherwise */
+    roots: FolderRoot[];
+    /** sub-folders, names only, hidden ones skipped, sorted by name */
+    entries: Array<{ name: string; path: string }>;
+    /** more than the listed entries exist */
+    truncated: boolean;
+    facts: FolderFacts | null;
+}
+
+/** Link of a project (reply to `project.link` and `project.link.status`). */
+export interface ProjectLinkedMessage {
+    type: "project.linked";
+    rid: string;
+    projectId: string;
+    linked: boolean;
+    kind?: LinkedProjectKind;
+    linkedRoot?: string;
+    engine?: GameEngine | null;
+    stack?: DetectedStack | null;
+}
+
+export type LinkedDaemonMessage = FolderListReplyMessage | ProjectLinkedMessage;

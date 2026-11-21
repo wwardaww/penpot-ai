@@ -30,3 +30,6 @@ export { workflow as wirePrototype } from "./wire-prototype";
 export { workflow as designSystemGenerate } from "./design-system-generate";
 export { workflow as designSystemIcons } from "./design-system-icons";
 export { workflow as designSystemExtract } from "./design-system-extract";
+export { workflow as projectRead } from "./project-read";
+export { workflow as codeRedesign } from "./code-redesign";
+export { workflow as gameUiExport } from "./game-ui-export";

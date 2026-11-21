@@ -1,10 +1,13 @@
 import { execFile } from "child_process";
 import { randomUUID } from "crypto";
+import { statSync } from "fs";
 import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import { join } from "path";
 import { promisify } from "util";
 import type { ProjectRepo, WorkflowWorkspaceApi } from "@penpot/mcp-common";
-import { PathGuard } from "./pathGuard";
+import type { ProjectLink, ProjectLinkFields } from "../linked/ProjectLink";
+import { ProjectLinkRecord } from "../linked/ProjectLink";
+import { ProjectPathGuard } from "./pathGuard";
 import { renameWithRetry } from "./renameWithRetry";
 
 const execFileAsync = promisify(execFile);
@@ -13,7 +16,8 @@ const execFileAsync = promisify(execFile);
  * Folder of one Penpot project on disk (`<PENFORGE_HOME>/projects/<project-id>/`).
  *
  * Holds two git repositories, `design/` and `app-src/`, and the daemon's metadata folder
- * `.penforge/`. Every path handed out is checked by a {@link PathGuard} on the project root.
+ * `.penforge/`. Every path handed out is checked by a {@link ProjectPathGuard} on the project root
+ * and, for a Game UI or Existing project (W38), the linked folder of this computer.
  */
 export class ProjectWorkspace implements WorkflowWorkspaceApi {
     /** Pattern of acceptable project ids (Penpot uses UUIDs). */
@@ -26,7 +30,9 @@ export class ProjectWorkspace implements WorkflowWorkspaceApi {
     public readonly designDir: string;
     public readonly appSrcDir: string;
     public readonly metaDir: string;
-    public readonly guard: PathGuard;
+    public readonly guard: ProjectPathGuard;
+    /** link to a folder of this computer (W38), from `project.json` */
+    private link: ProjectLink | null = null;
     /** Pending atomic writes per metadata file, so writes to one file never overlap. */
     private readonly writeQueues = new Map<string, Promise<void>>();
 
@@ -47,7 +53,7 @@ export class ProjectWorkspace implements WorkflowWorkspaceApi {
         this.designDir = join(this.root, "design");
         this.appSrcDir = join(this.root, "app-src");
         this.metaDir = join(this.root, ".penforge");
-        this.guard = new PathGuard(this.root);
+        this.guard = new ProjectPathGuard(this.root);
     }
 
     /**
@@ -57,6 +63,46 @@ export class ProjectWorkspace implements WorkflowWorkspaceApi {
         await mkdir(join(this.metaDir, "chat"), { recursive: true });
         for (const repo of ["design", "app-src"] as ProjectRepo[]) {
             await this.ensureRepo(repo);
+        }
+        this.setLink(ProjectLinkRecord.read(await this.readJson<ProjectLinkFields | null>("project.json", null)));
+    }
+
+    /** The project's link to a folder of this computer (W38), or null. */
+    public get linked(): ProjectLink | null {
+        return this.link;
+    }
+
+    /** The linked folder when it exists on this computer, else null. */
+    public get linkedRoot(): string | null {
+        return this.guard.linkedRoot;
+    }
+
+    /**
+     * Sets the project's link. The guard accepts the linked folder only while it exists as a
+     * folder; call again to check a folder that came back or went away.
+     *
+     * @param link - the link, or null to remove it
+     */
+    public setLink(link: ProjectLink | null): void {
+        this.link = link;
+        this.guard.setLinkedRoot(link !== null && ProjectWorkspace.isDirectory(link.root) ? link.root : null);
+    }
+
+    /**
+     * Resolves a path inside the linked folder; a relative path is taken relative to it.
+     *
+     * @param candidate - the path
+     * @throws if the project has no linked folder or the path is outside it
+     */
+    public resolveLinked(candidate: string): string {
+        return this.guard.resolveLinked(candidate);
+    }
+
+    private static isDirectory(path: string): boolean {
+        try {
+            return statSync(path).isDirectory();
+        } catch {
+            return false;
         }
     }
 
