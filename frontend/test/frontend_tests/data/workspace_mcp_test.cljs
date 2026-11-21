@@ -262,12 +262,34 @@
         (.on @extension "connect" #(swap! calls inc))
         (rx/push! stream (ptk/data-event :app.main.data.workspace.mcp/connect))
         (t/is (= 1 @calls))
-        (rx/push! stream (ptk/data-event :app.main.data.workspace/finalize-workspace))
-        (t/is (zero? @closed))
-        (rx/push! stream (ptk/data-event stop-event))
+        ;; a start first closes a plugin left from an older start
         (t/is (= 1 @closed))
+        (rx/push! stream (ptk/data-event :app.main.data.workspace/finalize-workspace))
+        (t/is (= 1 @closed))
+        (rx/push! stream (ptk/data-event stop-event))
+        (t/is (= 2 @closed))
         (t/is (false? (.isConnectionRequested @extension)))
         (.on @extension "connect" #(swap! calls inc))
         (rx/push! stream (ptk/data-event :app.main.data.workspace.mcp/connect))
         (t/is (= 1 @calls))
         (rx/end! stream)))))
+
+(t/deftest test-an-older-plugin-stop-leaves-the-new-plugin-alone
+  ;; a restart (`::init`) starts the new plugin before the old one's stop
+  ;; runs; both have the same plugin id
+  (let [old-stream (rx/subject)
+        new-stream (rx/subject)
+        started    (atom 0)
+        closed     (atom 0)]
+    (with-redefs [dp/start-plugin! (fn [_ _] (swap! started inc))
+                  dp/close-plugin! (fn [_] (swap! closed inc))]
+      (ptk/effect (#'mcp/init-mcp-plugin {}) nil old-stream)
+      (ptk/effect (#'mcp/init-mcp-plugin {}) nil new-stream)
+      (t/is (= 2 @started))
+      (t/is (= 2 @closed) "each start closed what an older one left")
+      (rx/push! old-stream (ptk/data-event :app.main.data.workspace.mcp/init))
+      (t/is (= 2 @closed) "the old stop does not close the new plugin")
+      (rx/push! new-stream (ptk/data-event :app.main.data.auth/logged-out))
+      (t/is (= 3 @closed) "the new plugin still stops with the session")
+      (rx/end! old-stream)
+      (rx/end! new-stream))))
