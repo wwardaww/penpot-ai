@@ -107,6 +107,26 @@
             (t/is (nil? (:error out)))
             (t/is (= [{:project-id project-id :platform :web}] (:result out)))))))))
 
+(t/deftest project-settings-store-linked-project-types
+  ;; W38: Game UI and Existing project pass the RPC schema and the
+  ;; database CHECK that migration penforge-0002 widened.
+  (with-ai-flag
+    (fn []
+      (let [{:keys [owner project]} (setup)
+            project-id (:id project)]
+        (doseq [platform [:game :existing]]
+          (t/testing (str "platform " (name platform))
+            (let [out (th/command! {::th/type :update-penforge-project-settings
+                                    ::rpc/profile-id (:id owner)
+                                    :project-id project-id
+                                    :platform platform})]
+              (t/is (nil? (:error out)))
+              (t/is (= {:project-id project-id :platform platform} (:result out))))
+            (let [out (th/command! {::th/type :get-penforge-project-settings
+                                    ::rpc/profile-id (:id owner)
+                                    :project-id project-id})]
+              (t/is (= platform (get-in out [:result :platform]))))))))))
+
 (t/deftest project-settings-rejects-unknown-platform
   (with-ai-flag
     (fn []

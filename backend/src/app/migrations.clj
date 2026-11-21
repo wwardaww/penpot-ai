@@ -547,7 +547,10 @@
     :fn (mg/resource "app/migrations/sql/0159-add-file-data-storage-object-id.sql")}
 
    {:name "penforge-0001-project-settings"
-    :fn (mg/resource "app/migrations/sql/penforge-0001-project-settings.sql")}])
+    :fn (mg/resource "app/migrations/sql/penforge-0001-project-settings.sql")}
+
+   {:name "penforge-0002-project-types"
+    :fn (mg/resource "app/migrations/sql/penforge-0002-project-types.sql")}])
 
 (defn apply-migrations!
   [pool name migrations]

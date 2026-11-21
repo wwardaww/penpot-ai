@@ -5,15 +5,17 @@
 ;; Copyright (c) KALEIDOS SUBSIDIARY SL
 
 (ns app.penforge.project-settings
-  "Penforge per project settings: the platform (web or mobile) the
-  generated app targets. Stored in `penforge_project_settings`, one row
-  per project."
+  "Penforge per project settings: the project type, called platform.
+  `:web` and `:mobile` name the app Penforge generates; `:game` (Game
+  UI for a linked Unity or Unreal folder) and `:existing` (a linked
+  existing app) design a new look for code on the user's machine (W38).
+  Stored in `penforge_project_settings`, one row per project."
   (:require
    [app.common.schema :as sm]
    [app.db :as db]))
 
 (def platforms
-  #{:web :mobile})
+  #{:web :mobile :game :existing})
 
 (def schema:platform
   [::sm/one-of platforms])
