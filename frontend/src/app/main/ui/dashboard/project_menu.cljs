@@ -13,6 +13,7 @@
    [app.main.refs :as refs]
    [app.main.store :as st]
    [app.main.ui.context :as ctx]
+   [app.main.ui.dashboard.penforge.change-folder :as pf-folder]
    [app.main.ui.dashboard.penforge.design-systems.from-file :as pf-dsx]
    [app.main.ui.ds.layout.menu :refer [menu* menu-item* menu-separator* sub-menu*]]
    [app.util.i18n :as i18n :refer [tr]]
@@ -41,6 +42,7 @@
         current-team-id  (mf/use-ctx ctx/current-team-id)
         teams            (mf/deref refs/teams)
         other-teams      (-> teams (dissoc current-team-id) vals)
+        project-settings (mf/deref pf-folder/ref:project-settings)
 
         on-duplicate-success
         (fn [new-project]
@@ -105,6 +107,12 @@
                           :id (str "move-to-" (:id team))
                           :on-action (on-move (:id team))}
            (:name team)])])
+
+     ;; W38: Game UI and Existing projects can point at another folder
+     (when (pf-folder/visible? project-settings project)
+       [:> menu-item* {:id "penforge-change-folder"
+                       :on-action #(pf-folder/open project)}
+        (tr "penforge.change-folder.action")])
 
      (when (pf-dsx/project-entry-visible? project)
        [:> menu-item* {:id "penforge-design-system-from-project"

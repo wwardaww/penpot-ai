@@ -13758,6 +13758,38 @@ msgstr "Linking the folder…"
 msgid "penforge.create-project.link-failed"
 msgstr "The project was created. Open it to pick the folder again."
 
+#: src/app/main/ui/dashboard/project_menu.cljs
+msgid "penforge.change-folder.action"
+msgstr "Change folder…"
+
+#: src/app/main/ui/dashboard/penforge/change_folder.cljs
+msgid "penforge.change-folder.title"
+msgstr "Change the folder of %s"
+
+#: src/app/main/ui/dashboard/penforge/change_folder.cljs
+msgid "penforge.change-folder.current"
+msgstr "Now: %s"
+
+#: src/app/main/ui/dashboard/penforge/change_folder.cljs
+msgid "penforge.change-folder.current-unknown"
+msgstr "This computer does not know the project's folder yet."
+
+#: src/app/main/ui/dashboard/penforge/change_folder.cljs
+msgid "penforge.change-folder.same"
+msgstr "The project already uses this folder."
+
+#: src/app/main/ui/dashboard/penforge/change_folder.cljs
+msgid "penforge.change-folder.reread"
+msgstr "Penforge reads the new folder from scratch the next time you open a file of this project."
+
+#: src/app/main/ui/dashboard/penforge/change_folder.cljs
+msgid "penforge.change-folder.submit"
+msgstr "Use this folder"
+
+#: src/app/main/ui/dashboard/penforge/change_folder.cljs
+msgid "penforge.change-folder.done"
+msgstr "Folder changed"
+
 #: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
 msgid "penforge.folder-browser.choose"
 msgstr "Choose folder…"

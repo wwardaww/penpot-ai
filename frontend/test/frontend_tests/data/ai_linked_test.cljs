@@ -13,12 +13,14 @@
    [app.common.schema :as sm]
    [app.common.types.file :as ctf]
    [app.common.uuid :as uuid]
+   [app.config :as cf]
    [app.main.data.ai.actions :as actions]
    [app.main.data.ai.actions.build]
    [app.main.data.ai.actions.redesign-code :as redesign]
    [app.main.data.ai.linked :as linked]
    [app.main.data.ai.protocol :as proto]
    [app.main.data.penforge :as pf]
+   [app.main.ui.dashboard.penforge.change-folder :as change-folder]
    [app.main.ui.dashboard.penforge.create-project :as create-project]
    [cljs.test :as t :include-macros true]))
 
@@ -345,3 +347,29 @@
     (t/is (true? (actions/enabled? action ready)))
     (t/is (false? (actions/enabled? action (assoc-in ready [:penforge :linked :redesign]
                                                      {:status :running}))))))
+
+;; --- Change folder (project menu)
+
+(t/deftest change-folder-is-offered-for-linked-projects-only
+  (let [game     (uuid/next)
+        existing (uuid/next)
+        web      (uuid/next)
+        settings {game :game existing :existing web :web}]
+    (with-redefs [cf/flags (conj cf/flags :ai)]
+      (t/is (change-folder/visible? settings {:id game}))
+      (t/is (change-folder/visible? settings {:id existing}))
+      (t/is (not (change-folder/visible? settings {:id web})))
+      (t/is (not (change-folder/visible? settings {:id (uuid/next)})) "platform not loaded yet")
+      (t/is (not (change-folder/visible? settings {}))))
+    (with-redefs [cf/flags (disj cf/flags :ai)]
+      (t/is (not (change-folder/visible? settings {:id game}))))))
+
+(t/deftest change-folder-needs-another-fitting-folder
+  (let [app-folder  {:path "F:/adissio/apps/landing" :facts {:empty false :markers ["package.json"]}}
+        game-folder {:path "D:/games/hero" :facts {:engine "unity"}}]
+    (t/is (change-folder/can-change? :existing app-folder "F:/adissio/apps/admin"))
+    (t/is (not (change-folder/can-change? :existing app-folder "F:/adissio/apps/landing"))
+          "the folder it already uses")
+    (t/is (not (change-folder/can-change? :existing nil "F:/adissio")) "nothing picked yet")
+    (t/is (not (change-folder/can-change? :game app-folder nil)) "not a game folder")
+    (t/is (change-folder/can-change? :game game-folder nil) "the current folder is unknown")))

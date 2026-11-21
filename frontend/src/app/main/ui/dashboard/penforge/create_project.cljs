@@ -72,8 +72,7 @@
 
 (mf/defc folder-step*
   "Folder step of Game UI and Existing projects; starts the daemon
-  client while it shows."
-  {::mf/private true}
+  client while it shows. Also used by the \"Change folder\" dialog."
   [{:keys [platform browser disabled]}]
   (let [connection (mf/deref ref:connection)
         connected  (= :connected (:status connection))
