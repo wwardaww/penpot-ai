@@ -13,6 +13,8 @@ export interface ProjectInfo {
     fileIds: string[];
     createdAt: string;
     updatedAt: string;
+    /** keys other features keep in the file (e.g. W32 `aiAnimations`) */
+    [key: string]: unknown;
 }
 
 /**
@@ -94,6 +96,8 @@ export class WorkspaceManager {
         const fileIds = new Set(previous?.fileIds ?? []);
         fileIds.add(context.fileId);
         const info: ProjectInfo = {
+            // keys written by other features survive a new context
+            ...previous,
             projectId: context.projectId,
             projectName: context.projectName ?? previous?.projectName,
             teamId: context.teamId,

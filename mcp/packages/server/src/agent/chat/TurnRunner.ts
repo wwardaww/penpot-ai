@@ -3,6 +3,7 @@ import type { ClaudeRunner, RunnerConversation, ToolPermissionHandler } from "..
 import type { PromptRegistry } from "../prompts/promptRegistry";
 import type { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import { AttachmentPrompt } from "./AttachmentPrompt";
+import { AnimationSettings } from "../animations/AnimationSettings";
 
 /** Client-side state a Claude turn runs with. */
 export interface TurnSetup {
@@ -54,12 +55,19 @@ export class TurnRunner {
         request: TurnRequest
     ): AsyncIterable<RunnerEvent> {
         const { context } = setup;
+        // W32: tells chat and generate-screen turns whether they may animate on their own
+        const animationNote = await AnimationSettings.promptNote(setup.workspace, request.workflow);
         const systemPrompt = this.prompts.build({
             persona: context.persona,
             platform: context.platform,
             projectName: context.projectName ?? context.fileName,
             workflow: request.workflow,
-            extra: [TurnRunner.tabContext(context), TurnRunner.selectionNote(request), request.systemPromptAppend]
+            extra: [
+                TurnRunner.tabContext(context),
+                TurnRunner.selectionNote(request),
+                animationNote,
+                request.systemPromptAppend,
+            ]
                 .filter(Boolean)
                 .join("\n\n"),
         });

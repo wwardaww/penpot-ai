@@ -16,6 +16,7 @@ import { createLogger } from "../../logger";
 import { AgentError, type AgentClient } from "../AgentClient";
 import { RunnerNotConfiguredError } from "../runner/ClaudeRunner";
 import { CanvasCheck } from "./CanvasCheck";
+import { AnimationSteps } from "../animations/AnimationSteps";
 import { ConversationRecap } from "./ConversationRecap";
 import { type ConversationCut, type ConversationCutMode, ConversationStore } from "./ConversationStore";
 import { ToolSummary } from "./toolSummary";
@@ -290,6 +291,8 @@ export class ChatService {
         let text = "";
         let usage: ChatUsage | undefined;
         let failure: string | undefined;
+        // W32: a Play line after each successful update_animations call
+        const animationSteps = new AnimationSteps();
         try {
             const events = this.turns.run(
                 { ...setup, permissions: guard },
@@ -331,6 +334,12 @@ export class ChatService {
                                 event.status === "error" ? event.detail : undefined
                             ),
                         });
+                        {
+                            const step = animationSteps.observe(event);
+                            if (step) {
+                                client.send({ type: "chat.tool", conversationId, ...step });
+                            }
+                        }
                         break;
                     case "done":
                         messageId = event.messageId;
