@@ -19,6 +19,7 @@ export class ToolSummary {
         [/^mcp__penpot__(resolve_canvas_comment)$/, "Updating comments"],
         [/^mcp__penpot__(update_prototype)$/, "Wiring the prototype"],
         [/^mcp__penpot__(generate_code_hints)$/, "Studying the design's structure"],
+        [/^mcp__penpot__(penforge_design_system)$/, "Checking the design system"],
         [/^mcp__penpot__/, "Using Penpot"],
         [/^(Read|Glob|Grep|LS|NotebookRead)$/, "Reading project files"],
         [/^(Write|Edit|MultiEdit|NotebookEdit)$/, "Updating project files"],

@@ -13,6 +13,7 @@
   `:ai` flag is on."
   (:require-macros [app.main.style :as stl])
   (:require
+   [app.main.data.ai.actions.redesign :as rd]
    [app.main.data.ai.linked :as linked]
    [app.main.data.dashboard :as dd]
    [app.main.data.event :as ev]
@@ -34,6 +35,7 @@
    [app.main.ui.ds.foundations.typography.heading :refer [heading*]]
    [app.main.ui.ds.foundations.typography.text :refer [text*]]
    [app.main.ui.workspace.ai.chat.banner :refer [connection-banner*]]
+   [app.main.ui.workspace.ai.design-system.binding.picker :refer [design-system-field*]]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
    [cuerdas.core :as str]
@@ -119,6 +121,8 @@
         folder      (picked-folder browser)
         linked?     (pf/linked-platform? platform)
         link-failed (and submitted (= :failed (:status link)))
+        ds*         (mf/use-state nil)
+        ds          (deref ds*)
         valid       (and (not submitted) (can-create? name platform folder))
 
         options
@@ -154,9 +158,10 @@
 
         create
         (mf/use-fn
-         (mf/deps name platform valid linked? folder)
+         (mf/deps name platform valid linked? folder ds)
          (fn []
            (when valid
+             (st/emit! (rd/remember-choice-for-new-project ds))
              (if linked?
                ;; the dialog stays open until the daemon linked the folder
                (let [path (:path folder)]
@@ -248,7 +253,10 @@
          [:p {:class (stl/css :link-status)} (tr "penforge.create-project.linking")]
 
          :else
-         nil)]
+         nil)
+
+       [:> design-system-field* {:team-id (:current-team-id @st/state)
+                                 :on-change #(reset! ds* %)}]]
 
       [:div {:class (stl/css :modal-footer)}
        (if link-failed

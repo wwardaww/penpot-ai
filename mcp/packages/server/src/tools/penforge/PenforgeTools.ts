@@ -13,6 +13,7 @@ import { UpdateDesignNodeTool } from "./UpdateDesignNodeTool";
 import { UpdatePrototypeTool } from "./UpdatePrototypeTool";
 import { VisualQaTool } from "../../agent/qa/VisualQaTool";
 import { TidyUpTool } from "../../agent/cleanup/TidyUpTool";
+import { DesignSystemTool } from "../../agent/designsystem/conformance/DesignSystemTool";
 
 /**
  * Factory of the Penforge typed MCP tools (architecture §6).
@@ -56,6 +57,8 @@ export class PenforgeTools {
             new TidyUpTool(mcpServer),
             // W27: prototype interactions and flows
             new UpdatePrototypeTool(mcpServer),
+            // W30: the project's design system (inventory, missing items)
+            new DesignSystemTool(mcpServer),
         ];
     }
 }

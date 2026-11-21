@@ -34,3 +34,7 @@ export { workflow as projectRead } from "./project-read";
 export { workflow as codeRedesign } from "./code-redesign";
 export { workflow as gameUiExport } from "./game-ui-export";
 export { workflow as buildChanges } from "./build-changes";
+export { workflow as designSystemBind } from "./design-system-bind";
+export { workflow as designSystemCheck } from "./design-system-check";
+export { workflow as designSystemRedesign } from "./design-system-redesign";
+export { workflow as designSystemMissing } from "./design-system-missing";

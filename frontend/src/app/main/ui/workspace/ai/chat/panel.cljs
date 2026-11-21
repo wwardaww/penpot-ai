@@ -27,6 +27,7 @@
    [app.main.ui.workspace.ai.chat.files :as files]
    [app.main.ui.workspace.ai.chat.markdown :refer [markdown*]]
    [app.main.ui.workspace.ai.chat.status :refer [work-status*]]
+   [app.main.ui.workspace.ai.design-system.binding.card :refer [design-system-binding*]]
    [app.main.ui.workspace.ai.design-system.start :refer [design-system-start*]]
    [app.main.ui.workspace.ai.detached.placeholder :refer [ref:detached? detach-button* detached-placeholder*]]
    [app.main.ui.workspace.ai.linked.panel :refer [linked-project-panel*]]
@@ -894,6 +895,7 @@
      [:> connection-banner* {:connection connection}]
      [:> design-system-start* {}]
      [:> linked-project-panel* {}]
+     [:> design-system-binding* {}]
 
      (when (or connected (seq entries))
        [:> timeline* {:entries entries

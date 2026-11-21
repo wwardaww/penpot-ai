@@ -134,7 +134,8 @@ export class WorkspaceManager {
         const fileIds = new Set(previous?.fileIds ?? []);
         fileIds.add(context.fileId);
         const info: ProjectInfo = {
-            // keeps the link (W38) and other fields written by other features
+            // keeps the link (W38), `designSystem` (W30) and other fields written by
+            // other features
             ...previous,
             projectId: context.projectId,
             projectName: context.projectName ?? previous?.projectName,

@@ -38,3 +38,10 @@ Answer with one JSON object and nothing else:
   the comments.
 - `labels`: per thread a short button label naming its option ("Make it blue").
 - Use `"conflicts": []` when there are none.
+
+## Design system
+
+If `penforge_design_system` (`action: "inventory"`) says a design system is linked, use only its
+colors or color tokens, text styles, radius/spacing tokens and component instances; never invent
+values or redraw its components. Report what it lacks in ONE call with `action: "missing"` (short
+reason each) instead of asking the user item by item.

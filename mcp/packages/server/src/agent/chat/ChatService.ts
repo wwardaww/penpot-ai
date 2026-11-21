@@ -16,6 +16,7 @@ import { createLogger } from "../../logger";
 import { AgentError, type AgentClient } from "../AgentClient";
 import { RunnerNotConfiguredError } from "../runner/ClaudeRunner";
 import { CanvasCheck } from "./CanvasCheck";
+import { DesignSystemTurnCheck } from "../designsystem/conformance/TurnCheck";
 import { ConversationRecap } from "./ConversationRecap";
 import { type ConversationCut, type ConversationCutMode, ConversationStore } from "./ConversationStore";
 import { ToolSummary } from "./toolSummary";
@@ -356,6 +357,8 @@ export class ChatService {
 
         if (changedDesign && !signal.aborted) {
             await this.reportCanvasProblems(client, conversationId, setup.context.pageId, check, await boardsBefore);
+            // W30: design system check (fixes drift, lists missing items); never fails the turn
+            await DesignSystemTurnCheck.afterChatTurn((m) => client.send(m), conversationId, setup);
         }
         if (failure !== undefined && !signal.aborted) {
             this.logger.warn("Chat turn of %s failed: %s", conversationId, failure);
