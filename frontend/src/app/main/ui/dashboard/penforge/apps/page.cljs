@@ -6,7 +6,7 @@
 
 (ns app.main.ui.dashboard.penforge.apps.page
   "Apps section of the dashboard (W33): the apps built on this computer
-  as cards. Needs the Penforge daemon; without it, or without pairing,
+  and (W39) the Re-Designed Existing projects, as cards. Needs the Penforge daemon; without it, or without pairing,
   the section shows how to start or pair it instead of the grid."
   (:require-macros [app.main.style :as stl])
   (:require
@@ -65,15 +65,15 @@
 
       :else
       [:div {:class (stl/css :grid) :data-testid "penforge-apps-grid"}
-       (for [project-id order]
-         [:> app-card* {:key project-id
-                        :app (get items project-id)
+       (for [app-id order]
+         [:> app-card* {:key app-id
+                        :app (get items app-id)
                         :developer developer
                         :connected connected
-                        :pending (contains? pending project-id)
-                        :error (get errors project-id)
-                        :logs (get logs project-id)
-                        :phone (get phone project-id)}])])))
+                        :pending (contains? pending app-id)
+                        :error (get errors app-id)
+                        :logs (get logs app-id)
+                        :phone (get phone app-id)}])])))
 
 (mf/defc apps-page*
   [{:keys [team]}]

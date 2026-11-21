@@ -5,7 +5,8 @@
 ;; Copyright (c) KALEIDOS SUBSIDIARY SL
 
 (ns app.main.data.ai.apps
-  "Built apps on the dashboard (W33).
+  "Apps on the dashboard: built apps (W33) and Re-Designed Existing
+  projects (W39).
 
   The dashboard's Apps section talks to the Penforge daemon over the
   same client as the workspace (`app.main.data.ai.client`), without a
@@ -16,10 +17,12 @@
 
   State lives under `[:penforge :apps]`:
   `{:status :loading|:loaded|:failed, :team-id, :rid, :items {id app},
-  :order [id], :error {:code :message}, :errors {id {:code :message}},
-  :pending #{id}, :logs {id {:loading :lines}}, :phone {id phone},
-  :rids {rid [kind id]}}`. App maps are the daemon's `AppInfo` with
-  kebab-case keys (`:project-id`, `:status {:state :url ...}`)."
+  :order [id], :error {:code :message}, :errors {id {:code :reason
+  :message}}, :pending #{id}, :logs {id {:loading :lines}}, :phone {id
+  phone}, :rids {rid [kind id]}}`, where `id` is the app id (`:app-id`;
+  the project id for a built app). App maps are the daemon's `AppInfo`
+  with kebab-case keys (`:app-id`, `:project-id`, `:redesign`,
+  `:status {:state :url ...}`)."
   (:require
    [app.common.logging :as log]
    [app.main.data.ai.client :as client]
@@ -52,70 +55,94 @@
     (when (and (= state "ready") (safe-app-url? url))
       url)))
 
+(defn app-id
+  "The id of an app or of an `apps.*` message about one: `:app-id`, else
+  the project id (a built app, or a daemon from before W39)."
+  [{:keys [app-id project-id]}]
+  (or app-id project-id))
+
 (defn- app-entry?
   [app]
   (and (map? app) (string? (:project-id app)) (string? (:name app))))
+
+(defn redesigned?
+  "True for the app of a Re-Designed Existing project (W39)."
+  [app]
+  (map? (:redesign app)))
+
+(defn off-branch?
+  "True when the linked folder of a Re-Designed app has another branch
+  checked out than the Re-Design's: the app then runs that branch."
+  [app]
+  (let [{:keys [branch current-branch]} (:redesign app)]
+    (and (string? branch) (not= branch current-branch))))
 
 (defn- state-path
   [& ks]
   (into [:penforge :apps] ks))
 
 (defn- remember-rid
-  [state rid kind project-id]
-  (assoc-in state (state-path :rids rid) [kind project-id]))
+  [state rid kind id]
+  (assoc-in state (state-path :rids rid) [kind id]))
+
+(defn- apply-error
+  "Store the `error` reply of a request where its card shows it."
+  [state {:keys [rid] :as msg}]
+  (if-let [[kind id] (get-in state (state-path :rids rid))]
+    (let [error (select-keys msg [:code :reason :message])
+          state (update-in state (state-path :rids) dissoc rid)]
+      (case kind
+        :list  (update-in state [:penforge :apps] merge {:status :failed :error error})
+        :phone (assoc-in state (state-path :phone id) {:state "failed"
+                                                       :code (:code msg)
+                                                       :message (:message msg)})
+        :logs  (assoc-in state (state-path :logs id) {:loading false :lines [] :error error})
+        (-> state
+            (assoc-in (state-path :errors id) error)
+            (update-in (state-path :pending) disj id))))
+    state))
 
 (defn apply-message
   "Apply a daemon message to the state; returns the state unchanged for
   messages that are not about the apps."
-  [state {:keys [type rid project-id] :as msg}]
-  (case type
-    "apps.list"
-    (if (= rid (get-in state (state-path :rid)))
-      (let [apps (filterv app-entry? (:apps msg))]
-        (update-in state [:penforge :apps] merge
-                   {:status :loaded
-                    :error nil
-                    :items (into {} (map (juxt :project-id identity)) apps)
-                    :order (mapv :project-id apps)}))
-      state)
+  [state {:keys [type rid] :as msg}]
+  (let [id (app-id msg)]
+    (case type
+      "apps.list"
+      (if (= rid (get-in state (state-path :rid)))
+        (let [apps (filterv app-entry? (:apps msg))]
+          (update-in state [:penforge :apps] merge
+                     {:status :loaded
+                      :error nil
+                      :items (into {} (map (juxt app-id identity)) apps)
+                      :order (mapv app-id apps)}))
+        state)
 
-    "apps.status"
-    (cond-> state
-      (contains? (get-in state (state-path :items)) project-id)
-      (assoc-in (state-path :items project-id :status)
-                (select-keys msg [:state :url :reason :message :exposure]))
+      "apps.status"
+      (cond-> state
+        (contains? (get-in state (state-path :items)) id)
+        (assoc-in (state-path :items id :status)
+                  (select-keys msg [:state :url :reason :message :exposure]))
 
-      :always
-      (update-in (state-path :pending) disj project-id)
+        :always
+        (update-in (state-path :pending) disj id)
 
-      (contains? #{"ready" "starting"} (:state msg))
-      (update-in (state-path :errors) dissoc project-id))
+        (contains? #{"ready" "starting"} (:state msg))
+        (update-in (state-path :errors) dissoc id))
 
-    "apps.logs"
-    (assoc-in state (state-path :logs project-id)
-              {:loading false
-               :lines (filterv #(string? (:text %)) (:lines msg))})
+      "apps.logs"
+      (assoc-in state (state-path :logs id)
+                {:loading false
+                 :lines (filterv #(string? (:text %)) (:lines msg))})
 
-    "apps.phone"
-    (assoc-in state (state-path :phone project-id)
-              (select-keys msg [:state :url :host :port :qr :expires-at :code :message]))
+      "apps.phone"
+      (assoc-in state (state-path :phone id)
+                (select-keys msg [:state :url :host :port :qr :expires-at :code :message]))
 
-    "error"
-    (if-let [[kind id] (get-in state (state-path :rids rid))]
-      (let [error (select-keys msg [:code :message])
-            state (update-in state (state-path :rids) dissoc rid)]
-        (case kind
-          :list  (update-in state [:penforge :apps] merge {:status :failed :error error})
-          :phone (assoc-in state (state-path :phone id) {:state "failed"
-                                                         :code (:code msg)
-                                                         :message (:message msg)})
-          :logs  (assoc-in state (state-path :logs id) {:loading false :lines [] :error error})
-          (-> state
-              (assoc-in (state-path :errors id) error)
-              (update-in (state-path :pending) disj id))))
-      state)
+      "error"
+      (apply-error state msg)
 
-    state))
+      state)))
 
 ;; --- Browser tabs opened for apps that are still starting
 
@@ -140,21 +167,21 @@
     tab))
 
 (defn- settle-waiting-tab!
-  [project-id state url]
-  (when-let [^js tab (get @waiting-tabs project-id)]
+  [id state url]
+  (when-let [^js tab (get @waiting-tabs id)]
     (cond
       (and (= state "ready") (safe-app-url? url))
-      (do (swap! waiting-tabs dissoc project-id)
+      (do (swap! waiting-tabs dissoc id)
           (set! (.-location tab) url))
 
       (contains? #{"failed" "stopped"} state)
-      (do (swap! waiting-tabs dissoc project-id)
+      (do (swap! waiting-tabs dissoc id)
           (.close tab)))))
 
 (defn- drop-waiting-tab!
-  [project-id]
-  (when-let [^js tab (get @waiting-tabs project-id)]
-    (swap! waiting-tabs dissoc project-id)
+  [id]
+  (when-let [^js tab (get @waiting-tabs id)]
+    (swap! waiting-tabs dissoc id)
     (.close tab)))
 
 ;; --- Events
@@ -173,25 +200,31 @@
       (case (:type msg)
         "apps.status"
         (when-not (= "restarting" (:reason msg))
-          (settle-waiting-tab! (:project-id msg) (:state msg) (:url msg)))
+          (settle-waiting-tab! (app-id msg) (:state msg) (:url msg)))
         "error"
         ;; a refused start closes the tab it opened
-        (doseq [project-id (keys @waiting-tabs)]
-          (when (get-in state (state-path :errors project-id))
-            (drop-waiting-tab! project-id)))
+        (doseq [id (keys @waiting-tabs)]
+          (when (get-in state (state-path :errors id))
+            (drop-waiting-tab! id)))
         nil))))
+
+(defn- app-ref
+  "The ids a request names an app by: its project and its app id."
+  [state id]
+  {:project-id (or (get-in state (state-path :items id :project-id)) id)
+   :app-id id})
 
 (defn- request
   "Send a request; on a closed connection mark it failed right away."
-  [state kind project-id message]
+  [state kind id message]
   (if (client/send! message)
-    (remember-rid state (:rid message) kind project-id)
+    (remember-rid state (:rid message) kind id)
     (case kind
       :list (update-in state [:penforge :apps] merge
                        {:status :failed :error {:code "not-connected"}})
       (-> state
-          (assoc-in (state-path :errors project-id) {:code "not-connected"})
-          (update-in (state-path :pending) disj project-id)))))
+          (assoc-in (state-path :errors id) {:code "not-connected"})
+          (update-in (state-path :pending) disj id)))))
 
 (defn fetch-apps
   "Ask the daemon for the built apps of the dashboard's team."
@@ -209,85 +242,86 @@
             (request :list nil message))))))
 
 (defn start-app
-  "Run an app's dev server; `tab` is a waiting browser tab opened by the
-  click (see `open-waiting-tab!`) that goes to the app once ready."
-  ([project-id] (start-app project-id nil))
-  ([project-id tab]
+  "Run an app's dev server; `id` is the app id. `tab` is a waiting
+  browser tab opened by the click (see `open-waiting-tab!`) that goes to
+  the app once ready."
+  ([id] (start-app id nil))
+  ([id tab]
    (let [rid (proto/next-rid)]
      (ptk/reify ::start-app
        ptk/UpdateEvent
        (update [_ state]
          (-> state
-             (update-in (state-path :pending) (fnil conj #{}) project-id)
-             (update-in (state-path :errors) dissoc project-id)
-             (request :start project-id {:type "apps.start" :rid rid :project-id project-id})))
+             (update-in (state-path :pending) (fnil conj #{}) id)
+             (update-in (state-path :errors) dissoc id)
+             (request :start id (merge {:type "apps.start" :rid rid} (app-ref state id)))))
 
        ptk/EffectEvent
        (effect [_ state _]
          (when (some? tab)
-           (drop-waiting-tab! project-id)
-           (swap! waiting-tabs assoc project-id tab))
-         (when (= "not-connected" (get-in state (state-path :errors project-id :code)))
-           (drop-waiting-tab! project-id)))))))
+           (drop-waiting-tab! id)
+           (swap! waiting-tabs assoc id tab))
+         (when (= "not-connected" (get-in state (state-path :errors id :code)))
+           (drop-waiting-tab! id)))))))
 
 (defn stop-app
-  [project-id]
+  [id]
   (ptk/reify ::stop-app
     ptk/UpdateEvent
     (update [_ state]
-      (request state :stop project-id
-               {:type "apps.stop" :rid (proto/next-rid) :project-id project-id}))
+      (request state :stop id
+               (merge {:type "apps.stop" :rid (proto/next-rid)} (app-ref state id))))
 
     ptk/EffectEvent
     (effect [_ _ _]
-      (drop-waiting-tab! project-id))))
+      (drop-waiting-tab! id))))
 
 (defn fetch-logs
-  [project-id]
+  [id]
   (ptk/reify ::fetch-logs
     ptk/UpdateEvent
     (update [_ state]
       (-> state
-          (assoc-in (state-path :logs project-id :loading) true)
-          (request :logs project-id
-                   {:type "apps.logs" :rid (proto/next-rid) :project-id project-id})))))
+          (assoc-in (state-path :logs id :loading) true)
+          (request :logs id
+                   (merge {:type "apps.logs" :rid (proto/next-rid)} (app-ref state id)))))))
 
 (defn close-logs
-  [project-id]
+  [id]
   (ptk/reify ::close-logs
     ptk/UpdateEvent
     (update [_ state]
-      (update-in state (state-path :logs) dissoc project-id))))
+      (update-in state (state-path :logs) dissoc id))))
 
 (defn start-phone
   "Open an Expo app on a phone. Only after the user agreed that devices
   on the local network can reach the app while the QR code is shown."
-  [project-id]
+  [id]
   (ptk/reify ::start-phone
     ptk/UpdateEvent
     (update [_ state]
       (-> state
-          (assoc-in (state-path :phone project-id) {:state "starting"})
-          (request :phone project-id
-                   {:type "apps.phone.start" :rid (proto/next-rid)
-                    :project-id project-id :confirmed true})))))
+          (assoc-in (state-path :phone id) {:state "starting"})
+          (request :phone id
+                   (merge {:type "apps.phone.start" :rid (proto/next-rid) :confirmed true}
+                          (app-ref state id)))))))
 
 (defn stop-phone
-  [project-id]
+  [id]
   (ptk/reify ::stop-phone
     ptk/UpdateEvent
     (update [_ state]
-      (if (client/send! {:type "apps.phone.stop" :project-id project-id})
+      (if (client/send! (merge {:type "apps.phone.stop"} (app-ref state id)))
         state
-        (update-in state (state-path :phone) dissoc project-id)))))
+        (update-in state (state-path :phone) dissoc id)))))
 
 (defn close-phone
   "Forget a finished phone session (stopped or failed)."
-  [project-id]
+  [id]
   (ptk/reify ::close-phone
     ptk/UpdateEvent
     (update [_ state]
-      (update-in state (state-path :phone) dissoc project-id))))
+      (update-in state (state-path :phone) dissoc id))))
 
 (defn initialize
   "Start the daemon client for the Apps section and list the team's
@@ -334,5 +368,5 @@
 
     ptk/EffectEvent
     (effect [_ _ _]
-      (doseq [project-id (keys @waiting-tabs)]
-        (drop-waiting-tab! project-id)))))
+      (doseq [id (keys @waiting-tabs)]
+        (drop-waiting-tab! id)))))
