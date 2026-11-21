@@ -925,7 +925,17 @@ export interface ProjectLinkStatusMessage {
     projectId: string;
 }
 
-export type LinkedClientMessage = FolderListMessage | ProjectLinkMessage | ProjectLinkStatusMessage;
+/**
+ * Request for the font files of a linked project, to import them into the team's fonts; the reply
+ * is `fonts.files`.
+ */
+export interface FontsFilesMessage {
+    type: "fonts.files";
+    rid: string;
+    projectId: string;
+}
+
+export type LinkedClientMessage = FolderListMessage | ProjectLinkMessage | ProjectLinkStatusMessage | FontsFilesMessage;
 
 /** Why a folder is refused for browsing or linking (client translates; `message` is English). */
 export type LinkRefusalReason =
@@ -999,4 +1009,15 @@ export interface ProjectLinkedMessage {
     stack?: DetectedStack | null;
 }
 
-export type LinkedDaemonMessage = FolderListReplyMessage | ProjectLinkedMessage;
+/** Fonts of a linked project (reply to `fonts.files`). */
+export interface FontsFilesReplyMessage {
+    type: "fonts.files";
+    rid: string;
+    projectId: string;
+    /** font files to import (base64), best format of each */
+    files: Array<{ name: string; data: string }>;
+    /** Google Fonts families the code loads (already in Penpot's catalog) */
+    google: string[];
+}
+
+export type LinkedDaemonMessage = FolderListReplyMessage | ProjectLinkedMessage | FontsFilesReplyMessage;

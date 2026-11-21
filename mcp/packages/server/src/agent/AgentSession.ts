@@ -279,6 +279,8 @@ export class AgentSession implements AgentClient {
                 return this.links().link(this, message);
             case "project.link.status":
                 return this.links().status(this, message);
+            case "fonts.files":
+                return this.links().fonts(this, message);
         }
     }
 

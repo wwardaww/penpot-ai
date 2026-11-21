@@ -32,6 +32,7 @@
    [app.common.logging :as log]
    [app.main.data.ai.chat :as chat]
    [app.main.data.ai.client :as client]
+   [app.main.data.ai.project-fonts :as project-fonts]
    [app.main.data.ai.protocol :as proto]
    [app.main.data.penforge :as pf]
    [app.main.store :as st]
@@ -373,32 +374,59 @@
         (update-in state (state-path :read) apply-read-message msg)
         state))))
 
+(defn- read-ended-well?
+  "Whether a `project-read` message is its result for a read folder."
+  [{:keys [type kind payload]}]
+  (and (= "workflow.event" type)
+       (= "result" kind)
+       (contains? #{"ready" "unchanged"} (:state payload))))
+
+(defn read-params
+  "Params of `project-read` for a read `mode`: `:keep` (a file opens or
+  the tab reconnects: an existing brief is kept even if files changed,
+  so an open conversation never reads the code again), `:changes` (a
+  new chat: read the files changed since the last read) or `:force`
+  (\"Read project again\": read everything)."
+  [mode]
+  (case mode
+    :force {:force true}
+    :keep  {:keep-brief true}
+    {}))
+
 (defn start-read
-  "Read the open linked project in the background (`project-read`). A
-  read that runs or ended well is not started again unless `force`
-  (\"Read project again\")."
-  ([] (start-read false))
-  ([force]
-   (ptk/reify ::start-read
-     ptk/WatchEvent
-     (watch [_ state stream]
-       (let [project-id (:current-project-id state)
-             read       (get-read state)
-             same       (= (str project-id) (:project-id read))]
-         (if (or (not (uuid? project-id))
-                 (not (pf/linked-platform? (pf/current-platform state)))
-                 (and (not force) same (contains? #{:running :ready} (:status read)))
-                 (and force same (= :running (:status read))))
-           (rx/empty)
-           (let [rid (proto/next-rid)]
-             (rx/merge
-              (->> (chat/workflow-messages stream rid)
-                   (rx/map #(read-message rid %))
-                   (rx/take-until (rx/filter (ptk/type? ::finalize) stream)))
-              (rx/of (read-started rid project-id)
-                     (chat/run-workflow "project-read"
-                                        (if force {:force true} {})
-                                        {:rid rid :silent true}))))))))))
+  "Read the open linked project in the background (`project-read`), see
+  `read-params` for `mode` (`true` is `:force`, `false` or none is
+  `:keep`). A read that runs is never started twice, and one that ended
+  well is read again only for a new chat or \"Read project again\"."
+  ([] (start-read :keep))
+  ([mode]
+   (let [mode (case mode true :force false :keep mode)]
+     (ptk/reify ::start-read
+       ptk/WatchEvent
+       (watch [_ state stream]
+         (let [project-id (:current-project-id state)
+               read       (get-read state)
+               same       (= (str project-id) (:project-id read))]
+           (if (or (not (uuid? project-id))
+                   (not (pf/linked-platform? (pf/current-platform state)))
+                   (and same (= :running (:status read)))
+                   (and (= :keep mode) same (= :ready (:status read))))
+             (rx/empty)
+             (let [rid (proto/next-rid)]
+               (rx/merge
+                (->> (chat/workflow-messages stream rid)
+                     (rx/map #(read-message rid %))
+                     (rx/take-until (rx/filter (ptk/type? ::finalize) stream)))
+                ;; once the folder is read, the project's own fonts come in
+                (->> (chat/workflow-messages stream rid)
+                     (rx/filter read-ended-well?)
+                     (rx/take 1)
+                     (rx/map (fn [_] (project-fonts/import-fonts)))
+                     (rx/take-until (rx/filter (ptk/type? ::finalize) stream)))
+                (rx/of (read-started rid project-id)
+                       (chat/run-workflow "project-read"
+                                          (read-params mode)
+                                          {:rid rid :silent true})))))))))))
 
 (defn- read-after-link
   "Read again once the folder of a project that needed one is linked."
@@ -444,7 +472,11 @@
                                        (start-read false)))))
               (->> (client/messages stream)
                    (rx/filter #(= "project.linked" (:type %)))
-                   (rx/map read-after-link)))
+                   (rx/map read-after-link))
+              ;; a new chat is when the code is read again (its changes)
+              (->> stream
+                   (rx/filter (ptk/type? ::chat/new-conversation))
+                   (rx/map (fn [_] (start-read :changes)))))
              (rx/take-until stopper))))))
 
 (defn finalize

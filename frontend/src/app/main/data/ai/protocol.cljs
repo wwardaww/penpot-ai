@@ -226,6 +226,10 @@
      [:path :string]]]
 
    ["project.link.status"
+    [:map [:type :string] [:rid :string] [:project-id :string]]]
+
+   ;; the font files of a linked project, for the import into the team
+   ["fonts.files"
     [:map [:type :string] [:rid :string] [:project-id :string]]]])
 
 ;; --- Daemon -> client
@@ -390,6 +394,15 @@
      [:engine {:optional true} [:maybe :string]]
      [:stack {:optional true} [:maybe [:map-of :keyword :any]]]]]
 
+   ;; reply to fonts.files (each file `{:name :data}`, data in base64)
+   ["fonts.files"
+    [:map
+     [:type :string]
+     [:rid :string]
+     [:project-id :string]
+     [:files [:vector [:map [:name :string] [:data :string]]]]
+     [:google [:vector :string]]]]
+
    ;; a design tool found no MCP plugin session for this tab: restart
    ;; the hidden plugin
    ["mcp.restart"
@@ -552,6 +565,12 @@
 (defn project-link-status
   [{:keys [rid project-id]}]
   {:type "project.link.status"
+   :rid (or rid (next-rid))
+   :project-id (str project-id)})
+
+(defn fonts-files
+  [{:keys [rid project-id]}]
+  {:type "fonts.files"
    :rid (or rid (next-rid))
    :project-id (str project-id)})
 

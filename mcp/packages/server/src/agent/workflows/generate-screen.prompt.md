@@ -52,6 +52,18 @@ Build rules:
 - When you finish, list the sections and the components and tokens you used, briefly.
 {{/developer}}
 
+## Fonts
+
+- Use only fonts Penpot has: its catalog holds the Google Fonts and the team's uploaded fonts. Pick
+  a family by its exact name, `penpot.fonts.all.find((f) => f.name === "Inter")` (`findByName`
+  also matches parts of names), apply it with `font.applyToText(text, variant)`, and never set
+  `fontFamily` to a name the catalog lacks: the text then falls back to a font without Turkish
+  letters and the tab waits for a font that never loads.
+- The texts are often Turkish (ş, ğ, ı, İ, ç, ö, ü): pick families with Latin Extended letters
+  (Inter, Manrope, Plus Jakarta Sans, DM Sans, Space Grotesk, Archivo, Poppins, Montserrat…).
+- When the project lists its fonts (a section below), design with them unless the user asks for
+  others.
+
 ## Animation
 
 Animations (entrance, stagger, press feedback, loops) live in the file and are set with one

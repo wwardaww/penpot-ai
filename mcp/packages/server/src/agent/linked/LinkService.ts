@@ -1,5 +1,6 @@
 import type {
     FolderListMessage,
+    FontsFilesMessage,
     ProjectLinkedMessage,
     ProjectLinkMessage,
     ProjectLinkStatusMessage,
@@ -10,6 +11,7 @@ import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import type { WorkspaceManager } from "../workspace/WorkspaceManager";
 import type { LinkedFolders } from "./LinkedFolders";
 import type { ProjectLink } from "./ProjectLink";
+import { ProjectFonts, type ProjectFontsInfo } from "./ProjectFonts";
 
 /**
  * Handler of the folder browser and project link messages (W38): `folder.list`, `project.link`,
@@ -62,6 +64,23 @@ export class LinkService {
         workspace.setLink(workspace.linked);
         const link = workspace.linkedRoot !== null ? workspace.linked : null;
         client.send(LinkService.reply(message.rid, message.projectId, link));
+    }
+
+    /** Handles `fonts.files`: the font files of the linked folder, for the import into the team's fonts. */
+    public async fonts(client: AgentClient, message: FontsFilesMessage): Promise<void> {
+        this.checkEnabled();
+        LinkService.checkProjectId(message.projectId);
+        const workspace = await this.workspaces.get(message.projectId);
+        const info = await workspace.readJson<ProjectFontsInfo | null>(ProjectFonts.FILE, null);
+        const root = workspace.linkedRoot;
+        const files = info !== null && root !== null ? await ProjectFonts.filesToSend(root, info) : [];
+        client.send({
+            type: "fonts.files",
+            rid: message.rid,
+            projectId: message.projectId,
+            files,
+            google: info?.google ?? [],
+        });
     }
 
     private checkEnabled(): void {

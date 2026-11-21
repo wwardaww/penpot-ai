@@ -185,6 +185,39 @@ describe("LinkedFolders", () => {
 });
 
 describe("LinkService", () => {
+    test("sends the font files of a linked project for the import into the team's fonts", async () => {
+        const app = join(base, "work", "fonts-app");
+        mkdirSync(join(app, "fonts"), { recursive: true });
+        writeFileSync(join(app, "package.json"), '{"name":"fonts-app"}');
+        writeFileSync(join(app, "fonts", "Brand-Bold.ttf"), "TTF");
+        const workspaces = new WorkspaceManager(projectsDir);
+        const service = new LinkService(new LinkedFolders(penforgeHome), workspaces);
+        const client = new FakeClient();
+        await service.link(client, {
+            type: "project.link",
+            rid: "l1",
+            projectId: "proj-fonts",
+            kind: "existing",
+            path: app,
+        });
+        const meta = join(projectsDir, "proj-fonts", ".penforge");
+        writeFileSync(
+            join(meta, "project-fonts.json"),
+            JSON.stringify({ google: ["Inter"], files: [{ path: "fonts/Brand-Bold.ttf", family: "Brand" }] })
+        );
+        await service.fonts(client, { type: "fonts.files", rid: "f1", projectId: "proj-fonts" });
+        const reply = client.sent.at(-1) as Extract<DaemonMessage, { type: "fonts.files" }>;
+        assert.equal(reply.type, "fonts.files");
+        assert.deepEqual(reply.google, ["Inter"]);
+        assert.deepEqual(
+            reply.files.map((file) => [file.name, Buffer.from(file.data, "base64").toString()]),
+            [["Brand-Bold.ttf", "TTF"]]
+        );
+
+        await service.fonts(client, { type: "fonts.files", rid: "f2", projectId: "proj-none" });
+        assert.deepEqual((client.sent.at(-1) as { files: unknown[] }).files, [], "a project without fonts sends none");
+    });
+
     test("links a project, keeps the link across context updates and reports it", async () => {
         const workspaces = new WorkspaceManager(projectsDir);
         const service = new LinkService(new LinkedFolders(penforgeHome), workspaces);
@@ -488,6 +521,32 @@ describe("project-read", () => {
         });
         await projectRead.run(forced.ctx, { force: true });
         assert.equal(forced.turns.length, 1);
+    });
+
+    test("an open conversation keeps the brief; only a new chat reads the changed files", async () => {
+        const app = join(base, "work", "keep-app");
+        mkdirSync(join(app, "src"), { recursive: true });
+        writeFileSync(join(app, "package.json"), '{"name":"keep"}');
+        writeFileSync(join(app, "src", "App.tsx"), "export const App = () => null;");
+        const appLink = link("existing", app, { stack: { platform: "web", name: "react" } });
+        const open = (text: string) =>
+            fakeRun(projectsDir, appLink, { projectType: "existing", projectId: "read-keep", turn: () => ({ text }) });
+
+        const first = await open("# Keep\n## Screens\n- / — Home — src/App.tsx");
+        await projectRead.run(first.ctx, { keepBrief: true });
+        assert.equal(first.turns.length, 1, "with no brief yet, the first open reads");
+
+        writeFileSync(join(app, "src", "App.tsx"), "export const App = () => 'changed';");
+        const reopened = await open("unused");
+        await projectRead.run(reopened.ctx, { keepBrief: true });
+        assert.equal(reopened.turns.length, 0, "the file changed, but the conversation keeps its brief");
+        assert.equal(reopened.events.find((event) => event.kind === "result")!.payload.state, "unchanged");
+        assert.ok(!reopened.events.some((event) => event.kind === "progress"), "nothing is even listed");
+
+        const newChat = await open("# Keep\n## Screens\n- / — Home (changed) — src/App.tsx");
+        await projectRead.run(newChat.ctx, {});
+        assert.equal(newChat.turns.length, 1, "a new chat reads the changed file");
+        assert.equal(newChat.events.find((event) => event.kind === "result")!.payload.state, "ready");
     });
 
     test("Existing project: copies DESIGN.md into the design repository and keeps node_modules out", async () => {

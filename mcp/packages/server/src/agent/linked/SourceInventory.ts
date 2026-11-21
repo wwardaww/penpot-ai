@@ -43,6 +43,8 @@ export interface SourceIndex {
     skipped: SkippedCounts;
     /** the walk stopped early (too many entries) */
     truncated: boolean;
+    /** font files of the project (woff2, woff, ttf, otf), relative paths; absent in older indexes */
+    fonts?: string[];
 }
 
 /** Difference between two inventories. */
@@ -84,6 +86,10 @@ export class SourceInventory {
     };
 
     /** folders never entered, any project type */
+    /** Font files the project may ship (listed for the font import, never read by Claude). */
+    public static readonly FONT_FILE = /\.(woff2?|ttf|otf)$/i;
+    public static readonly MAX_FONT_FILES = 200;
+
     private static readonly COMMON_SKIP = [
         "node_modules",
         "bower_components",
@@ -205,6 +211,7 @@ export class SourceInventory {
     public async build(onProgress?: (files: number) => void): Promise<SourceIndex> {
         const skipped: SkippedCounts = { folders: 0, ignored: 0, tooBig: 0, overBudget: 0 };
         const files: SourceFile[] = [];
+        const fonts: string[] = [];
         const ignores: Array<{ base: string; rules: GitIgnore }> = [];
         let entries = 0;
         let bytes = 0;
@@ -250,6 +257,9 @@ export class SourceInventory {
                 if (SourceInventory.ignored(dirIgnores, rel, false)) {
                     skipped.ignored++;
                     continue;
+                }
+                if (SourceInventory.FONT_FILE.test(entry.name) && fonts.length < SourceInventory.MAX_FONT_FILES) {
+                    fonts.push(rel);
                 }
                 const selected = await this.select(rel, entry.name);
                 if (selected === null) {
@@ -302,6 +312,7 @@ export class SourceInventory {
             files,
             skipped,
             truncated,
+            fonts,
         };
     }
 

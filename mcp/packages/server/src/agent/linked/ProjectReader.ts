@@ -6,6 +6,7 @@ import { DesignMdRepository } from "../designmd/DesignMdRepository";
 import { LinkedProjectPrompt } from "./LinkedProjectPrompt";
 import { LinkedToolFilter } from "./LinkedToolFilter";
 import { LinkedWorkspace } from "./LinkedWorkspace";
+import { ProjectFonts } from "./ProjectFonts";
 import type { ProjectLink } from "./ProjectLink";
 import { type SourceChanges, type SourceIndex, SourceInventory } from "./SourceInventory";
 
@@ -13,6 +14,11 @@ import { type SourceChanges, type SourceIndex, SourceInventory } from "./SourceI
 export interface ProjectReadParams {
     /** read every file again and write a new brief ("Read project again") */
     force?: boolean;
+    /**
+     * keep a brief that exists for the linked folder, even if files changed (a file opens again or
+     * the tab reconnects while a conversation goes on); only a new chat reads the changes
+     */
+    keepBrief?: boolean;
 }
 
 /** Payload of the `result` event of `project-read`. */
@@ -58,7 +64,9 @@ export class ProjectReader {
     public async run(params: ProjectReadParams): Promise<ProjectReadResult> {
         const key = this.ctx.workspace.root;
         const previous = ProjectReader.running.get(key) ?? Promise.resolve();
-        const next = previous.catch(() => undefined).then(() => this.read(params.force === true));
+        const next = previous
+            .catch(() => undefined)
+            .then(() => this.read(params.force === true, params.keepBrief === true));
         ProjectReader.running.set(key, next);
         const forget = () => {
             if (ProjectReader.running.get(key) === next) {
@@ -69,7 +77,7 @@ export class ProjectReader {
         return next;
     }
 
-    private async read(force: boolean): Promise<ProjectReadResult> {
+    private async read(force: boolean, keepBrief: boolean): Promise<ProjectReadResult> {
         const ctx = this.ctx;
         const folder = LinkedWorkspace.of(ctx);
         if (folder.state === "not-linked") {
@@ -86,11 +94,19 @@ export class ProjectReader {
             };
         }
         const { link, root } = folder;
+        if (keepBrief && !force) {
+            const kept = await this.keptBrief(link, root);
+            if (kept) {
+                return kept;
+            }
+        }
         this.progress("inventory", { done: 0 }, "Listing the project's files");
         const index = await new SourceInventory(root, link.kind, link.engine).build((done) =>
             this.progress("inventory", { done }, `Listed ${done} files`)
         );
         this.checkCancelled();
+        // the fonts the AI should design with (cheap, kept fresh on every read)
+        await ctx.workspace.writeJson(ProjectFonts.FILE, await ProjectFonts.collect(root, index));
         const before = await ctx.workspace.readJson<SourceIndex | null>(ProjectReader.INDEX_FILE, null);
         const sameRoot = before !== null && before.root === index.root && before.kind === index.kind;
         const changes = SourceInventory.changes(sameRoot ? before : null, index);
@@ -142,6 +158,33 @@ export class ProjectReader {
         await this.writeBrief(briefFile, `${brief}\n\n${ProjectReader.skippedSection(index)}\n`);
         await ctx.workspace.writeJson(ProjectReader.INDEX_FILE, index);
         return { state: "ready", ...base };
+    }
+
+    /**
+     * The result for a brief that is kept as it is: one exists, written from this folder. No file is
+     * listed or read, so reopening a file costs nothing.
+     */
+    private async keptBrief(link: ProjectLink, root: string): Promise<ProjectReadResult | null> {
+        const before = await this.ctx.workspace.readJson<SourceIndex | null>(ProjectReader.INDEX_FILE, null);
+        if (before === null || before.root !== root || before.kind !== link.kind) {
+            return null;
+        }
+        const brief = await readFile(join(this.ctx.workspace.metaDir, LinkedProjectPrompt.BRIEF_FILE), "utf8").catch(
+            () => null
+        );
+        if (brief === null || brief.trim().length === 0) {
+            return null;
+        }
+        return {
+            state: "unchanged",
+            kind: link.kind,
+            engine: link.engine,
+            stack: link.stack,
+            files: before.files.length,
+            changed: 0,
+            skipped: 0,
+            truncated: before.truncated,
+        };
     }
 
     private firstPrompt(link: ProjectLink, root: string, index: SourceIndex): string {

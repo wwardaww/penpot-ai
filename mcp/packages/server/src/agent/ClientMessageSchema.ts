@@ -119,6 +119,7 @@ export class ClientMessageSchema {
             path: z.string().min(1).max(4096),
         }),
         z.object({ type: z.literal("project.link.status"), rid: id, projectId: id }),
+        z.object({ type: z.literal("fonts.files"), rid: id, projectId: id }),
     ]);
 
     /**

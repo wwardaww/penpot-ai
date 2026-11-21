@@ -18,6 +18,7 @@
    [app.main.data.ai.actions.build]
    [app.main.data.ai.actions.redesign-code :as redesign]
    [app.main.data.ai.linked :as linked]
+   [app.main.data.ai.project-fonts :as project-fonts]
    [app.main.data.ai.protocol :as proto]
    [app.main.data.penforge :as pf]
    [app.main.ui.dashboard.penforge.change-folder :as change-folder]
@@ -373,3 +374,31 @@
     (t/is (not (change-folder/can-change? :existing nil "F:/adissio")) "nothing picked yet")
     (t/is (not (change-folder/can-change? :game app-folder nil)) "not a game folder")
     (t/is (change-folder/can-change? :game game-folder nil) "the current folder is unknown")))
+
+;; --- Reads and fonts
+
+(t/deftest an-open-conversation-keeps-the-brief
+  (t/is (= {:keep-brief true} (linked/read-params :keep)) "a file opens or the tab reconnects")
+  (t/is (= {} (linked/read-params :changes)) "a new chat reads the changed files")
+  (t/is (= {:force true} (linked/read-params :force)) "Read project again"))
+
+(t/deftest project-font-variants-to-upload
+  (let [item       {:font-family "Brand" :font-weight "700" :font-style "normal"}
+        team-fonts {(uuid/next) {:font-family "Brand" :font-weight 400 :font-style "normal"}}]
+    (t/is (project-fonts/new-variant? item nil team-fonts) "a family Penpot does not have")
+    (t/is (project-fonts/new-variant? item {:backend :custom} team-fonts)
+          "a new variant of a team family")
+    (t/is (not (project-fonts/new-variant? (assoc item :font-weight 400) {:backend :custom} team-fonts))
+          "the team has this variant")
+    (t/is (not (project-fonts/new-variant? (assoc item :font-family "Inter") {:backend :google} {}))
+          "a Google Fonts family needs no upload")
+    (t/is (not (project-fonts/new-variant? item {:backend :builtin} {})))))
+
+(t/deftest fonts-files-messages
+  (t/is (= {:type "fonts.files" :rid "r1" :project-id "p1"}
+           (proto/fonts-files {:rid "r1" :project-id "p1"})))
+  (t/is (= {:type "fonts.files" :rid "r1" :project-id "p1"
+            :files [{:name "Brand-Bold.ttf" :data "VFRG"}] :google ["Inter"]}
+           (proto/decode (json {"type" "fonts.files" "rid" "r1" "projectId" "p1"
+                                "files" [{"name" "Brand-Bold.ttf" "data" "VFRG"}]
+                                "google" ["Inter"]})))))

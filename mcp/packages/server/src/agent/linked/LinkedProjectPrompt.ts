@@ -1,6 +1,7 @@
 import { readFile } from "fs/promises";
 import { join } from "path";
 import type { AgentContext } from "@penpot/mcp-common";
+import { ProjectFonts, type ProjectFontsInfo } from "./ProjectFonts";
 import type { ProjectLink } from "./ProjectLink";
 
 /** Workspace parts the prompt section needs. */
@@ -53,7 +54,8 @@ export class LinkedProjectPrompt {
                   "(one per route, named after it) and the new look next to or instead of them, as the user asks.",
             workspace.linkedRoot !== null
                 ? `The project's folder on this computer: \`${workspace.linkedRoot}\`. Read it with Read, Glob ` +
-                  "and Grep (absolute paths) when the brief below is not enough."
+                  "and Grep (absolute paths) only when the brief below is not enough. Files you already read in " +
+                  "this conversation are in your context: never read them again."
                 : "The project's folder is not available on this computer right now.",
             "",
             LinkedProjectPrompt.LOOK_ONLY_RULE,
@@ -62,6 +64,13 @@ export class LinkedProjectPrompt {
                   "guides into a `PenforgeUI/` folder."
                 : "The app's code changes only through the Re-Design button, on its own git branch.",
         ];
+        const fonts = await readFile(join(workspace.metaDir, ProjectFonts.FILE), "utf8")
+            .then((text) => JSON.parse(text) as ProjectFontsInfo)
+            .catch(() => null);
+        const fontLines = ProjectFonts.promptLines(fonts);
+        if (fontLines.length > 0) {
+            lines.push("", ...fontLines);
+        }
         const brief = await LinkedProjectPrompt.brief(workspace.metaDir);
         if (brief !== null) {
             lines.push("", "### What the project is (project brief)", "````markdown", brief, "````");
