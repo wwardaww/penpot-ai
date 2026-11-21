@@ -190,14 +190,15 @@
 (defn- apply-workflow-started
   [chat {:keys [rid run-id name]}]
   (if (contains? (:pending-runs chat) rid)
-    (let [{:keys [silent]} (get-in chat [:pending-runs rid])]
+    (let [{:keys [silent read-only]} (get-in chat [:pending-runs rid])]
       (-> chat
           (update :pending-runs dissoc rid)
-          (assoc-in [:runs run-id] {:run-id run-id
-                                    :rid rid
-                                    :name name
-                                    :status :running
-                                    :silent silent})
+          (assoc-in [:runs run-id] (cond-> {:run-id run-id
+                                            :rid rid
+                                            :name name
+                                            :status :running
+                                            :silent silent}
+                                     read-only (assoc :read-only true)))
           (cond-> (not silent)
             (append-entry {:kind :workflow
                            :id run-id
@@ -408,12 +409,14 @@
 
 (defn busy?
   "True while the AI may change the design: like `working?`, but silent
-  runs (started by dialogs and panels) count too."
+  runs (started by dialogs and panels) count too; `:read-only` runs
+  (background checks that only read, W34) do not."
   [chat]
   (boolean
    (or (= :streaming (:status chat))
-       (seq (:pending-runs chat))
-       (some (fn [[_ run]] (= :running (:status run))) (:runs chat)))))
+       (some (fn [[_ run]] (not (:read-only run))) (:pending-runs chat))
+       (some (fn [[_ run]] (and (= :running (:status run)) (not (:read-only run))))
+             (:runs chat)))))
 
 (defn waiting?
   "True while the AI waits for the user: an unanswered question of a run
@@ -975,10 +978,12 @@
   - `:rid` request id, to follow the run with `workflow-messages`
   - `:silent` true keeps the run out of the chat timeline (questions
     still show).
+  - `:read-only` true marks a run that never changes the design (W34
+    background checks): `busy?` ignores it.
   Features call this from their registered actions."
   ([name params]
    (run-workflow name params nil))
-  ([name params {:keys [rid silent]}]
+  ([name params {:keys [rid silent read-only]}]
    (let [message (proto/workflow-run {:rid (or rid (proto/next-rid))
                                       :name name
                                       :params params})]
@@ -988,7 +993,8 @@
          (if (connected? state)
            (update-chat state assoc-in
                         [:pending-runs (:rid message)]
-                        {:name name :silent (boolean silent)})
+                        (cond-> {:name name :silent (boolean silent)}
+                          read-only (assoc :read-only true)))
            (update-in state [:penforge :chat] (fnil append-entry empty-chat)
                       {:kind :error :id (str (uuid/next)) :code "not-connected"})))
 

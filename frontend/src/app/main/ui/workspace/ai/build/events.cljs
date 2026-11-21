@@ -12,9 +12,18 @@
   developer's edits); a finished build emits `::built`, the hook for
   the preview (W09). Runs are silent: they never show in the chat.
 
+  Change requests (W34): once an app is built, the Build button turns
+  into Update. `start-update` opens the dialog on the list of design
+  changes since the last build (`build-changes`), and
+  `confirm-update` runs `build-run {update}`, which writes a change
+  request and builds from it. Both the plan and the change list take
+  instructions for the AI. A watcher keeps `[:penforge :build-changes]`
+  (badge count) current while the AI session of the file runs.
+
   State lives under `[:penforge :build]`:
 
-  - `:stage` `:idle` `:planning` `:plan` `:building` `:done` `:error`
+  - `:stage` `:idle` `:planning` `:plan` `:changes` `:review`
+    `:building` `:done` `:error`
   - `:workflow` the running or last workflow (`build-plan`/`build-run`)
   - `:rid` request id of the run the state follows; `:run-id` its id
     while it runs
@@ -27,14 +36,21 @@
   - `:result` payload of the `result` event
   - `:failure-code` code of a `failed` event (translated by the UI) and
     `:failure` its message (English; technical for developers)
-  - `:error` technical error (`workflow.done` error or request error)"
+  - `:error` technical error (`workflow.done` error or request error)
+  - `:question` open question of the run `{:question-id :text :options}`
+    (an instruction that conflicts with the design, W34)"
   (:require
    [app.common.data :as d]
    [app.main.data.ai.chat :as chat]
+   [app.main.data.ai.client :as client]
    [app.main.data.ai.preview :as preview]
    [app.main.data.ai.protocol :as proto]
+   [app.main.data.helpers :as dsh]
    [app.main.data.modal :as modal]
+   [app.main.store :as st]
    [beicon.v2.core :as rx]
+   [beicon.v2.operators :as rxo]
+   [cuerdas.core :as str]
    [potok.v2.core :as ptk]))
 
 (def modal-type
@@ -52,7 +68,7 @@
 
 (defn running?
   [build]
-  (contains? #{:planning :building} (:stage build)))
+  (contains? #{:planning :changes :building} (:stage build)))
 
 ;; --- Pure reducer
 
@@ -95,6 +111,9 @@
     "result"
     (assoc build :result payload)
 
+    "question"
+    (assoc build :question (select-keys payload [:question-id :text :options]))
+
     build))
 
 (defn- finish-stage
@@ -102,6 +121,7 @@
   (cond
     (not ok) :error
     (= "build-plan" (:workflow build)) (if (:plan build) :plan :error)
+    (= "build-changes" (:workflow build)) (if (:result build) :review :error)
     :else :done))
 
 (defn apply-message
@@ -119,6 +139,7 @@
         (assoc :stage (finish-stage build ok)
                :run-id nil
                :activity nil)
+        (dissoc :question)
         (cond-> (not ok) (assoc :error (or error "failed"))))
 
     "error"
@@ -137,6 +158,8 @@
   [project-id result]
   (ptk/data-event ::built {:project-id project-id :result result}))
 
+(declare changes-loaded check-changes)
+
 (defn- stop
   "Stop following the current run."
   []
@@ -153,11 +176,18 @@
 
     ptk/WatchEvent
     (watch [_ state _]
-      (let [build (get-build state)]
-        (if (and (= rid (:rid build))
-                 (= "workflow.done" (:type msg))
-                 (= :done (:stage build)))
-          (rx/of (built (:current-project-id state) (:result build)))
+      (let [build (get-build state)
+            done? (and (= rid (:rid build)) (= "workflow.done" (:type msg)))]
+        (cond
+          (and done? (= :done (:stage build)))
+          (rx/of (built (:current-project-id state) (:result build))
+                 (check-changes))
+
+          ;; the dialog's change list also refreshes the Update badge
+          (and done? (= :review (:stage build)))
+          (rx/of (changes-loaded (:result build)))
+
+          :else
           (rx/empty))))))
 
 (defn- connected?
@@ -178,6 +208,7 @@
                                    :workflow workflow
                                    :rid rid)
                       (= stage :building) (assoc :plan (:plan build))
+                      (contains? params :update) (assoc :update true)
                       (not (connected? state)) (assoc :stage :error
                                                       :error "not-connected")))))
 
@@ -214,10 +245,12 @@
 
 (defn confirm
   "Build the shown plan. `overrides` are the developer's edits:
-  `{:notes :stack-name :routes {\"<board-id>\" \"/route\"}}`. A plan
-  with nothing to do plans a full rebuild instead."
-  ([] (confirm nil))
-  ([overrides]
+  `{:notes :stack-name :routes {\"<board-id>\" \"/route\"}}`;
+  `instructions` the instructions for the AI `{:text :keep :kept}`
+  (W34). A plan with nothing to do plans a full rebuild instead."
+  ([] (confirm nil nil))
+  ([overrides] (confirm overrides nil))
+  ([overrides instructions]
    (ptk/reify ::confirm
      ptk/WatchEvent
      (watch [_ state _]
@@ -234,15 +267,23 @@
            (rx/of (stop)
                   (run :building "build-run"
                        (cond-> {:plan-id (:plan-id plan-payload)}
-                         (seq overrides) (assoc :overrides overrides))))))))))
+                         (seq overrides) (assoc :overrides overrides)
+                         (seq instructions) (assoc :instructions instructions))))))))))
+
+(declare list-changes)
 
 (defn retry
-  "Start over after an error: plan again."
+  "Start over after an error: plan again, or list the changes again
+  when the failed run was an update."
   []
   (ptk/reify ::retry
     ptk/WatchEvent
-    (watch [_ _ _]
-      (rx/of (stop) (plan)))))
+    (watch [_ state _]
+      (let [build (get-build state)]
+        (if (or (= "build-changes" (:workflow build))
+                (:update build))
+          (rx/of (stop) (list-changes))
+          (rx/of (stop) (plan)))))))
 
 (defn cancel
   "Stop the running workflow (if any), forget the build state and close
@@ -278,3 +319,204 @@
     (watch [_ _ _]
       (rx/of (modal/hide)
              (preview/show-app)))))
+
+;; --- Change requests (W34)
+
+(def changes-debounce-ms
+  "Quiet time after the last saved design change before the Update
+  badge is refreshed: the daemon reads the whole design, so edits in a
+  row make one check."
+  8000)
+
+(defn get-changes
+  "Design changes since the last build, as last listed by
+  `build-changes`: `{:status :has-build :count :token-only :changes
+  :last-build :kept-instructions}`. `:status` is `:idle` `:checking`
+  `:ready` or `:error`."
+  [state]
+  (get-in state [:penforge :build-changes] {:status :idle}))
+
+(defn get-cta
+  "Mode of the Build button for a `get-changes` value: `:build` (no app
+  built yet, or not known yet), `:update` (changes since the last
+  build, or a count not known) or `:up-to-date`."
+  [changes]
+  (let [{:keys [has-build status]} changes
+        n (:count changes)]
+    (cond
+      (not (true? has-build)) :build
+      (and (number? n) (pos? n)) :update
+      (and (= status :ready) (number? n)) :up-to-date
+      :else :update)))
+
+(defn get-change-count
+  "Number of listed changes (0 when not known)."
+  [changes]
+  (let [n (:count changes)]
+    (if (number? n) n 0)))
+
+(defn apply-changes-result
+  "Store the `result` payload of `build-changes`. A busy answer (a build
+  runs) keeps the last list: the build's end checks again."
+  [changes result]
+  (if (:busy result)
+    (assoc changes :status :ready)
+    (assoc changes
+           :status :ready
+           :has-build (true? (:has-build result))
+           :count (:count result)
+           :token-only (true? (:token-only result))
+           :changes (:changes result)
+           :last-build (:last-build result)
+           :kept-instructions (or (:kept-instructions result) ""))))
+
+(defn apply-changes-message
+  "Reduce a daemon message of a background `build-changes` run."
+  [changes {:keys [type kind payload ok]}]
+  (cond
+    (and (= "workflow.event" type) (= "result" kind))
+    (apply-changes-result changes payload)
+
+    (or (and (= "workflow.done" type) (not ok))
+        (= "error" type))
+    (assoc changes :status :error)
+
+    :else
+    changes))
+
+(defn- update-changes
+  [state f & args]
+  (apply update-in state [:penforge :build-changes] (fnil f {:status :idle}) args))
+
+(defn changes-loaded
+  "Store a `build-changes` result listed by the dialog."
+  [result]
+  (ptk/reify ::changes-loaded
+    ptk/UpdateEvent
+    (update [_ state]
+      (update-changes state apply-changes-result result))))
+
+(defn- can-check?
+  [state]
+  (and (connected? state) (not (running? (get-build state)))))
+
+(defn check-changes
+  "List the design changes since the last build in the background (a
+  silent, read-only `build-changes` run) for the Update badge. Skipped
+  without a connection and while a build runs (its end checks again)."
+  []
+  (let [rid (proto/next-rid)]
+    (ptk/reify ::check-changes
+      ptk/UpdateEvent
+      (update [_ state]
+        (if (can-check? state)
+          (update-changes state assoc :status :checking)
+          state))
+
+      ptk/WatchEvent
+      (watch [_ state stream]
+        (if (can-check? state)
+          (rx/merge
+           (->> (chat/workflow-messages stream rid)
+                (rx/map (fn [msg]
+                          (ptk/reify ::changes-message
+                            ptk/UpdateEvent
+                            (update [_ state]
+                              (update-changes state apply-changes-message msg))))))
+           (rx/of (chat/run-workflow "build-changes" {}
+                                     {:rid rid :silent true :read-only true})))
+          (rx/empty))))))
+
+(defn- design-revision
+  "What the Update badge follows: the connection and the saved revision
+  of the open file."
+  [state]
+  [(connected? state)
+   (:revn (dsh/lookup-file state))])
+
+(defn watch-changes
+  "Keep the Update badge current until the AI session of the file
+  stops: a check once connected, then after saved design changes
+  (debounced)."
+  []
+  (ptk/reify ::watch-changes
+    ptk/WatchEvent
+    (watch [_ _ stream]
+      (let [stopper (rx/merge
+                     (rx/filter (ptk/type? ::client/finalize) stream)
+                     (rx/filter (ptk/type? ::client/initialize) stream)
+                     (rx/filter (ptk/type? ::watch-changes) stream))]
+        (->> (rx/from-atom st/state {:emit-current-value? true})
+             (rx/map design-revision)
+             (rx/pipe (rxo/distinct-contiguous))
+             (rx/filter first)
+             (rx/debounce changes-debounce-ms)
+             (rx/map (fn [_] (check-changes)))
+             (rx/take-until stopper))))))
+
+;; The AI session starts with `client/initialize` (once per open file);
+;; the watcher follows it.
+(defonce changes-watcher-subscription
+  (->> st/stream
+       (rx/filter (ptk/type? ::client/initialize))
+       (rx/subs! (fn [_] (st/emit! (watch-changes))))))
+
+(defn list-changes
+  "List the changes since the last build in the dialog (`build-changes`)."
+  []
+  (run :changes "build-changes" {}))
+
+(defn start-update
+  "Open the dialog on the changes since the last build: the Update
+  button. A running build only opens the dialog."
+  []
+  (ptk/reify ::start-update
+    ptk/WatchEvent
+    (watch [_ state _]
+      (rx/concat
+       (if (running? (get-build state))
+         (rx/empty)
+         (rx/of (stop) (list-changes)))
+       (rx/of (modal/show modal-type {}))))))
+
+(defn get-instructions
+  "Instructions for the AI as `build-run` takes them, from the dialog's
+  fields: the new text, the keep checkbox and the kept instructions
+  (sent only when edited). Nil when there is nothing to send."
+  [{:keys [text keep kept kept-original]}]
+  (let [text (some-> text str/trim not-empty)]
+    (not-empty
+     (cond-> {}
+       (some? text) (assoc :text text)
+       (and (some? text) keep) (assoc :keep true)
+       (and (string? kept) (not= (str/trim kept) (str/trim (or kept-original ""))))
+       (assoc :kept (str/trim kept))))))
+
+(defn confirm-update
+  "Run the update shown in the change list: `build-run {update}` writes
+  a change request and builds from it. `instructions` as returned by
+  `get-instructions`."
+  [instructions]
+  (ptk/reify ::confirm-update
+    ptk/WatchEvent
+    (watch [_ state _]
+      (if (= :review (:stage (get-build state)))
+        (rx/of (stop)
+               (run :building "build-run" {:update (or instructions {})}))
+        (rx/empty)))))
+
+(defn answer
+  "Answer the open question of the followed run (an instruction that
+  conflicts with the design)."
+  [option-id]
+  (ptk/reify ::answer
+    ptk/UpdateEvent
+    (update [_ state]
+      (update-in state [:penforge :build] dissoc :question))
+
+    ptk/WatchEvent
+    (watch [_ state _]
+      (let [{:keys [run-id question]} (get-build state)]
+        (if (and run-id question)
+          (rx/of (chat/answer-question run-id (:question-id question) option-id))
+          (rx/empty))))))

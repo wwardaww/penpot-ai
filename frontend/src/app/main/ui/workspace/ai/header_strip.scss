@@ -22,6 +22,22 @@
   flex-shrink: 0;
 }
 
+// count of the Update button (W34)
+.primary-badge {
+  @include use-typography("body-small");
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: px2rem(18);
+  block-size: px2rem(18);
+  margin-inline-start: var(--sp-xs);
+  padding-inline: var(--sp-xxs);
+  border-radius: $br-circle;
+  background-color: var(--color-background-primary);
+  color: var(--color-accent-primary);
+}
+
 .menu-wrapper {
   position: relative;
 }

@@ -25,6 +25,8 @@
     of the right header, `:island` actions in the floating toolbar
   - `:primary` optional; true renders the action as a labelled primary
     button (the Build CTA) instead of a menu entry
+  - `:badge` optional fn of the app state returning a short text (a
+    count) shown on a `:primary` button, or nil (W34)
   - `:order` optional number; lower first, then by id
   - `:visible?` optional fn of the app state; hidden when false
   - `:enabled?` optional fn of the app state; disabled when false
@@ -44,6 +46,7 @@
    [:icon {:optional true} :string]
    [:scopes [:set (into [:enum] scopes)]]
    [:primary {:optional true} :boolean]
+   [:badge {:optional true} fn?]
    [:order {:optional true} number?]
    [:visible? {:optional true} fn?]
    [:enabled? {:optional true} fn?]

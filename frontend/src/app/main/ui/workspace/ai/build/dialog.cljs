@@ -8,6 +8,13 @@
   "The Build dialog (W08): plan card, confirmation (with the editable
   plan for developers), progress list, done and error states.
 
+  W34: once an app is built, the dialog opens on the list of design
+  changes since the last build (Update), and both the plan and the
+  change list take instructions for the AI (one-time text, \"keep for
+  next builds\", and the kept instructions to edit or remove). A
+  question of the build (an instruction that conflicts with the design)
+  is answered in the dialog.
+
   Designers see outcomes only; commands, routes, logs and error output
   are shown to developers."
   (:require-macros [app.main.style :as stl])
@@ -37,6 +44,9 @@
 (def ^:private ref:persona
   (l/derived client/get-persona st/state))
 
+(def ^:private ref:kept-instructions
+  (l/derived #(:kept-instructions (build/get-changes %) "") st/state))
+
 ;; --- Pieces
 
 (mf/defc step-icon*
@@ -60,6 +70,8 @@
                "read" (tr "penforge.build.step.read")
                "plan" (tr "penforge.build.step.plan")
                "prepare" (tr "penforge.build.step.prepare")
+               "changes" (tr "penforge.build.step.changes")
+               "apply" (tr "penforge.build.step.apply")
                "prebuild" (tr "penforge.build.step.prebuild")
                "scaffold" (tr "penforge.build.step.scaffold")
                "screen" (if update
@@ -120,6 +132,209 @@
     [:details {:class (stl/css :details)}
      [:summary (tr "penforge.build.dev.logs")]
      [:pre {:class (stl/css :pre)} (str/join "\n\n" logs)]]))
+
+;; --- Instructions for the AI (W34)
+
+(mf/defc instructions-fields*
+  "Instructions for the AI: the new text, \"keep for next builds\", and
+  the kept instructions, editable (emptied = removed)."
+  {::mf/private true}
+  [{:keys [text keep kept on-text on-keep on-kept]}]
+  (let [on-keep-change (mf/use-fn (mf/deps on-keep) #(on-keep (dom/checked? (dom/get-target %))))]
+    [:section {:class (stl/css :section)}
+     [:label {:class (stl/css :notes-label)}
+      [:> text* {:as "span" :typography t/body-small} (tr "penforge.build.instructions.label")]
+      [:textarea {:class (stl/css :notes)
+                  :rows 3
+                  :value text
+                  :data-testid "penforge-build-instructions"
+                  :placeholder (tr "penforge.build.instructions.placeholder")
+                  :on-change on-text}]]
+     [:label {:class (stl/css :keep)}
+      [:input {:type "checkbox" :checked keep :on-change on-keep-change}]
+      [:> text* {:as "span" :typography t/body-small} (tr "penforge.build.instructions.keep")]]
+     (when (string? kept)
+       [:label {:class (stl/css :notes-label)}
+        [:> text* {:as "span" :typography t/body-small} (tr "penforge.build.instructions.kept")]
+        [:textarea {:class (stl/css :notes)
+                    :rows 3
+                    :value kept
+                    :data-testid "penforge-build-kept-instructions"
+                    :on-change on-kept}]
+        [:> text* {:as "span" :typography t/body-small :class (stl/css :muted)}
+         (tr "penforge.build.instructions.kept-hint")]])]))
+
+(defn- use-instructions
+  "State of the instruction fields; `:kept` starts with the kept
+  instructions (nil when there are none)."
+  [kept-original]
+  (let [text*  (mf/use-state "")
+        keep*  (mf/use-state false)
+        kept*  (mf/use-state #(not-empty kept-original))]
+    {:text @text*
+     :keep @keep*
+     :kept @kept*
+     :kept-original kept-original
+     :on-text (mf/use-fn #(reset! text* (dom/get-target-val %)))
+     :on-keep (mf/use-fn #(reset! keep* %))
+     :on-kept (mf/use-fn #(reset! kept* (dom/get-target-val %)))}))
+
+;; --- Change list (W34)
+
+(defn get-change-text
+  "Translated text of a change item; the daemon's English `text` for
+  unknown codes."
+  [{:keys [code params text]}]
+  (let [{:keys [layer before after source target trigger name value screen visible change]} params]
+    (case code
+      "text-changed" (tr "penforge.build.change.text-changed" layer before after)
+      "layer-added" (tr "penforge.build.change.layer-added" layer)
+      "layer-removed" (tr "penforge.build.change.layer-removed" layer)
+      "layer-renamed" (tr "penforge.build.change.layer-renamed" before after)
+      "fill-changed" (tr "penforge.build.change.fill-changed" layer)
+      "stroke-changed" (tr "penforge.build.change.stroke-changed" layer)
+      "typography-changed" (tr "penforge.build.change.typography-changed" layer)
+      "layout-changed" (tr "penforge.build.change.layout-changed" layer)
+      "size-changed" (tr "penforge.build.change.size-changed" layer
+                         (str/replace (str before) "x" "×")
+                         (str/replace (str after) "x" "×"))
+      "component-swapped" (tr "penforge.build.change.component-swapped" layer after)
+      "image-changed" (tr "penforge.build.change.image-changed" layer)
+      "visibility-changed" (if visible
+                             (tr "penforge.build.change.shown" layer)
+                             (tr "penforge.build.change.hidden" layer))
+      "animation-changed" (case change
+                            "added" (tr "penforge.build.change.animation-added" layer)
+                            "removed" (tr "penforge.build.change.animation-removed" layer)
+                            (tr "penforge.build.change.animation-changed" layer))
+      "navigation-added" (tr "penforge.build.change.navigation-added" source target trigger)
+      "navigation-removed" (tr "penforge.build.change.navigation-removed" source target)
+      "design-changed" (tr "penforge.build.change.design-changed")
+      "token-added" (tr "penforge.build.change.token-added" name value)
+      "token-removed" (tr "penforge.build.change.token-removed" name)
+      "token-changed" (tr "penforge.build.change.token-changed" name before after)
+      "flow-added" (tr "penforge.build.change.flow-added" name screen)
+      "flow-removed" (tr "penforge.build.change.flow-removed" name)
+      "flow-start-changed" (tr "penforge.build.change.flow-start-changed" name screen)
+      "design-system-changed" (tr "penforge.build.change.design-system-changed" before after)
+      text)))
+
+(defn- screen-change-status
+  [{:keys [status previous-name]}]
+  (case status
+    "added" (tr "penforge.build.changes.status.added")
+    "removed" (tr "penforge.build.changes.status.removed")
+    "renamed" (tr "penforge.build.changes.status.renamed" previous-name)
+    (if (seq previous-name)
+      (tr "penforge.build.changes.status.changed-renamed" previous-name)
+      (tr "penforge.build.changes.status.changed"))))
+
+(mf/defc change-items*
+  {::mf/private true}
+  [{:keys [items more]}]
+  (when (or (seq items) (pos? (or more 0)))
+    [:ul {:class (stl/css :change-items)}
+     (for [[index item] (map-indexed vector items)]
+       [:li {:key index} (get-change-text item)])
+     (when (pos? (or more 0))
+       [:li {:class (stl/css :muted)} (tr "penforge.build.changes.more" more)])]))
+
+(mf/defc change-list*
+  "Design changes since the last build, grouped by screen, then tokens,
+  flows and the design system."
+  [{:keys [changes]}]
+  (let [{:keys [screens tokens flows design-system baseline]} changes]
+    [:div {:class (stl/css :changes) :data-testid "penforge-build-changes"}
+     (when (= "hashes" baseline)
+       [:> text* {:as "p" :typography t/body-small :class (stl/css :muted)}
+        (tr "penforge.build.changes.hashes-note")])
+     (when (seq screens)
+       [:section {:class (stl/css :section)}
+        [:> text* {:as "h3" :typography t/headline-small :class (stl/css :section-title)}
+         (tr "penforge.build.changes.screens")]
+        [:ul {:class (stl/css :screens)}
+         (for [{:keys [board-id name items more] :as screen} screens]
+           [:li {:key board-id :class (stl/css :change-screen)}
+            [:div {:class (stl/css :screen)}
+             [:span {:class (stl/css :screen-name)} name]
+             [:span {:class (stl/css :badge :badge-changed)} (screen-change-status screen)]]
+            [:> change-items* {:items items :more more}]])]])
+     (when (seq tokens)
+       [:section {:class (stl/css :section)}
+        [:> text* {:as "h3" :typography t/headline-small :class (stl/css :section-title)}
+         (tr "penforge.build.changes.tokens")]
+        [:> change-items* {:items tokens}]])
+     (when (seq flows)
+       [:section {:class (stl/css :section)}
+        [:> text* {:as "h3" :typography t/headline-small :class (stl/css :section-title)}
+         (tr "penforge.build.changes.flows")]
+        [:> change-items* {:items flows}]])
+     (when (some? design-system)
+       [:section {:class (stl/css :section)}
+        [:> text* {:as "h3" :typography t/headline-small :class (stl/css :section-title)}
+         (tr "penforge.build.changes.design-system")]
+        [:> change-items* {:items [design-system]}]])]))
+
+(mf/defc review-view*
+  {::mf/private true}
+  [{:keys [build kept-instructions]}]
+  (let [{:keys [changes token-only last-build] n :count} (:result build)
+        nothing?     (not (pos? (or n 0)))
+        fields       (use-instructions kept-instructions)
+        has-text?    (seq (str/trim (:text fields)))
+        can-update?  (or (not nothing?) has-text?)
+        instructions (build/get-instructions fields)
+        on-confirm   (mf/use-fn
+                      (mf/deps instructions)
+                      #(st/emit! (build/confirm-update instructions)))
+        on-cancel    (mf/use-fn #(st/emit! (build/cancel)))]
+    [:*
+     [:div {:class (stl/css :body)}
+      [:> text* {:as "p" :typography t/body-medium}
+       (cond
+         nothing? (tr "penforge.build.changes.none")
+         (some? last-build) (tr "penforge.build.changes.intro" (:label last-build))
+         :else (tr "penforge.build.changes.intro-unknown"))]
+      (when-not nothing?
+        [:> change-list* {:changes changes}])
+      (when token-only
+        [:> text* {:as "p" :typography t/body-small :class (stl/css :muted)}
+         (tr "penforge.build.changes.token-only")])
+      [:> instructions-fields* {:text (:text fields)
+                                   :keep (:keep fields)
+                                   :kept (:kept fields)
+                                   :on-text (:on-text fields)
+                                   :on-keep (:on-keep fields)
+                                   :on-kept (:on-kept fields)}]]
+     [:footer {:class (stl/css :footer)}
+      [:> button* {:variant "secondary" :on-click on-cancel}
+       (tr "penforge.build.plan.not-now")]
+      [:> button* {:variant "primary"
+                   :disabled (not can-update?)
+                   :on-click on-confirm}
+       (tr "penforge.build.changes.confirm")]]]))
+
+(mf/defc question-card*
+  "Open question of the build (an instruction that conflicts with the
+  design), answered here."
+  {::mf/private true}
+  [{:keys [question]}]
+  (let [on-click (mf/use-fn
+                  (fn [event]
+                    (st/emit! (build/answer (-> (dom/get-current-target event)
+                                                (dom/get-data "option"))))))]
+    [:div {:class (stl/css :question-card) :role "alert"}
+     [:> markdown* {:text (or (:text question) "")}]
+     [:div {:class (stl/css :question-options)}
+      (for [{:keys [id label]} (:options question)]
+        [:> button* {:key id
+                     :variant (if (= id "instruction") "secondary" "primary")
+                     :data-option id
+                     :on-click on-click}
+         (case id
+           "design" (tr "penforge.build.question.design")
+           "instruction" (tr "penforge.build.question.instruction")
+           label)])]]))
 
 ;; --- Plan
 
@@ -212,7 +427,7 @@
 
 (mf/defc plan-view*
   {::mf/private true}
-  [{:keys [plan persona]}]
+  [{:keys [plan persona kept-instructions]}]
   (let [{:keys [summary mode screens developer]} plan
         developer?   (and (= persona :developer) (some? developer))
         nothing?     (= "none" mode)
@@ -220,6 +435,8 @@
         stack-name*  (mf/use-state #(get-in developer [:stack :name] ""))
         routes*      (mf/use-state #(initial-routes developer))
         notes*       (mf/use-state "")
+        fields       (use-instructions kept-instructions)
+        instructions (build/get-instructions fields)
 
         on-stack-name
         (mf/use-fn #(reset! stack-name* (dom/get-target-val %)))
@@ -232,13 +449,14 @@
 
         on-confirm
         (mf/use-fn
-         (mf/deps developer? developer)
+         (mf/deps developer? developer instructions)
          (fn []
            (st/emit! (build/confirm
                       (when developer?
                         (get-overrides developer {:stack-name @stack-name*
                                                   :routes @routes*
-                                                  :notes @notes*}))))))
+                                                  :notes @notes*}))
+                      instructions))))
 
         on-cancel
         (mf/use-fn #(st/emit! (build/cancel)))]
@@ -264,6 +482,13 @@
                              :on-stack-name on-stack-name
                              :on-route on-route
                              :on-notes on-notes}])
+      (when-not nothing?
+        [:> instructions-fields* {:text (:text fields)
+                                   :keep (:keep fields)
+                                   :kept (:kept fields)
+                                   :on-text (:on-text fields)
+                                   :on-keep (:on-keep fields)
+                                   :on-kept (:on-kept fields)}])
       [:> text* {:as "p" :typography t/body-medium :class (stl/css :question)}
        (cond
          nothing? (tr "penforge.build.plan.nothing-question")
@@ -286,7 +511,9 @@
     [:*
      [:div {:class (stl/css :body)}
       [:> text* {:as "p" :typography t/body-medium}
-       (tr "penforge.build.planning")]
+       (if (= "build-changes" (:workflow build))
+         (tr "penforge.build.changes.checking")
+         (tr "penforge.build.planning"))]
       [:> steps* {:steps (:steps build) :activity (:activity build) :persona persona}]]
      [:footer {:class (stl/css :footer)}
       [:> button* {:variant "secondary" :on-click on-cancel}
@@ -300,7 +527,11 @@
     [:*
      [:div {:class (stl/css :body)}
       [:> text* {:as "p" :typography t/body-medium}
-       (tr "penforge.build.building")]
+       (if (:update build)
+         (tr "penforge.build.updating")
+         (tr "penforge.build.building"))]
+      (when-let [question (:question build)]
+        [:> question-card* {:question question}])
       [:> steps* {:steps (:steps build) :activity (:activity build) :persona persona}]
       (when (= persona :developer)
         [:> logs* {:logs (:logs build)}])]
@@ -314,6 +545,8 @@
   {::mf/private true}
   [{:keys [build persona]}]
   (let [{:keys [result logs]} build
+        {:keys [mode token-only assets change-request]} result
+        nothing? (= "none" mode)
         commit   (:commit result)
         on-close (mf/use-fn #(st/emit! (build/close)))
         on-open  (mf/use-fn #(st/emit! (build/open-preview)))]
@@ -321,9 +554,28 @@
      [:div {:class (stl/css :body :done)}
       [:> icon* {:icon-id i/tick :size "l" :class (stl/css :step-done)}]
       [:> text* {:as "p" :typography t/headline-small}
-       (tr "penforge.build.done.title")]
+       (cond
+         nothing? (tr "penforge.build.done.nothing")
+         (:update build) (tr "penforge.build.done.updated")
+         :else (tr "penforge.build.done.title"))]
+      (when token-only
+        [:> text* {:as "p" :typography t/body-small :class (stl/css :muted)}
+         (tr "penforge.build.done.tokens-only")])
+      (when (seq assets)
+        [:section {:class (stl/css :section)}
+         [:> text* {:as "h3" :typography t/headline-small :class (stl/css :section-title)}
+          (tr "penforge.build.done.assets")]
+         [:ul {:class (stl/css :change-items)}
+          (for [{:keys [file source license]} assets]
+            [:li {:key file}
+             (if (= persona :developer)
+               (str file " — " source (when (seq license) (str " (" license ")")))
+               (str source (when (seq license) (str " (" license ")"))))])]])
       (when (= persona :developer)
         [:*
+         (when (string? change-request)
+           [:> text* {:as "p" :typography t/body-small :class (stl/css :muted)}
+            (tr "penforge.build.dev.change-request" change-request)])
          (when (string? commit)
            [:> text* {:as "p" :typography t/body-small :class (stl/css :muted)}
             (tr "penforge.build.dev.commit" (subs commit 0 (min 10 (count commit))))])
@@ -331,8 +583,9 @@
      [:footer {:class (stl/css :footer)}
       [:> button* {:variant "secondary" :on-click on-close}
        (tr "penforge.build.close")]
-      [:> button* {:variant "primary" :on-click on-open}
-       (tr "penforge.build.done.open-preview")]]]))
+      (when-not nothing?
+        [:> button* {:variant "primary" :on-click on-open}
+         (tr "penforge.build.done.open-preview")])]]))
 
 (defn- get-error-message
   [{:keys [failure-code error]}]
@@ -342,6 +595,7 @@
     (= failure-code "stale-plan") (tr "penforge.build.failed.stale-plan")
     (= failure-code "busy") (tr "penforge.build.failed.busy")
     (= failure-code "gave-up") (tr "penforge.build.failed.gave-up")
+    (= failure-code "no-build") (tr "penforge.build.failed.no-build")
     (= error "not-connected") (tr "penforge.build.error.not-connected")
     :else (tr "penforge.build.error.generic")))
 
@@ -377,14 +631,21 @@
 ;; --- Dialog
 
 (mf/defc build-view*
-  "Content of the build dialog for a build state and a persona."
-  [{:keys [build persona]}]
+  "Content of the build dialog for a build state and a persona.
+  `kept-instructions` are the kept instructions for the AI (W34)."
+  [{:keys [build persona kept-instructions]}]
   (let [stage (:stage build)]
     (cond
-      (= stage :planning) [:> planning-view* {:build build :persona persona}]
+      (contains? #{:planning :changes} stage) [:> planning-view* {:build build :persona persona}]
       (= stage :plan) [:> plan-view* {:key (get-in build [:plan :plan-id])
                                       :plan (:plan build)
-                                      :persona persona}]
+                                      :persona persona
+                                      :kept-instructions kept-instructions}]
+      ;; the change list's own answer carries the kept instructions
+      (= stage :review) [:> review-view* {:key (:rid build)
+                                          :build build
+                                          :kept-instructions (or (get-in build [:result :kept-instructions])
+                                                                 kept-instructions)}]
       (= stage :building) [:> building-view* {:build build :persona persona}]
       (= stage :done) [:> done-view* {:build build :persona persona}]
       (= stage :error) [:> error-view* {:build build :persona persona}]
@@ -396,6 +657,8 @@
   []
   (let [build    (mf/deref ref:build)
         persona  (mf/deref ref:persona)
+        kept     (mf/deref ref:kept-instructions)
+        update?  (or (contains? #{:changes :review} (:stage build)) (:update build))
         on-close (mf/use-fn #(st/emit! (build/close)))]
     [:div {:class (stl/css :modal-overlay)}
      [:div {:class (stl/css :modal-dialog)
@@ -405,9 +668,11 @@
       [:header {:class (stl/css :header)}
        [:> text* {:as "h2" :id "penforge-build-title"
                   :typography t/headline-medium :class (stl/css :title)}
-        (tr "penforge.build.title")]
+        (if update?
+          (tr "penforge.build.update-title")
+          (tr "penforge.build.title"))]
        [:> icon-button* {:variant "ghost"
                          :icon i/close
                          :aria-label (tr "penforge.build.close")
                          :on-click on-close}]]
-      [:> build-view* {:build build :persona persona}]]]))
+      [:> build-view* {:build build :persona persona :kept-instructions kept}]]]))
