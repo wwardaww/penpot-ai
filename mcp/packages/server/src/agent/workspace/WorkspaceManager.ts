@@ -94,6 +94,8 @@ export class WorkspaceManager {
         const fileIds = new Set(previous?.fileIds ?? []);
         fileIds.add(context.fileId);
         const info: ProjectInfo = {
+            // keys other features keep in the file (W30 `designSystem`)
+            ...previous,
             projectId: context.projectId,
             projectName: context.projectName ?? previous?.projectName,
             teamId: context.teamId,

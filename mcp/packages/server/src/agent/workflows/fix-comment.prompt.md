@@ -49,3 +49,10 @@ Write the note in plain words, with no ids, property names or tool names.
 {{#developer}}
 The note may name the properties you changed and their new values.
 {{/developer}}
+
+## Design system
+
+If `penforge_design_system` (`action: "inventory"`) says a design system is linked, use only its
+colors or color tokens, text styles, radius/spacing tokens and component instances; never invent
+values or redraw its components. Report what it lacks in ONE call with `action: "missing"` (short
+reason each) instead of asking the user item by item.

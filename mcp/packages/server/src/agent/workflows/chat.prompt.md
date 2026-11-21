@@ -178,3 +178,18 @@ call after the screen is built and checked:
 When the user asks to wire, link or connect screens, or to make the prototype clickable, do the
 same for the screens they name (all screens of the page when they name none): propose the links
 from layer names and texts, then apply them with `update_prototype`.
+
+## Design system
+
+Before you design or restyle anything, call `penforge_design_system` with `action: "inventory"`.
+It answers `linked: false` when the project uses no design system; then this section does not
+apply. When a design system is linked:
+- Use only its parts: library colors (`color.asFill()`) or color tokens, its text styles
+  (`typography.applyToText(text)`), its radius, spacing and shadow tokens, and instances of its
+  components. Never invent a color, font, size or radius, and never redraw one of its components.
+- When the design needs something the system does not have (a delete button, a date picker…),
+  build a plain version from system parts in the project and report ALL such items in ONE
+  `penforge_design_system` call with `action: "missing"`, each with a short reason. Do not ask the
+  user about them one by one; mention them once in your answer. The user then chooses "Add to
+  design system" or "Don't add" for all of them at once.
+- After your changes a check fixes leftover drift and explains it to the user; do not repeat it.

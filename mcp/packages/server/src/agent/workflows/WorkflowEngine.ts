@@ -15,6 +15,7 @@ import { AgentError, type AgentClient } from "../AgentClient";
 import { ToolSummary } from "../chat/toolSummary";
 import type { TurnRunner, TurnSetup } from "../chat/TurnRunner";
 import { WorkflowRegistry } from "./WorkflowRegistry";
+import { DesignSystemTurnCheck } from "../designsystem/conformance/TurnCheck";
 
 /** Pending question of a run. */
 interface PendingQuestion {
@@ -78,6 +79,8 @@ export class WorkflowEngine {
             if (run.abort.signal.aborted) {
                 throw new Error("cancelled");
             }
+            // W30: design workflows end with the design system check (never fails the run)
+            await DesignSystemTurnCheck.afterWorkflow(ctx, workflow.name);
             client.send({ type: "workflow.done", runId: run.runId, ok: true, summary: result?.summary ?? "Done" });
         } catch (error) {
             const reason = run.abort.signal.aborted ? "cancelled" : WorkflowEngine.describe(error);
