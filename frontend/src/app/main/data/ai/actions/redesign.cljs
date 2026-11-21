@@ -188,12 +188,16 @@
            (contains? #{fixed-code missing-code} (:code payload)))))
 
 (defn fold-check
-  "Folds a check message into the binding state."
-  [s {:keys [type code params summary payload]}]
+  "Folds a check message into the binding state; any other message
+  leaves it as it is."
+  [s {:keys [type code params summary payload] :as message}]
   (let [[code params text] (if (= "chat.tool" type)
                              [code params summary]
                              [(:code payload) (:params payload) (:text payload)])]
     (cond
+      (not (check-message? message))
+      s
+
       (= fixed-code code)
       (assoc s :fixed (fixed-of params text))
 

@@ -14,8 +14,7 @@
    [app.main.data.ai.actions.redesign :as rd]
    [app.main.store :as st]
    [app.main.ui.ds.buttons.button :refer [button*]]
-   [app.main.ui.ds.buttons.icon-button :refer [icon-button*]]
-   [app.main.ui.ds.foundations.assets.icon :as i]
+   [app.main.ui.ds.foundations.assets.icon :as i :refer [icon*]]
    [app.main.ui.ds.foundations.typography :as t]
    [app.main.ui.ds.foundations.typography.text :refer [text*]]
    [app.main.ui.ds.product.loader :refer [loader*]]
@@ -47,11 +46,13 @@
        [:div {:class (stl/css :section-header)}
         [:> text* {:as "h4" :typography t/body-large :class (stl/css :section-title)}
          (tr "penforge.design-system-binding.fixed.title" (i18n/c (or (:total fixed) (count lines))))]
-        [:> icon-button* {:variant "ghost"
-                          :type "button"
-                          :aria-label (tr "labels.close")
-                          :icon i/close
-                          :on-click on-dismiss}]]
+        ;; a plain button: the DS icon button's tooltip needs a real document
+        [:button {:type "button"
+                  :class (stl/css :dismiss)
+                  :aria-label (tr "labels.close")
+                  :title (tr "labels.close")
+                  :on-click on-dismiss}
+         [:> icon* {:icon-id i/close :size "s"}]]]
        [:ul {:class (stl/css :lines)}
         (for [[index line] (map-indexed vector (take 12 lines))]
           [:li {:key index :class (stl/css :line)} line])]
