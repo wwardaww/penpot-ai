@@ -10,6 +10,7 @@
   the instant auto named creation when the `:ai` flag is on."
   (:require-macros [app.main.style :as stl])
   (:require
+   [app.main.data.ai.actions.redesign :as rd]
    [app.main.data.dashboard :as dd]
    [app.main.data.event :as ev]
    [app.main.data.modal :as modal]
@@ -25,6 +26,7 @@
    [app.main.ui.ds.foundations.typography :as t]
    [app.main.ui.ds.foundations.typography.heading :refer [heading*]]
    [app.main.ui.ds.foundations.typography.text :refer [text*]]
+   [app.main.ui.workspace.ai.design-system.binding.picker :refer [design-system-field*]]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
    [cuerdas.core :as str]
@@ -48,6 +50,8 @@
         name      (deref name*)
         platform* (mf/use-state nil)
         platform  (deref platform*)
+        ds*       (mf/use-state nil)
+        ds        (deref ds*)
         valid     (can-create? name platform)
 
         options
@@ -73,10 +77,11 @@
 
         create
         (mf/use-fn
-         (mf/deps name platform valid)
+         (mf/deps name platform valid ds)
          (fn []
            (when valid
-             (st/emit! (-> (dd/create-project {:name (str/trim name)
+             (st/emit! (rd/remember-choice-for-new-project ds)
+                       (-> (dd/create-project {:name (str/trim name)
                                                :platform platform})
                            (with-meta {::ev/origin "dashboard:penforge-create-project"}))
                        (modal/hide)))))
@@ -131,7 +136,9 @@
                            :value platform
                            :label (tr "penforge.create-project.platform")
                            :on-change on-platform-change
-                           :on-submit create}]]]
+                           :on-submit create}]]
+       [:> design-system-field* {:team-id (:current-team-id @st/state)
+                                 :on-change #(reset! ds* %)}]]
 
       [:div {:class (stl/css :modal-footer)}
        [:> button* {:variant "secondary"
