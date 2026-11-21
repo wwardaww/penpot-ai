@@ -245,3 +245,52 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+// --- W34: change list, instructions, question
+
+.changes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-m);
+}
+
+.change-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xxs);
+}
+
+.change-items {
+  @include t.use-typography("body-small");
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xxs);
+  margin: 0;
+  padding-inline-start: var(--sp-l);
+  color: var(--color-foreground-primary);
+}
+
+.keep {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-s);
+  color: var(--color-foreground-secondary);
+  cursor: pointer;
+}
+
+.question-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  padding: var(--sp-m);
+  border: $b-1 solid var(--color-accent-warning);
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+}
+
+.question-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-s);
+}

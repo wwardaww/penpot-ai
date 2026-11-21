@@ -25,13 +25,16 @@
    [rumext.v2 :as mf]))
 
 (defn scope-items
-  "Visible actions of `scope` in `registry` with their enabled flag for
-  the app `state`."
+  "Visible actions of `scope` in `registry` with their enabled flag,
+  label and badge for the app `state` (label and badge may follow the
+  state, W34: Build / Update (n) / Up to date)."
   [registry scope state]
   (->> (actions/get-actions registry scope state)
        (mapv (fn [action]
-               {:action action
-                :enabled (actions/enabled? action state)}))))
+               (cond-> {:action action
+                        :enabled (actions/enabled? action state)
+                        :label (actions/get-label action)}
+                 (fn? (:badge action)) (assoc :badge ((:badge action) state)))))))
 
 (defn- use-scope-items
   "Visible actions of `scope` with their enabled flag, kept in sync with
@@ -64,7 +67,7 @@
 
 (mf/defc primary-action*
   {::mf/private true}
-  [{:keys [action enabled scope]}]
+  [{:keys [action enabled label badge scope]}]
   (let [on-click
         (mf/use-fn
          (mf/deps action scope)
@@ -73,7 +76,9 @@
                  :class (stl/css :primary-action)
                  :disabled (not enabled)
                  :on-click on-click}
-     (actions/get-label action)]))
+     label
+     (when (some? badge)
+       [:span {:class (stl/css :primary-badge)} badge])]))
 
 (mf/defc menu-action*
   {::mf/private true}
@@ -120,10 +125,12 @@
         (mf/use-fn #(reset! show-menu* false))]
     (when (seq items)
       [:div {:class (stl/css :header-strip)}
-       (for [{:keys [action enabled]} primary-items]
+       (for [{:keys [action enabled label badge]} primary-items]
          [:> primary-action* {:key (str (:id action))
                               :action action
                               :enabled enabled
+                              :label label
+                              :badge badge
                               :scope :header}])
        (when (seq menu-items)
          [:div {:class (stl/css :menu-wrapper)}
@@ -148,8 +155,10 @@
   (let [items (use-scope-items :island)]
     (when (seq items)
       [:div {:class (stl/css :island-actions)}
-       (for [{:keys [action enabled]} items]
+       (for [{:keys [action enabled label badge]} items]
          [:> primary-action* {:key (str (:id action))
                               :action action
                               :enabled enabled
+                              :label label
+                              :badge badge
                               :scope :island}])])))

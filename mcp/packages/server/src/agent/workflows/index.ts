@@ -33,3 +33,4 @@ export { workflow as designSystemExtract } from "./design-system-extract";
 export { workflow as projectRead } from "./project-read";
 export { workflow as codeRedesign } from "./code-redesign";
 export { workflow as gameUiExport } from "./game-ui-export";
+export { workflow as buildChanges } from "./build-changes";

@@ -14053,3 +14053,258 @@ msgstr "Game screens"
 #: src/app/main/ui/workspace/ai/generate/dialog.cljs
 msgid "penforge.generate.platform.game"
 msgstr "Game"
+
+# penforge:W34
+
+
+#: src/app/main/data/ai/actions/build.cljs
+msgid "penforge.build.update"
+msgstr "Update"
+
+#: src/app/main/data/ai/actions/build.cljs
+msgid "penforge.build.up-to-date"
+msgstr "Up to date"
+
+#: src/app/main/data/ai/actions/build.cljs
+msgid "penforge.actions.build-instructions"
+msgstr "Update with instructions…"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.update-title"
+msgstr "Update app"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.updating"
+msgstr "Updating your app. You can close this window; the update goes on."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.step.changes"
+msgstr "Listing what changed"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.step.apply"
+msgstr "Updating the whole app"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.failed.no-build"
+msgstr "There is no app to update yet. Press Build first."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.instructions.label"
+msgstr "Instructions for the AI"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.instructions.placeholder"
+msgstr "What the design can't show, e.g. \"play a sound on every move\", \"save games on this device\", \"use this API\"."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.instructions.keep"
+msgstr "Keep for next builds"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.instructions.kept"
+msgstr "Kept instructions (every build reads them)"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.instructions.kept-hint"
+msgstr "Edit or delete them here. They never override the design system or the prototype flows."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.changes.checking"
+msgstr "Looking at what changed since the last build…"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.changes.intro"
+msgstr "Changes since %s:"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.changes.intro-unknown"
+msgstr "Changes since the last build:"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.changes.none"
+msgstr "Nothing changed in the design since the last build. You can still give the AI new instructions."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.changes.hashes-note"
+msgstr "This app was built before Penforge kept track of changes, so the list names the changed screens without details."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.changes.token-only"
+msgstr "Only design tokens changed: the app's theme follows them without rebuilding screens."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.changes.confirm"
+msgstr "Update the app"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.changes.screens"
+msgstr "Screens"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.changes.tokens"
+msgstr "Design tokens"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.changes.flows"
+msgstr "Prototype flows"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.changes.design-system"
+msgstr "Design system"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.changes.more"
+msgstr "…and %s more changes"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.changes.status.added"
+msgstr "New"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.changes.status.removed"
+msgstr "Removed"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.changes.status.renamed"
+msgstr "Renamed from %s"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.changes.status.changed"
+msgstr "Changed"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.changes.status.changed-renamed"
+msgstr "Changed, was %s"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.text-changed"
+msgstr "Text of \"%s\" changed from \"%s\" to \"%s\""
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.layer-added"
+msgstr "Added \"%s\""
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.layer-removed"
+msgstr "Removed \"%s\""
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.layer-renamed"
+msgstr "Renamed \"%s\" to \"%s\""
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.fill-changed"
+msgstr "New fill color on \"%s\""
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.stroke-changed"
+msgstr "New border on \"%s\""
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.typography-changed"
+msgstr "New text style on \"%s\""
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.layout-changed"
+msgstr "New spacing or alignment in \"%s\""
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.size-changed"
+msgstr "\"%s\" resized from %s to %s"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.component-swapped"
+msgstr "\"%s\" now uses the component \"%s\""
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.image-changed"
+msgstr "New image in \"%s\""
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.shown"
+msgstr "\"%s\" is shown again"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.hidden"
+msgstr "\"%s\" is hidden"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.animation-added"
+msgstr "New animation on \"%s\""
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.animation-removed"
+msgstr "Animation removed from \"%s\""
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.animation-changed"
+msgstr "Animation of \"%s\" changed"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.navigation-added"
+msgstr "\"%s\" now opens \"%s\" (%s)"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.navigation-removed"
+msgstr "\"%s\" no longer opens \"%s\""
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.design-changed"
+msgstr "The design of this screen changed"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.token-added"
+msgstr "New token \"%s\" (%s)"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.token-removed"
+msgstr "Token \"%s\" removed"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.token-changed"
+msgstr "Token \"%s\" changed from %s to %s"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.flow-added"
+msgstr "New flow \"%s\" starting at \"%s\""
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.flow-removed"
+msgstr "Flow \"%s\" removed"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.flow-start-changed"
+msgstr "Flow \"%s\" now starts at \"%s\""
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.change.design-system-changed"
+msgstr "Design system changed from %s to %s"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.question.design"
+msgstr "Keep the design"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.question.instruction"
+msgstr "Follow my instructions"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.done.updated"
+msgstr "Your app is up to date with the design."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.done.nothing"
+msgstr "Nothing to update: your app already matches the design."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.done.tokens-only"
+msgstr "The app's theme now follows your design tokens. No screen had to be rebuilt."
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.done.assets"
+msgstr "Assets the AI added"
+
+#: src/app/main/ui/workspace/ai/build/dialog.cljs
+msgid "penforge.build.dev.change-request"
+msgstr "Change request %s"

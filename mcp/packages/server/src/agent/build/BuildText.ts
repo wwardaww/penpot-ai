@@ -3,7 +3,19 @@ import type { CommandOutcome } from "./CommandExecutor";
 
 /** Step of a build, as reported in `progress` events (`payload.step`). */
 export type BuildStep =
-    "read" | "plan" | "prepare" | "prebuild" | "scaffold" | "screen" | "cleanup" | "install" | "check" | "fix" | "save";
+    | "read"
+    | "plan"
+    | "prepare"
+    | "changes"
+    | "prebuild"
+    | "scaffold"
+    | "apply"
+    | "screen"
+    | "cleanup"
+    | "install"
+    | "check"
+    | "fix"
+    | "save";
 
 /**
  * Wording of the build pipeline for the two personas.
@@ -29,6 +41,10 @@ export class BuildText {
                 return dev ? "Planning the app structure" : "Working out how the app will work";
             case "prepare":
                 return "Getting ready";
+            case "changes":
+                return dev ? "Writing the change request" : "Listing what changed";
+            case "apply":
+                return dev ? `Applying ${detail ?? "the change request"} to the whole app` : "Updating the whole app";
             case "prebuild":
                 return dev ? `Running ${detail}` : "Preparing the design for the app";
             case "scaffold":
@@ -104,6 +120,35 @@ export class BuildText {
         return this.isDeveloper
             ? "The plan is out of date or missing; run build-plan again."
             : "The design changed since the plan was made. Please press Build again.";
+    }
+
+    public noBuild(): string {
+        return this.isDeveloper
+            ? "No earlier build to update (map.json, stack.json or app-src/package.json missing); run a full build."
+            : "There is no app to update yet. Press Build first.";
+    }
+
+    /** Question about instructions that conflict with the design. */
+    public conflictQuestion(list: string): string {
+        return this.isDeveloper
+            ? `These instructions conflict with the design system or the prototype flows, so they were not applied:
+
+${list}
+
+Keep the design or follow the instructions?`
+            : `Some of your instructions don't fit the design, so I left them out:
+
+${list}
+
+Should I keep the design as it is, or follow your instructions?`;
+    }
+
+    public keepDesign(): string {
+        return "Keep the design";
+    }
+
+    public followInstruction(): string {
+        return "Follow my instructions";
     }
 
     public busy(): string {

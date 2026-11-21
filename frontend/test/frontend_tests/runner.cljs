@@ -172,6 +172,7 @@
    [frontend-tests.tokens.tokenscript-test]
    [frontend-tests.tokens.typography-form-test]
    [frontend-tests.tokens.workspace-tokens-remap-test]
+   [frontend-tests.ui.ai-build-changes-test]
    [frontend-tests.ui.ai-build-test]
    [frontend-tests.ui.ai-chat-markdown-test]
    [frontend-tests.ui.ai-chat-ux-test]
@@ -430,6 +431,7 @@
    'frontend-tests.ui.ai-design-system-test
    'frontend-tests.ui.ai-linked-test
    'frontend-tests.ui.ai-build-test
+   'frontend-tests.ui.ai-build-changes-test
    'frontend-tests.ui.ai-preview-pane-test
    'frontend-tests.ui.ai-chat-markdown-test
    'frontend-tests.ui.ai-chat-ux-test
