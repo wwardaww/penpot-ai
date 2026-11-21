@@ -65,6 +65,8 @@ export interface DataLayout {
     assets: string;
     logs: string;
     tmp: string;
+    /** Google Fonts files downloaded once (desktop gateway). */
+    fontCache: string;
     stateFile: string;
 }
 
@@ -75,6 +77,7 @@ export function dataLayout(root: string): DataLayout {
         assets: join(root, "assets"),
         logs: join(root, "logs"),
         tmp: join(root, "tmp"),
+        fontCache: join(root, "font-cache"),
         stateFile: join(root, "desktop.json"),
     };
 }

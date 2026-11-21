@@ -8,6 +8,7 @@ import { randomFreePort } from "../net/ports";
 import { tempDir } from "../testing/helpers";
 import { configJs } from "./configJs";
 import { allowedHost, Gateway, safeJoin } from "./Gateway";
+import { GoogleFonts } from "./GoogleFonts";
 
 interface Answer {
     status?: number;
@@ -58,6 +59,7 @@ describe("Gateway", () => {
     let gateway: Gateway;
     const backendSockets = new Set<import("node:net").Socket>();
     const seen: { method?: string; url?: string; body: string; forwardedFor?: string }[] = [];
+    const fontRequests: string[] = [];
 
     before(async () => {
         const frontend = join(temp.dir, "frontend");
@@ -109,6 +111,14 @@ describe("Gateway", () => {
             assetsDir: assets,
             backendPort,
             configJs: () => configJs({ origin: `http://127.0.0.1:${gatewayPort}`, agentPort: 7001, bridgePort: 7002, version: "1.2.3" }),
+            googleFonts: new GoogleFonts({
+                cacheDir: join(temp.dir, "font-cache"),
+                fetch: async (url) => {
+                    fontRequests.push(url);
+                    const body = url.includes("/css?") ? "@font-face{font-family:'Inter'}" : "FONTDATA";
+                    return { ok: true, status: 200, arrayBuffer: async () => new TextEncoder().encode(body).buffer as ArrayBuffer };
+                },
+            }),
         });
         await gateway.start();
     });
@@ -216,5 +226,30 @@ describe("Gateway", () => {
         });
         assert.match(reply, /101 Switching Protocols/);
         assert.match(reply, /ping$/);
+    });
+
+    it("answers the Google Fonts routes and keeps font files on disk", async () => {
+        const css = await call(gatewayPort, "/internal/gfonts/css?family=Inter:400,700&display=block");
+        assert.equal(css.status, 200);
+        assert.match(String(css.headers["content-type"]), /text\/css/);
+        assert.match(css.body, /Inter/);
+        assert.equal(fontRequests.at(-1), "https://fonts.googleapis.com/css?family=Inter:400,700&display=block");
+
+        const path = "/internal/gfonts/font/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuLyfAZ9hiA.woff2";
+        const font = await call(gatewayPort, path);
+        assert.equal(font.status, 200);
+        assert.equal(font.headers["content-type"], "font/woff2");
+        assert.equal(font.body, "FONTDATA");
+        const asked = fontRequests.length;
+        const again = await call(gatewayPort, path);
+        assert.equal(again.body, "FONTDATA");
+        assert.equal(fontRequests.length, asked, "the second load comes from the disk cache");
+    });
+
+    it("never answers an internal route with the app page", async () => {
+        assert.equal((await call(gatewayPort, "/internal/gfonts/font/../secret.txt")).status, 404);
+        const other = await call(gatewayPort, "/internal/somewhere/else");
+        assert.equal(other.status, 404);
+        assert.doesNotMatch(other.body, /penpot/);
     });
 });

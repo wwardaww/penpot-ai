@@ -2,6 +2,7 @@ import { createReadStream, statSync } from "node:fs";
 import { Agent, createServer, request as httpRequest, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { connect, type Socket } from "node:net";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { GoogleFonts } from "./GoogleFonts";
 
 const CONTENT_TYPES: Record<string, string> = {
     ".html": "text/html; charset=utf-8",
@@ -37,6 +38,8 @@ export interface GatewayOptions {
     backendPort: number;
     /** Body of `/js/config.js`. */
     configJs: () => string;
+    /** The Google Fonts routes (`/internal/gfonts/...`); without it they answer 404. */
+    googleFonts?: GoogleFonts;
 }
 
 /** Paths answered by the backend. */
@@ -150,11 +153,34 @@ export class Gateway {
             this.plain(res, 405, "method not allowed");
             return;
         }
+        // web server routes of Penpot (nginx in the docker images); never the app page
+        if (path.startsWith("/internal/")) {
+            if (this.options.googleFonts && GoogleFonts.handles(path)) {
+                this.serveFont(req, res, this.options.googleFonts, path, url.search);
+            } else {
+                this.plain(res, 404, "not found");
+            }
+            return;
+        }
         if (this.options.mcpPluginDir && (path === "/plugins/mcp" || path.startsWith("/plugins/mcp/"))) {
             this.serveStatic(req, res, this.options.mcpPluginDir, path.slice("/plugins/mcp".length) || "/index.html", false);
             return;
         }
         this.serveStatic(req, res, this.options.frontendDir, path === "/" ? "/index.html" : path, true);
+    }
+
+    private serveFont(req: IncomingMessage, res: ServerResponse, fonts: GoogleFonts, path: string, search: string): void {
+        fonts.answer(path, search).then(
+            (answer) => {
+                res.writeHead(answer.status, {
+                    "content-type": answer.contentType,
+                    "content-length": answer.body.length,
+                    "cache-control": answer.cache,
+                });
+                res.end(req.method === "HEAD" ? undefined : answer.body);
+            },
+            () => this.plain(res, 502, "font not available")
+        );
     }
 
     private serveStatic(req: IncomingMessage, res: ServerResponse, root: string, path: string, spaFallback: boolean): void {

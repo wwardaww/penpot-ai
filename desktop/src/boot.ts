@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { dataLayout, missingParts, runtimeLayout, type DataLayout, type RuntimeLayout } from "./config/layout";
 import { DesktopState } from "./config/DesktopState";
 import { Gateway } from "./gateway/Gateway";
+import { GoogleFonts } from "./gateway/GoogleFonts";
 import { configJs } from "./gateway/configJs";
 import { choosePorts } from "./net/ports";
 import { backendService } from "./services/backend";
@@ -121,6 +122,7 @@ export async function boot(options: BootOptions): Promise<RunningApp> {
         mcpPluginDir: runtime.mcpPluginDir,
         assetsDir: data.assets,
         backendPort: ports.backend,
+        googleFonts: new GoogleFonts({ cacheDir: data.fontCache }),
         configJs: () => configJs({
             origin: context.origin,
             agentPort: ports.agent,
