@@ -11,6 +11,9 @@ import { PenforgeOverviewTool } from "./PenforgeOverviewTool";
 import { ResolveCanvasCommentTool } from "./ResolveCanvasCommentTool";
 import { UpdateDesignNodeTool } from "./UpdateDesignNodeTool";
 import { UpdatePrototypeTool } from "./UpdatePrototypeTool";
+import { GetAnimationsTool } from "./GetAnimationsTool";
+import { GetAnimationSpecTool } from "./GetAnimationSpecTool";
+import { UpdateAnimationsTool } from "./UpdateAnimationsTool";
 import { VisualQaTool } from "../../agent/qa/VisualQaTool";
 import { TidyUpTool } from "../../agent/cleanup/TidyUpTool";
 
@@ -56,6 +59,10 @@ export class PenforgeTools {
             new TidyUpTool(mcpServer),
             // W27: prototype interactions and flows
             new UpdatePrototypeTool(mcpServer),
+            // W32: layer animations and the animation spec for the build
+            new GetAnimationsTool(mcpServer),
+            new UpdateAnimationsTool(mcpServer),
+            new GetAnimationSpecTool(mcpServer),
         ];
     }
 }

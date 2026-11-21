@@ -19,6 +19,8 @@ export class DesignToolFilter implements WorkflowToolFilter {
         "generate_code_hints",
         "capture_node_screenshot",
         "list_canvas_comments",
+        "get_animations",
+        "get_animation_spec",
         "penforge_overview",
         "high_level_overview",
         "penpot_api_info",
