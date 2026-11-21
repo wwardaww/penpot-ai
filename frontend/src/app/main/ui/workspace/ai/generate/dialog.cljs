@@ -38,7 +38,7 @@
 
 (defn- valid-platform
   [platform]
-  (if (contains? #{:web :mobile} platform) platform :web))
+  (if (contains? #{:web :mobile :game} platform) platform :web))
 
 (mf/defc generate-screen-dialog*
   "The dialog. Props (single-word keys, they arrive through the modal
@@ -59,13 +59,18 @@
         valid        (can-generate? prompt)
 
         platform-options
-        (mf/with-memo []
-          [{:id "penforge-generate-platform-web"
-            :label (tr "penforge.generate.platform.web")
-            :value "web"}
-           {:id "penforge-generate-platform-mobile"
-            :label (tr "penforge.generate.platform.mobile")
-            :value "mobile"}])
+        (mf/with-memo [platform]
+          (cond-> [{:id "penforge-generate-platform-web"
+                    :label (tr "penforge.generate.platform.web")
+                    :value "web"}
+                   {:id "penforge-generate-platform-mobile"
+                    :label (tr "penforge.generate.platform.mobile")
+                    :value "mobile"}]
+            ;; W38: Game UI projects design game screens (1920x1080)
+            (= platform :game)
+            (conj {:id "penforge-generate-platform-game"
+                   :label (tr "penforge.generate.platform.game")
+                   :value "game"})))
 
         on-prompt-change
         (mf/use-fn

@@ -15,6 +15,12 @@
   gap: var(--sp-m);
 }
 
+// four cards (W38 project types) sit two by two
+.cards-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-flow: row;
+}
+
 .card {
   --card-border-color: var(--color-background-quaternary);
   --card-background: var(--color-background-tertiary);

@@ -6,7 +6,7 @@
 
 (ns app.main.data.penforge
   "Penforge persona (designer/developer, a profile prop) and platform
-  (web/mobile, a per project setting).
+  (a per project setting: the project type, web/mobile/game/existing).
 
   Persona lives in `[:profile :props :penforge-persona]`. Project
   platforms live in `[:penforge-project-settings <project-id>]` once
@@ -25,7 +25,12 @@
 (log/set-level! :warn)
 
 (def personas #{:designer :developer})
-(def platforms #{:web :mobile})
+(def platforms #{:web :mobile :game :existing})
+
+(def linked-platforms
+  "Project types that design a new look for a folder on the user's
+  machine (W38): Game UI and Existing project."
+  #{:game :existing})
 
 (def default-persona :designer)
 
@@ -138,6 +143,25 @@
                     {:project-id project-id :platform platform})
            (rx/map #(project-settings-fetched [%]))))))
 
+(defn linked-platform?
+  "True for project types that work on a linked folder (W38)."
+  [platform]
+  (contains? linked-platforms (some-> platform keyword)))
+
+(defn design-platform
+  "The platform screens are designed for: `:game` for Game UI, the
+  platform detected in the linked code (`:web` or `:mobile`, web while
+  unknown) for an existing project, else the project platform (web
+  while unknown)."
+  [platform detected]
+  (let [platform (some-> platform keyword)
+        detected (some-> detected keyword)]
+    (cond
+      (= platform :game)     :game
+      (= platform :existing) (if (= detected :mobile) :mobile :web)
+      (= platform :mobile)   :mobile
+      :else                  :web)))
+
 ;; --- Seed boards of a new file
 
 (def ^:private safe-area-color "#FF3277")
@@ -153,6 +177,10 @@
     :mobile [{:name "iPhone" :width 390 :height 844
               :guides [47 (- 844 34)]}
              {:name "Android" :width 412 :height 915}]
+    ;; W38: game UI is designed at 1920x1080 (the default game preset);
+    ;; an existing project starts empty, the AI draws its current
+    ;; screens after reading the linked folder.
+    :game   [{:name "Main Menu" :width 1920 :height 1080}]
     []))
 
 (def ^:private board-gap 100)
@@ -204,7 +232,10 @@
   [state {:keys [id project-id data revn vern features] :as file}]
   (let [platform (get-project-platform state project-id)
         page-id  (-> data :pages first)]
-    (if (and (enabled?) (contains? platforms platform) (uuid? page-id))
+    (if (and (enabled?)
+             (contains? platforms platform)
+             (uuid? page-id)
+             (seq (platform-boards platform)))
       (->> (rp/cmd! :update-file
                     (cond-> {:id id
                              :session-id (or (:session-id state) cf/session-id)

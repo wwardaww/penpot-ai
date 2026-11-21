@@ -20,3 +20,8 @@
 .badge-mobile {
   color: var(--color-accent-primary);
 }
+
+.badge-linked {
+  color: var(--color-foreground-primary);
+  border-color: var(--color-accent-primary-muted);
+}

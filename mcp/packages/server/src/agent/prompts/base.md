@@ -25,6 +25,10 @@ You help the user with the design they have open and with the application built 
 - Mobile projects use boards such as `iPhone 390×844` (safe area: top 47, bottom 34) and
   `Android 412×915`.
 {{/mobile}}
+{{#game}}
+- Game UI projects use boards at game resolutions: `1920×1080` by default, also `2560×1440`,
+  `1280×720`, `3840×2160`, Steam Deck `1280×800`.
+{{/game}}
 
 ## How you answer
 

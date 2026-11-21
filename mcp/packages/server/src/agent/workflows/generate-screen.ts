@@ -1,6 +1,9 @@
 import { readFile } from "fs/promises";
 import { join } from "path";
-import type { Attachment, Platform, Workflow, WorkflowContext } from "@penpot/mcp-common";
+import type { Attachment, ScreenPlatform, Workflow, WorkflowContext } from "@penpot/mcp-common";
+
+/** Kind of screen board: the web / mobile platforms, plus game screens (W38 Game UI projects). */
+export type Platform = ScreenPlatform | "game";
 import {
     type BoardInspection,
     type CreatedBoard,
@@ -46,10 +49,14 @@ export interface ScreenFrame {
     guides: number[];
 }
 
-/** Board per platform (architecture §8): desktop for web, iPhone with safe areas for mobile. */
+/**
+ * Board per platform (architecture §8): desktop for web, iPhone with safe areas for mobile, Full HD
+ * for a game screen (W38).
+ */
 export const SCREEN_FRAMES: Record<Platform, ScreenFrame> = {
     web: { label: "Desktop", width: 1440, height: 1024, guides: [] },
     mobile: { label: "iPhone", width: 390, height: 844, guides: [47, 844 - 34] },
+    game: { label: "Game 1920×1080", width: 1920, height: 1080, guides: [] },
 };
 
 /** Space between the new board and the layers already on the page. */
@@ -115,7 +122,7 @@ export function parseParams(raw: unknown, defaultPlatform: Platform | undefined)
         throw new Error(`The prompt is too long (max ${MAX_PROMPT_LENGTH} characters)`);
     }
     const platform = params.platform ?? defaultPlatform ?? "web";
-    if (platform !== "web" && platform !== "mobile") {
+    if (platform !== "web" && platform !== "mobile" && platform !== "game") {
         throw new Error(`Unknown platform ${JSON.stringify(platform)}`);
     }
     const targetPageId = params.targetPageId;
@@ -437,7 +444,7 @@ export function createGenerateScreenWorkflow(deps: GenerateScreenDeps = defaultD
         name: "generate-screen",
         description: "Design a new screen on the canvas from a prompt, with the file's design system.",
         run: async (ctx, raw) => {
-            const params = parseParams(raw, ctx.context.platform);
+            const params = parseParams(raw, ctx.context.projectType === "game" ? "game" : ctx.context.platform);
             const frame = SCREEN_FRAMES[params.platform];
 
             progress(ctx, "design-system");

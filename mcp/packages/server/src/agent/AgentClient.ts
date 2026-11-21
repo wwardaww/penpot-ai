@@ -2,12 +2,15 @@ import type { AgentErrorCode, DaemonMessage } from "@penpot/mcp-common";
 import type { TurnSetup } from "./chat/TurnRunner";
 
 /**
- * Error reported to the client as an `error` message with the given code.
+ * Error reported to the client as an `error` message with the given code (and, optionally, a finer
+ * `reason` code with `params` that the client translates).
  */
 export class AgentError extends Error {
     constructor(
         public readonly code: AgentErrorCode,
-        message: string
+        message: string,
+        public readonly reason?: string,
+        public readonly params?: Record<string, unknown>
     ) {
         super(message);
         this.name = "AgentError";

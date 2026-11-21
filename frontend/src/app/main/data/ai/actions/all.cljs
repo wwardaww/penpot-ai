@@ -24,6 +24,7 @@
    [app.main.data.ai.actions.generate]
    [app.main.data.ai.actions.prototype]
    [app.main.data.ai.actions.publish]
+   [app.main.data.ai.actions.redesign-code]
    [app.main.data.ai.actions.token-sync]
    ;; W36: name dialog of "Create design system from this file"
    [app.main.ui.dashboard.penforge.design-systems.from-file]

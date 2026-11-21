@@ -1,13 +1,15 @@
-import type { AgentContext } from "@penpot/mcp-common";
+import type { AgentContext, Platform } from "@penpot/mcp-common";
 import { createLogger } from "../../logger";
+import { type ProjectLink, type ProjectLinkFields, ProjectLinkRecord } from "../linked/ProjectLink";
 import { ProjectWorkspace } from "./ProjectWorkspace";
 
-/** Content of `.penforge/project.json`. */
-export interface ProjectInfo {
+/** Content of `.penforge/project.json` (with the W38 link fields of a linked project). */
+export interface ProjectInfo extends ProjectLinkFields {
     projectId: string;
     projectName?: string;
     teamId: string;
-    platform: AgentContext["platform"];
+    /** the project type as chosen in Penpot */
+    platform: Platform;
     /** persona of the last user who opened the project */
     persona: AgentContext["persona"];
     fileIds: string[];
@@ -68,23 +70,61 @@ export class WorkspaceManager {
     }
 
     /**
+     * Stores or removes a project's link to a folder of this computer (W38) in `project.json`,
+     * in turn with the context updates, and applies it to the open workspace.
+     *
+     * @param projectId - the Penpot project id
+     * @param link - the link, or null to remove it
+     * @throws when `project.json` cannot be written
+     */
+    public async setLink(projectId: string, link: ProjectLink | null): Promise<ProjectWorkspace> {
+        const workspace = await this.get(projectId);
+        await this.queue(workspace, async () => {
+            const previous = await workspace.readJson<Partial<ProjectInfo> | null>("project.json", null);
+            const {
+                linkedRoot: _root,
+                linkedKind: _kind,
+                engine: _engine,
+                stack: _stack,
+                linkedAt: _at,
+                ...rest
+            } = previous ?? {};
+            const now = new Date().toISOString();
+            await workspace.writeJson("project.json", {
+                projectId,
+                createdAt: now,
+                ...rest,
+                ...(link ? ProjectLinkRecord.fields(link) : {}),
+                updatedAt: now,
+            });
+            workspace.setLink(link);
+        });
+        return workspace;
+    }
+
+    /**
      * Records the context in `project.json`, one update at a time per project. The file is
      * metadata only: a failed write is logged and never fails the client's session.
      */
     private record(workspace: ProjectWorkspace, context: AgentContext): Promise<void> {
         const key = workspace.projectId;
+        return this.queue(workspace, () => this.recordContext(workspace, context)).catch((error: unknown) => {
+            this.logger.warn("Could not update project.json of %s: %s", key, String(error));
+        });
+    }
+
+    /** Runs an update of `project.json` after the pending ones of the same project. */
+    private queue(workspace: ProjectWorkspace, update: () => Promise<void>): Promise<void> {
+        const key = workspace.projectId;
         const previous = this.records.get(key) ?? Promise.resolve();
-        const next = previous
-            .then(() => this.recordContext(workspace, context))
-            .catch((error: unknown) => {
-                this.logger.warn("Could not update project.json of %s: %s", key, String(error));
-            });
+        const next = previous.catch(() => undefined).then(update);
         this.records.set(key, next);
-        void next.then(() => {
+        const forget = () => {
             if (this.records.get(key) === next) {
                 this.records.delete(key);
             }
-        });
+        };
+        next.then(forget, forget);
         return next;
     }
 
@@ -94,10 +134,12 @@ export class WorkspaceManager {
         const fileIds = new Set(previous?.fileIds ?? []);
         fileIds.add(context.fileId);
         const info: ProjectInfo = {
+            // keeps the link (W38) and other fields written by other features
+            ...previous,
             projectId: context.projectId,
             projectName: context.projectName ?? previous?.projectName,
             teamId: context.teamId,
-            platform: context.platform,
+            platform: context.projectType ?? context.platform,
             persona: context.persona,
             fileIds: [...fileIds],
             createdAt: previous?.createdAt ?? now,

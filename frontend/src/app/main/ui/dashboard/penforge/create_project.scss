@@ -29,7 +29,9 @@
   border-radius: $br-8;
   background-color: var(--color-background-primary);
   border: $b-2 solid var(--color-background-quaternary);
-  inline-size: px2rem(520);
+  inline-size: px2rem(560);
+  max-block-size: calc(100vh - var(--sp-xxxl) * 2);
+  overflow-y: auto;
   max-inline-size: calc(100vw - var(--sp-xxxl) * 2);
 }
 
@@ -64,4 +66,26 @@
   display: flex;
   justify-content: flex-end;
   gap: var(--sp-s);
+}
+
+.folder-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+}
+
+.link-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.link-status-error {
+  color: var(--color-accent-error);
+}
+
+.link-text {
+  margin: 0;
 }

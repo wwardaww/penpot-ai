@@ -24,7 +24,8 @@ export class PathOutsideRootError extends Error {
  * alternate data streams (`file.txt:stream`).
  */
 export class PathGuard {
-    private readonly root: string;
+    /** the guarded root folder (resolved, not followed through links) */
+    public readonly root: string;
     private readonly platformPath: typeof path.posix;
     private readonly isWindows: boolean;
 
@@ -87,7 +88,7 @@ export class PathGuard {
      * Checks for UNC (`\\server\share`, `//server/share`), device (`\\?\`, `\\.\`) and drive-relative
      * (`C:foo`) paths, alternate data streams (`file.txt:stream`) and reserved device names.
      */
-    private static isSpecialWindowsPath(candidate: string): boolean {
+    public static isSpecialWindowsPath(candidate: string): boolean {
         if (/^[\\/]{2}/.test(candidate) || /^[a-zA-Z]:(?![\\/])/.test(candidate)) {
             return true;
         }
@@ -157,5 +158,91 @@ export class PathGuard {
         } catch {
             return false;
         }
+    }
+}
+
+/**
+ * Guard of one project: its own folder (`<PENFORGE_HOME>/projects/<id>/`), plus the folder of this
+ * computer the project is linked to (W38 Game UI / Existing project), when there is one.
+ *
+ * Relative paths resolve against the project folder only. An absolute path is accepted when it
+ * lies inside either root, with the same rules for each root (links followed, `..`, UNC, device
+ * names and alternate data streams refused). The linked root belongs to this guard alone: other
+ * projects' guards never see it.
+ */
+export class ProjectPathGuard extends PathGuard {
+    private linked: PathGuard | null = null;
+
+    /**
+     * Creates a guard for a project folder.
+     *
+     * @param root - the project folder; it must exist when paths are checked
+     * @param platform - the platform whose path rules apply (defaults to the current one)
+     */
+    constructor(
+        root: string,
+        private readonly platform: NodeJS.Platform = process.platform
+    ) {
+        super(root, platform);
+    }
+
+    /** The linked folder, or null when the project has none. */
+    public get linkedRoot(): string | null {
+        return this.linked?.root ?? null;
+    }
+
+    /**
+     * Sets or clears the linked folder.
+     *
+     * @param root - an absolute folder path (it must exist when paths are checked), or null
+     */
+    public setLinkedRoot(root: string | null): void {
+        if (root === null) {
+            this.linked = null;
+            return;
+        }
+        const platformPath = this.platform === "win32" ? path.win32 : path.posix;
+        if (!platformPath.isAbsolute(root)) {
+            throw new PathOutsideRootError(root, this.root);
+        }
+        this.linked = new PathGuard(root, this.platform);
+    }
+
+    /**
+     * Resolves a path inside the project folder, or an absolute path inside the linked folder.
+     *
+     * @param candidate - an absolute path, or a path relative to the project folder
+     * @returns the resolved real path
+     * @throws PathOutsideRootError if the path is in neither root or not acceptable
+     */
+    public override resolve(candidate: string): string {
+        try {
+            return super.resolve(candidate);
+        } catch (error) {
+            const linked = this.linked;
+            if (!(error instanceof PathOutsideRootError) || linked === null || !this.isAbsolutePath(candidate)) {
+                throw error;
+            }
+            return linked.resolve(candidate);
+        }
+    }
+
+    /**
+     * Resolves a path inside the linked folder; a relative path is taken relative to it.
+     *
+     * @param candidate - an absolute path, or a path relative to the linked folder
+     * @throws PathOutsideRootError if the project has no linked folder or the path is outside it
+     */
+    public resolveLinked(candidate: string): string {
+        if (this.linked === null) {
+            throw new PathOutsideRootError(String(candidate), this.root);
+        }
+        return this.linked.resolve(candidate);
+    }
+
+    private isAbsolutePath(candidate: string): boolean {
+        return (
+            typeof candidate === "string" && (this.platform === "win32" ? path.win32 : path.posix).isAbsolute(candidate)
+        );
     }
 }

@@ -11,6 +11,7 @@
    [app.common.uuid :as uuid]
    [app.main.data.ai.chat :as chat]
    [app.main.data.ai.client :as client]
+   [app.main.data.ai.linked :as linked]
    [app.main.data.helpers :as dsh]
    [app.main.refs :as refs]
    [app.main.render :as render]
@@ -28,6 +29,7 @@
    [app.main.ui.workspace.ai.chat.status :refer [work-status*]]
    [app.main.ui.workspace.ai.design-system.start :refer [design-system-start*]]
    [app.main.ui.workspace.ai.detached.placeholder :refer [ref:detached? detach-button* detached-placeholder*]]
+   [app.main.ui.workspace.ai.linked.panel :refer [linked-project-panel*]]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
    [app.util.keyboard :as kbd]
@@ -45,6 +47,10 @@
 
 (def ^:private ref:persona
   (l/derived client/get-persona st/state))
+
+;; W38: the chat of a linked project waits for its background read
+(def ^:private ref:locked
+  (l/derived linked/chat-locked? st/state))
 
 ;; --- Attachments
 
@@ -604,7 +610,7 @@
 
 (mf/defc composer*
   {::mf/private true}
-  [{:keys [chat status connected]}]
+  [{:keys [chat status connected locked]}]
   (let [text*        (mf/use-state "")
         text         (deref text*)
         problems*    (mf/use-state nil)
@@ -803,11 +809,12 @@
      [:textarea {:class (stl/css :input)
                  :value text
                  :rows 3
-                 :disabled (not connected)
+                 :disabled (or (not connected) locked)
                  :aria-label (tr "penforge.chat.input.label")
-                 :placeholder (if dragging
-                                (tr "penforge.chat.attach.drop")
-                                (tr "penforge.chat.input.placeholder"))
+                 :placeholder (cond
+                                locked   (tr "penforge.linked.reading")
+                                dragging (tr "penforge.chat.attach.drop")
+                                :else    (tr "penforge.chat.input.placeholder"))
                  :on-change on-change
                  :on-key-down on-key-down
                  :on-paste on-paste}]
@@ -833,7 +840,7 @@
        [:> icon-button* {:variant "ghost"
                          :type "button"
                          :icon i/add
-                         :disabled (not connected)
+                         :disabled (or (not connected) locked)
                          :aria-label (tr "penforge.chat.attach.menu")
                          :aria-pressed menu-open
                          :on-click toggle-menu}]
@@ -848,7 +855,7 @@
                                :on-click on-pick-folder}]]]
       [:> button* {:variant "primary"
                    :type "submit"
-                   :disabled (or (not connected) busy (empty? (.trim text)))}
+                   :disabled (or (not connected) locked busy (empty? (.trim text)))}
        (tr "penforge.chat.input.send")]]]))
 
 ;; --- Panel
@@ -859,6 +866,7 @@
   (let [chat       (mf/deref ref:chat)
         connection (mf/deref ref:connection)
         persona    (mf/deref ref:persona)
+        locked     (mf/deref ref:locked)
 
         {:keys [entries status]} chat
         connected  (= :connected (:status connection))
@@ -885,6 +893,7 @@
 
      [:> connection-banner* {:connection connection}]
      [:> design-system-start* {}]
+     [:> linked-project-panel* {}]
 
      (when (or connected (seq entries))
        [:> timeline* {:entries entries
@@ -896,7 +905,8 @@
 
      [:> composer* {:chat chat
                     :status status
-                    :connected connected}]]))
+                    :connected connected
+                    :locked locked}]]))
 
 (mf/defc ai-chat-panel*
   "The AI tab: the chat, or a notice while it is in its own window."

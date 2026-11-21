@@ -19,3 +19,4 @@ const common = {
 
 await build({ ...common, entryPoints: [join(root, "src", "main.ts")], outfile: join(root, "dist", "main.js") });
 await build({ ...common, entryPoints: [join(root, "src", "preload.ts")], outfile: join(root, "dist", "preload.js") });
+await build({ ...common, entryPoints: [join(root, "src", "appPreload.ts")], outfile: join(root, "dist", "appPreload.js") });

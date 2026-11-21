@@ -1,5 +1,6 @@
 import type { AgentContext, Attachment, RunnerEvent, WorkflowToolsApi } from "@penpot/mcp-common";
 import type { ClaudeRunner, RunnerConversation, ToolPermissionHandler } from "../runner/ClaudeRunner";
+import { LinkedProjectPrompt } from "../linked/LinkedProjectPrompt";
 import type { PromptRegistry } from "../prompts/promptRegistry";
 import type { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import { AttachmentPrompt } from "./AttachmentPrompt";
@@ -54,15 +55,20 @@ export class TurnRunner {
         request: TurnRequest
     ): AsyncIterable<RunnerEvent> {
         const { context } = setup;
-        const systemPrompt = this.prompts.build({
+        const built = this.prompts.build({
             persona: context.persona,
-            platform: context.platform,
+            // a Game UI project (W38) uses the `{{#game}}` sections instead of the web ones
+            platform: context.projectType === "game" ? "game" : context.platform,
+            projectType: context.projectType,
             projectName: context.projectName ?? context.fileName,
             workflow: request.workflow,
             extra: [TurnRunner.tabContext(context), TurnRunner.selectionNote(request), request.systemPromptAppend]
                 .filter(Boolean)
                 .join("\n\n"),
         });
+        // the linked project's brief is user content: added after the template rendering (W38)
+        const linked = await LinkedProjectPrompt.section(setup.workspace, context);
+        const systemPrompt = linked ? `${built}\n${linked}\n` : built;
         const input = await new AttachmentPrompt(setup.tools).build(request.text, request.attachments);
         yield* this.runner.send(conversation, input, {
             cwd: setup.workspace.root,

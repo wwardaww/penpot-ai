@@ -13724,3 +13724,332 @@ msgstr "Messages removed. The AI had not changed the design since then."
 #: src/app/main/data/ai/actions/checkpoints.cljs
 msgid "penforge.checkpoints.workflow.chat"
 msgstr "AI chat"
+
+# penforge:W38
+#: src/app/main/ui/dashboard/penforge/create_project.cljs
+msgid "penforge.create-project.platform.game"
+msgstr "Game UI"
+
+#: src/app/main/ui/dashboard/penforge/create_project.cljs
+msgid "penforge.create-project.platform.game-caption"
+msgstr "HUD and menus for a Unity or Unreal game"
+
+#: src/app/main/ui/dashboard/penforge/create_project.cljs
+msgid "penforge.create-project.platform.existing"
+msgstr "Existing project"
+
+#: src/app/main/ui/dashboard/penforge/create_project.cljs
+msgid "penforge.create-project.platform.existing-caption"
+msgstr "A new look for an app you already have"
+
+#: src/app/main/ui/dashboard/penforge/create_project.cljs
+msgid "penforge.create-project.folder.game"
+msgstr "Pick the folder of your Unity or Unreal Engine 5 game. Penforge reads its Markdown and UI files."
+
+#: src/app/main/ui/dashboard/penforge/create_project.cljs
+msgid "penforge.create-project.folder.existing"
+msgstr "Pick the folder of your app. Penforge reads its Markdown files and code, but not dependency or build folders."
+
+#: src/app/main/ui/dashboard/penforge/create_project.cljs
+msgid "penforge.create-project.linking"
+msgstr "Linking the folder…"
+
+#: src/app/main/ui/dashboard/penforge/create_project.cljs
+msgid "penforge.create-project.link-failed"
+msgstr "The project was created. Open it to pick the folder again."
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.choose"
+msgstr "Choose folder…"
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.none"
+msgstr "No folder chosen"
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.up"
+msgstr "Up one folder"
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.path"
+msgstr "Folder path"
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.path-placeholder"
+msgstr "Paste a folder path"
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.go"
+msgstr "Go"
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.loading"
+msgstr "Loading folders…"
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.empty"
+msgstr "No folders here"
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.folders"
+msgstr "Folders"
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.truncated"
+msgstr "Only the first folders are shown. Paste a path to go further."
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.picked"
+msgstr "Picked folder:"
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.fact.unity"
+msgstr "Unity"
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.fact.unreal"
+msgstr "Unreal Engine"
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.fact.git"
+msgstr "Git"
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.problem.not-a-game"
+msgstr "This folder is not a Unity or Unreal Engine project. Pick the folder that holds Assets and ProjectSettings (Unity) or the .uproject file (Unreal)."
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.problem.empty-folder"
+msgstr "This folder is empty. Pick the folder of your app."
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.problem.no-folder"
+msgstr "Pick a folder first."
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.error.not-connected"
+msgstr "Penforge is not connected. Start the Penforge daemon, then try again."
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.error.not-configured"
+msgstr "Folders of this computer cannot be linked on a server."
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.error.bad-path"
+msgstr "This is not a valid folder path."
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.error.folder-missing"
+msgstr "This folder does not exist."
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.error.not-a-folder"
+msgstr "This is a file, not a folder."
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.error.folder-unreadable"
+msgstr "Penforge cannot open this folder."
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.error.folder-refused"
+msgstr "This folder cannot be linked. Pick the folder of the project itself, not a drive, your home folder or a system folder."
+
+#: src/app/main/ui/dashboard/penforge/folder_browser/browser.cljs
+msgid "penforge.folder-browser.error.generic"
+msgstr "Something went wrong with this folder."
+
+#: src/app/main/ui/dashboard/penforge/platform_badge.cljs
+msgid "penforge.platform.game"
+msgstr "Game UI"
+
+#: src/app/main/ui/dashboard/penforge/platform_badge.cljs
+msgid "penforge.platform.existing"
+msgstr "Existing"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.linked.reading"
+msgstr "Reading your project…"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.linked.reading-hint"
+msgstr "The chat opens once the read is done."
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.linked.reading-count"
+msgstr "%s of %s files"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.linked.read-failed"
+msgstr "Penforge could not read your project. You can still chat."
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.linked.retry"
+msgstr "Retry"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.linked.relink"
+msgstr "Penforge does not know where this project lives on this computer. Pick its folder again."
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.linked.link"
+msgstr "Link folder"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.linked.step.inventory"
+msgstr "Listing the files"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.linked.step.read"
+msgstr "Reading the files"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.linked.step.brief"
+msgstr "Writing the project brief"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.planning"
+msgstr "Preparing the Re-Design…"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.confirm.title"
+msgstr "Re-Design"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.confirm.branch"
+msgstr "Works on a new git branch: %s. Your current branch stays as it is."
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.confirm.continue-branch"
+msgstr "Continues on the branch %s."
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.confirm.look-only"
+msgstr "Only the look changes: styles, layout, components, assets, fonts, colours and spacing. Features, logic and data stay as they are, unless you ask for more below."
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.confirm.no-git"
+msgstr "This folder is not a git repository. Penforge asks before it creates one."
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.confirm.dirty"
+msgstr "The folder has changes that are not committed. Penforge asks what to do with them first."
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.confirm.screens"
+msgstr "Screens: %s"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.confirm.game"
+msgstr "Penforge writes the %s folder into your game: a PNG of every screen (1x and 2x), assets, tokens and a Markdown guide per screen for your engine."
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.confirm.game-safe"
+msgstr "The game's code and engine assets do not change."
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.confirm.game-no-git"
+msgstr "This folder is not a git repository. Penforge asks before it creates one; without one it only adds the new folder."
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.instructions"
+msgstr "Instructions for the AI"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.instructions-placeholder"
+msgstr "Optional: anything more you want changed"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.running"
+msgstr "Re-Design is running…"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.reverting"
+msgstr "Putting the files back…"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.done.title"
+msgstr "Re-Design done"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.done.existing"
+msgstr "%s files changed, %s screens done, %s partly done."
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.done.game"
+msgstr "%s screens, %s PNG files, %s guides and %s assets written."
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.done.branch"
+msgstr "Branch: %s"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.done.unmatched"
+msgstr "Could not match:"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.done.outside"
+msgstr "Changes outside the look:"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.done.revert"
+msgstr "Revert these changes"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.cancelled"
+msgstr "Re-Design cancelled."
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.failed"
+msgstr "Re-Design failed."
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.step.git"
+msgstr "Preparing the git branch"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.step.checkpoint"
+msgstr "Saving a checkpoint"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.step.screens"
+msgstr "Reading the screens"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.step.edit"
+msgstr "Changing the code"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.step.guard"
+msgstr "Checking that only the look changed"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.step.assets"
+msgstr "Exporting assets"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.step.tokens"
+msgstr "Writing tokens"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.step.guides"
+msgstr "Writing the engine guides"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.step.commit"
+msgstr "Committing"
+
+#: src/app/main/data/ai/actions/redesign_code.cljs
+msgid "penforge.redesign.action"
+msgstr "Re-Design"
+
+#: src/app/main/data/ai/actions/redesign_code.cljs
+msgid "penforge.linked.read-again"
+msgstr "Read project again"
+
+#: src/app/main/ui/workspace/device_screens.cljs
+msgid "penforge.devices.group.games"
+msgstr "Game screens"
+
+#: src/app/main/ui/workspace/ai/generate/dialog.cljs
+msgid "penforge.generate.platform.game"
+msgstr "Game"

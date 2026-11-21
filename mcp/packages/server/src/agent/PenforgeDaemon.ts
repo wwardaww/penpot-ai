@@ -3,6 +3,8 @@ import { createLogger } from "../logger";
 import { AgentConfig, PENFORGE_DAEMON_VERSION } from "./AgentConfig";
 import { AgentServer, PairingToken } from "./AgentServer";
 import { AppsService } from "./apps/AppsService";
+import { LinkedFolders } from "./linked/LinkedFolders";
+import { LinkService } from "./linked/LinkService";
 import { ChatService } from "./chat/ChatService";
 import { TurnRunner } from "./chat/TurnRunner";
 import { DevServerManager } from "./process/DevServerManager";
@@ -112,6 +114,11 @@ export class PenforgeDaemon {
                 pluginSessions: parts.pluginSessions,
                 authTimeoutMs: parts.authTimeoutMs ?? 10_000,
                 apps: this.apps,
+                links: new LinkService(
+                    new LinkedFolders(config.home),
+                    workspaces,
+                    this.hosting ? "Linked folders are available in the desktop app or local daemon only" : null
+                ),
             },
             () => ({
                 service: "penforge-agent",

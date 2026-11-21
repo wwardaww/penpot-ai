@@ -19,9 +19,9 @@
    [app.main.data.ai.actions :as actions]
    [app.main.data.ai.actions.ask :as ask]
    [app.main.data.ai.chat :as chat]
+   [app.main.data.ai.linked :as linked]
    [app.main.data.ai.protocol :as proto]
    [app.main.data.helpers :as dsh]
-   [app.main.data.penforge :as pf]
    [app.main.data.workspace.selection :as dws]
    [app.main.data.workspace.zoom :as dwz]
    [app.main.store :as st]
@@ -157,7 +157,7 @@
 (defn dialog-props
   "Props of the dialog for the current state and selection."
   [state selected]
-  {:platform (or (pf/current-platform state) :web)
+  {:platform (linked/current-design-platform state)
    :selection (vec selected)
    :page (:current-page-id state)
    :submit #(st/emit! (generate-screen %))})

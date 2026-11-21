@@ -43,6 +43,11 @@ function preloadFile(): string {
     return join(app.getAppPath(), "dist", "preload.js");
 }
 
+/** Preload of the Penpot window: only the native folder dialog (W38). */
+function appPreloadFile(): string {
+    return join(app.getAppPath(), "dist", "appPreload.js");
+}
+
 /** Environment of the children; on macOS with the login shell's PATH (Finder apps get a bare one). */
 async function childBaseEnv(): Promise<NodeJS.ProcessEnv> {
     const env = { ...process.env };
@@ -151,9 +156,20 @@ function createMainWindow(app_: RunningApp): BrowserWindow {
         height: 900,
         show: false,
         title: "Penforge",
-        webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
+        webPreferences: { preload: appPreloadFile(), contextIsolation: true, sandbox: true, nodeIntegration: false },
     });
     guardWindow(win, origin);
+    // W38: native folder dialog for linking a Game UI / Existing project, for the app origin only
+    ipcMain.removeHandler("app:choose-folder");
+    ipcMain.handle("app:choose-folder", async (event) => {
+        const sender = event.senderFrame?.url ?? "";
+        const owner = BrowserWindow.fromWebContents(event.sender);
+        if (!isSameOrigin(sender, origin) || !owner) {
+            return undefined;
+        }
+        const result = await dialog.showOpenDialog(owner, { properties: ["openDirectory"] });
+        return result.canceled ? undefined : result.filePaths[0];
+    });
     // a logout lands on the login page, which has no form in the desktop app: sign in again
     win.webContents.on("did-navigate-in-page", (_event, url) => {
         if (/#\/auth\/login/.test(url)) {
