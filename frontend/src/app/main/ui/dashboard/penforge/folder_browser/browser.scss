@@ -22,6 +22,30 @@
   gap: var(--sp-xs);
 }
 
+.up-button {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  inline-size: $sz-32;
+  block-size: $sz-32;
+  border: none;
+  border-radius: $br-8;
+  background: none;
+  color: var(--color-foreground-secondary);
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background-color: var(--color-background-quaternary);
+    color: var(--color-foreground-primary);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+}
+
 .path-input {
   @include t.use-typography("body-medium");
 
