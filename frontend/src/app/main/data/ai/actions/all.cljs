@@ -25,6 +25,8 @@
    [app.main.data.ai.actions.generate]
    [app.main.data.ai.actions.prototype]
    [app.main.data.ai.actions.publish]
+   ;; W30: design system binding (actions, watcher)
+   [app.main.data.ai.actions.redesign]
    [app.main.data.ai.actions.redesign-code]
    [app.main.data.ai.actions.token-sync]
    ;; W36: name dialog of "Create design system from this file"
@@ -34,10 +36,9 @@
    [app.main.ui.workspace.ai.build.actions]
    ;; W19: AI history dialog; requires app.main.data.ai.actions.checkpoints
    [app.main.ui.workspace.ai.checkpoints.history]
+   ;; W30: design system binding picker modal
+   [app.main.ui.workspace.ai.design-system.binding.picker]
    ;; W20: Share panel modal (ZIP, GitHub, Vercel, Netlify, phone, accounts)
    [app.main.ui.workspace.ai.publish.share]
    ;; W18: visual QA report panel; its events ns registers :ai/visual-qa
-   [app.main.ui.workspace.ai.qa.panel]
-   ;; W30: design system binding (actions, watcher) and its picker modal
-   [app.main.data.ai.actions.redesign]
-   [app.main.ui.workspace.ai.design-system.binding.picker]))
+   [app.main.ui.workspace.ai.qa.panel]))

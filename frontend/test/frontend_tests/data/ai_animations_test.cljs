@@ -56,7 +56,7 @@
                     (settings/next-state {:type "workflow.done" :ok true}))]
     (t/is (= {:step :ready :value false :error nil} loaded))
     (t/is (= :error (:step (settings/next-state loading {:type "workflow.done" :ok false
-                                                          :error "boom"}))))
+                                                         :error "boom"}))))
     (t/is (= "not-connected"
              (:error (settings/next-state loading {:type "error" :code "not-connected"}))))
     (t/is (= loading (settings/next-state loading {:type "workflow.event" :kind "result"

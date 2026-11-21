@@ -227,7 +227,7 @@
   (let [{:keys [markup errors]}
         (await (render-view {:build {:stage :review :rid 8
                                      :result (assoc changes-result :count 0 :changes nil
-                                                   :kept-instructions "")}
+                                                    :kept-instructions "")}
                              :persona :designer
                              :kept-instructions ""}))]
     (t/is (empty? errors))

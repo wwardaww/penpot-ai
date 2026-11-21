@@ -21,7 +21,7 @@
    [app.main.data.penforge :as pf]
    [app.main.store :as st]
    [app.main.ui.dashboard.penforge.folder-browser.browser :refer [folder-browser*
-                                                                   error-text]]
+                                                                  error-text]]
    [app.main.ui.dashboard.penforge.option-cards :refer [option-cards*
                                                         web-illustration*
                                                         mobile-illustration*

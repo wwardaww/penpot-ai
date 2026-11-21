@@ -19,7 +19,7 @@
    [app.main.data.penforge :as pf]
    [app.main.store :as st]
    [app.main.ui.dashboard.penforge.folder-browser.browser :refer [folder-browser*
-                                                                   error-text]]
+                                                                  error-text]]
    [app.main.ui.ds.buttons.button :refer [button*]]
    [app.main.ui.ds.foundations.typography :as t]
    [app.main.ui.ds.foundations.typography.text :refer [text*]]

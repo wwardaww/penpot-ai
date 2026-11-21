@@ -301,11 +301,11 @@
         [:> text* {:as "p" :typography t/body-small :class (stl/css :muted)}
          (tr "penforge.build.changes.token-only")])
       [:> instructions-fields* {:text (:text fields)
-                                   :keep (:keep fields)
-                                   :kept (:kept fields)
-                                   :on-text (:on-text fields)
-                                   :on-keep (:on-keep fields)
-                                   :on-kept (:on-kept fields)}]]
+                                :keep (:keep fields)
+                                :kept (:kept fields)
+                                :on-text (:on-text fields)
+                                :on-keep (:on-keep fields)
+                                :on-kept (:on-kept fields)}]]
      [:footer {:class (stl/css :footer)}
       [:> button* {:variant "secondary" :on-click on-cancel}
        (tr "penforge.build.plan.not-now")]
@@ -484,11 +484,11 @@
                              :on-notes on-notes}])
       (when-not nothing?
         [:> instructions-fields* {:text (:text fields)
-                                   :keep (:keep fields)
-                                   :kept (:kept fields)
-                                   :on-text (:on-text fields)
-                                   :on-keep (:on-keep fields)
-                                   :on-kept (:on-kept fields)}])
+                                  :keep (:keep fields)
+                                  :kept (:kept fields)
+                                  :on-text (:on-text fields)
+                                  :on-keep (:on-keep fields)
+                                  :on-kept (:on-kept fields)}])
       [:> text* {:as "p" :typography t/body-medium :class (stl/css :question)}
        (cond
          nothing? (tr "penforge.build.plan.nothing-question")
