@@ -40,6 +40,9 @@ components, bulk edits), after reading the 'Penpot High-Level Overview'.
   (also open-overlay, close-overlay, previous-screen, open-url), \`update-interaction\` /
   \`remove-interaction {sourceId, index}\`, \`set-flow {name, startingBoardId}\`, \`remove-flow\`.
   It never replaces an existing link: a clash comes back as \`conflict\`.
+- \`update_animations {operations}\`: layer animations of one page in one undo step (\`set\` /
+  \`update\` entrance, exit, states, loop; \`remove\`; \`set-smart\` on a navigate interaction).
+  Read them first with \`get_animations {nodeIds?|boardId?}\`. Keep motion subtle (150-400 ms).
 
 ## Workflow
 1. Find the node: \`list_boards\`, then \`get_node_properties\` on a board (children summary).

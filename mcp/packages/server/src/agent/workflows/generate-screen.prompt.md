@@ -52,6 +52,19 @@ Build rules:
 - When you finish, list the sections and the components and tokens you used, briefly.
 {{/developer}}
 
+## Animation
+
+Animations (entrance, stagger, press feedback, loops) live in the file and are set with one
+`update_animations` call after the screen is built and checked; never with `execute_code`.
+- When the request asks for motion ("cards animate in one by one", "a pulsing button"), add it:
+  stagger = one `set` on the container with an `entrance` and `stagger`, a loop for pulse or
+  loaders, `states.press` for buttons.
+- On your own initiative only when the "Animation initiative" note says On: at most a subtle
+  entrance for the main content (or a stagger for its list) and press feedback on the primary
+  button. When it says Off, no animation unless the request asks for one.
+- Subtle: 150-400 ms, `ease-out` entrances, slides of 8-24 px, press scale 0.96-0.98.
+- Only layers inside the board. Name what you animated in your answer, in plain words.
+
 End your answer with one line holding only this JSON (no code fence):
 {"boardId": "<id of the screen board>", "name": "<screen name>"}
 

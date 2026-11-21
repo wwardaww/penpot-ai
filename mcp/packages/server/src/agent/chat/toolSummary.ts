@@ -18,6 +18,8 @@ export class ToolSummary {
         [/^mcp__penpot__(update_design_node|execute_code|import_image)$/, "Working on the design"],
         [/^mcp__penpot__(resolve_canvas_comment)$/, "Updating comments"],
         [/^mcp__penpot__(update_prototype)$/, "Wiring the prototype"],
+        [/^mcp__penpot__(update_animations)$/, "Animating the design"],
+        [/^mcp__penpot__(get_animations|get_animation_spec)$/, "Reading the animations"],
         [/^mcp__penpot__(generate_code_hints)$/, "Studying the design's structure"],
         [/^mcp__penpot__(penforge_design_system)$/, "Checking the design system"],
         [/^mcp__penpot__/, "Using Penpot"],

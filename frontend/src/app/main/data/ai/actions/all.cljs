@@ -10,6 +10,7 @@
   `app.main.data.ai.actions.<name>` namespace, keeping the list sorted."
   (:require
    [app.main.data.ai.actions.adapt]
+   [app.main.data.ai.actions.animations]
    [app.main.data.ai.actions.ask]
    [app.main.data.ai.actions.audit]
    [app.main.data.ai.actions.auto-name]

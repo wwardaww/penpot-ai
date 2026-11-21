@@ -6,6 +6,8 @@ import { CommentService } from "./comments.ts";
 import { PrototypeReader } from "./prototype.ts";
 import { PrototypeWriter } from "./prototype-write.ts";
 import { ScreenshotCapturer } from "./screenshot.ts";
+import { AnimationExporter } from "./animations-export.ts";
+import { AnimationWriter } from "./animations-write.ts";
 import type { ScreenshotFormat } from "./screenshot.ts";
 
 /**
@@ -179,6 +181,66 @@ export class PenforgeApi {
             }
         }
         return { pageId: page.id, undoGrouped: blockId !== undefined, results, graph: writer.graph() };
+    }
+
+    /**
+     * Lists the animated layers (W31 specs) of some nodes and what is inside them, of a board, or
+     * of a page (the current page by default).
+     *
+     * @param params - optional `nodeIds`, `boardId` or `pageId`
+     */
+    public static getAnimations(params: { nodeIds?: string[]; boardId?: string; pageId?: string }): JsonObject {
+        const p = PenforgeApi.api();
+        return new AnimationExporter(PenforgeApi.locator()).layers(params ?? {}, p.currentPage ?? null);
+    }
+
+    /**
+     * Sets, updates and removes animation specs of layers of one page in one undo step (W32).
+     *
+     * The page is the page of the first referenced node; it is opened first because writes only
+     * work on the active page. Every operation is checked and every resulting spec validated
+     * before the first change, so an error leaves the file untouched.
+     *
+     * @param params - `operations`
+     */
+    public static async updateAnimations(params: { operations: unknown }): Promise<JsonObject> {
+        AnimationWriter.validate(params.operations);
+        const operations = params.operations;
+        const p = PenforgeApi.api();
+        const locator = PenforgeApi.locator();
+        const page = locator.require(AnimationWriter.referencedIds(operations)[0]).page;
+        if (p.currentPage?.id !== page.id) {
+            await p.openPage(page);
+        }
+        const active = p.currentPage;
+        if (!active) {
+            throw new Error("No page is open");
+        }
+        const writer = new AnimationWriter(active);
+        writer.prepare(operations);
+        const history = p.history;
+        const blockId = history && typeof history.undoBlockBegin === "function" ? history.undoBlockBegin() : undefined;
+        let results: JsonObject[];
+        try {
+            results = writer.write();
+        } finally {
+            if (blockId !== undefined) {
+                history.undoBlockFinish(blockId);
+            }
+        }
+        return { pageId: active.id, undoGrouped: blockId !== undefined, results };
+    }
+
+    /**
+     * Returns the animation spec of the whole file for the build (architecture §6
+     * `get_animation_spec`, without the `map.json` hints the server adds).
+     */
+    public static getAnimationSpec(): JsonObject {
+        const file: any = PenforgeApi.api().currentFile;
+        return new AnimationExporter(PenforgeApi.locator()).spec({
+            id: file?.id ?? null,
+            name: file?.name ?? null,
+        });
     }
 
     /**

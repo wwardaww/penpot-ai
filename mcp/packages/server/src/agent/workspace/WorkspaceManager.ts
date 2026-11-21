@@ -15,6 +15,8 @@ export interface ProjectInfo extends ProjectLinkFields {
     fileIds: string[];
     createdAt: string;
     updatedAt: string;
+    /** keys other features keep in the file (e.g. W32 `aiAnimations`) */
+    [key: string]: unknown;
 }
 
 /**

@@ -60,7 +60,7 @@ export class CanvasCheck {
     private static readonly MIN_OVERLAP = 1;
     /** Tools whose use means the turn may have changed the design. */
     private static readonly DESIGN_TOOLS =
-        /^mcp__penpot__(execute_code|update_design_node|import_image|import_penpot_file)$/;
+        /^mcp__penpot__(execute_code|update_design_node|update_animations|import_image|import_penpot_file)$/;
     private readonly logger = createLogger("CanvasCheck");
 
     /**

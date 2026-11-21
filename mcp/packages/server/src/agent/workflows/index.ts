@@ -38,3 +38,4 @@ export { workflow as designSystemBind } from "./design-system-bind";
 export { workflow as designSystemCheck } from "./design-system-check";
 export { workflow as designSystemRedesign } from "./design-system-redesign";
 export { workflow as designSystemMissing } from "./design-system-missing";
+export { workflow as animationSettings } from "./animation-settings";

@@ -11,6 +11,9 @@ import { PenforgeOverviewTool } from "./PenforgeOverviewTool";
 import { ResolveCanvasCommentTool } from "./ResolveCanvasCommentTool";
 import { UpdateDesignNodeTool } from "./UpdateDesignNodeTool";
 import { UpdatePrototypeTool } from "./UpdatePrototypeTool";
+import { GetAnimationsTool } from "./GetAnimationsTool";
+import { GetAnimationSpecTool } from "./GetAnimationSpecTool";
+import { UpdateAnimationsTool } from "./UpdateAnimationsTool";
 import { VisualQaTool } from "../../agent/qa/VisualQaTool";
 import { TidyUpTool } from "../../agent/cleanup/TidyUpTool";
 import { DesignSystemTool } from "../../agent/designsystem/conformance/DesignSystemTool";
@@ -59,6 +62,10 @@ export class PenforgeTools {
             new UpdatePrototypeTool(mcpServer),
             // W30: the project's design system (inventory, missing items)
             new DesignSystemTool(mcpServer),
+            // W32: layer animations and the animation spec for the build
+            new GetAnimationsTool(mcpServer),
+            new UpdateAnimationsTool(mcpServer),
+            new GetAnimationSpecTool(mcpServer),
         ];
     }
 }
