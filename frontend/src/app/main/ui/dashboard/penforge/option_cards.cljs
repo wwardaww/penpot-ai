@@ -74,6 +74,49 @@
    [:rect {:x 62 :y 46 :width 11 :height 11 :rx 3 :class (stl/css :shape-soft)}]
    [:path {:d "M53 71h14" :class (stl/css :shape-line)}]])
 
+(mf/defc game-illustration*
+  []
+  [:svg {:view-box "0 0 120 80"
+         :aria-hidden true
+         :class (stl/css :illustration)}
+   ;; Game screen with a HUD
+   [:rect {:x 6 :y 4 :width 108 :height 56 :rx 4 :class (stl/css :shape-fill)}]
+   [:rect {:x 6 :y 4 :width 108 :height 56 :rx 4 :class (stl/css :shape-line)}]
+   [:rect {:x 12 :y 10 :width 26 :height 4 :rx 2 :class (stl/css :shape-accent)}]
+   [:rect {:x 12 :y 17 :width 18 :height 3 :rx 1.5 :class (stl/css :shape-soft)}]
+   [:circle {:cx 102 :cy 14 :r 5 :class (stl/css :shape-line)}]
+   [:rect {:x 40 :y 26 :width 40 :height 22 :rx 3 :class (stl/css :shape-surface)}]
+   [:rect {:x 40 :y 26 :width 40 :height 22 :rx 3 :class (stl/css :shape-line)}]
+   [:rect {:x 46 :y 32 :width 28 :height 4 :rx 2 :class (stl/css :shape-accent)}]
+   [:rect {:x 46 :y 40 :width 20 :height 3 :rx 1.5 :class (stl/css :shape-soft)}]
+   ;; Gamepad in front
+   [:path {:d "M38 64h44a10 10 0 0 1 0 14H38a10 10 0 0 1 0-14z" :class (stl/css :shape-surface)}]
+   [:path {:d "M38 64h44a10 10 0 0 1 0 14H38a10 10 0 0 1 0-14z" :class (stl/css :shape-line)}]
+   [:path {:d "M38 68v6M35 71h6" :class (stl/css :shape-line)}]
+   [:circle {:cx 80 :cy 69 :r 1.8 :class (stl/css :shape-accent)}]
+   [:circle {:cx 84 :cy 73 :r 1.8 :class (stl/css :shape-soft)}]])
+
+(mf/defc existing-illustration*
+  []
+  [:svg {:view-box "0 0 120 80"
+         :aria-hidden true
+         :class (stl/css :illustration)}
+   ;; Code window
+   [:rect {:x 4 :y 8 :width 66 :height 60 :rx 5 :class (stl/css :shape-fill)}]
+   [:rect {:x 4 :y 8 :width 66 :height 60 :rx 5 :class (stl/css :shape-line)}]
+   [:path {:d "M4 19h66" :class (stl/css :shape-line)}]
+   [:rect {:x 11 :y 26 :width 22 :height 3 :rx 1.5 :class (stl/css :shape-soft)}]
+   [:rect {:x 17 :y 33 :width 30 :height 3 :rx 1.5 :class (stl/css :shape-soft)}]
+   [:rect {:x 17 :y 40 :width 24 :height 3 :rx 1.5 :class (stl/css :shape-soft)}]
+   [:rect {:x 11 :y 47 :width 18 :height 3 :rx 1.5 :class (stl/css :shape-soft)}]
+   ;; New look next to it
+   [:rect {:x 62 :y 20 :width 54 :height 52 :rx 5 :class (stl/css :shape-surface)}]
+   [:rect {:x 62 :y 20 :width 54 :height 52 :rx 5 :class (stl/css :shape-line)}]
+   [:rect {:x 69 :y 28 :width 40 :height 8 :rx 3 :class (stl/css :shape-accent)}]
+   [:rect {:x 69 :y 41 :width 18 :height 18 :rx 3 :class (stl/css :shape-soft)}]
+   [:rect {:x 91 :y 41 :width 18 :height 18 :rx 3 :class (stl/css :shape-soft)}]
+   [:path {:d "M69 64h28" :class (stl/css :shape-line)}]])
+
 (mf/defc designer-illustration*
   []
   [:svg {:view-box "0 0 120 80"
@@ -144,8 +187,9 @@
   "`options` is a vector of `{:id keyword :label string :caption string
   :illustration element}`; `value` is the selected id or nil. Arrows
   move and select, Space selects, Enter selects or, on the selected
-  card, calls the optional `on-submit`."
-  [{:keys [options value on-change on-submit label class]}]
+  card, calls the optional `on-submit`. `columns` 2 lays the cards out
+  two by two."
+  [{:keys [options value on-change on-submit label class columns]}]
   (let [container (mf/use-ref nil)
         values    (mf/with-memo [options] (mapv :id options))
 
@@ -178,7 +222,8 @@
     [:div {:role "radiogroup"
            :aria-label label
            :ref container
-           :class [class (stl/css :cards)]
+           :class [class (stl/css-case :cards true
+                                       :cards-grid (= columns 2))]
            :on-key-down on-key-down}
      (for [{:keys [id] :as option} options]
        [:> option-card* {:key (name id)

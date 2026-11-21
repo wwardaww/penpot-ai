@@ -10,6 +10,7 @@
    [app.main.data.ai.actions.all]
    [app.main.data.ai.chat :as chat]
    [app.main.data.ai.client :as client]
+   [app.main.data.ai.linked :as linked]
    [app.main.store :as st]
    [app.main.ui.workspace.ai.chat.tab-indicator :refer [tab-indicator*]]
    [rumext.v2 :as mf]))
@@ -20,8 +21,10 @@
   [{:keys [file-id]}]
   (mf/with-effect [file-id]
     (st/emit! (client/initialize)
-              (chat/initialize file-id))
+              (chat/initialize file-id)
+              (linked/initialize))
     (fn []
-      (st/emit! (chat/finalize)
+      (st/emit! (linked/finalize)
+                (chat/finalize)
                 (client/finalize))))
   [:> tab-indicator* {}])

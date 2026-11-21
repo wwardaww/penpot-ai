@@ -26,7 +26,11 @@
   [:enum "designer" "developer"])
 
 (def schema:platform
-  [:enum "web" "mobile"])
+  [:enum "web" "mobile" "game" "existing"])
+
+(def schema:linked-kind
+  "Project types whose design works on a linked folder (W38)."
+  [:enum "game" "existing"])
 
 (def schema:node-attachment
   [:map {:title "NodeAttachment"}
@@ -207,7 +211,22 @@
      [:rid :string]
      [:conversation-id :string]
      [:message-id :string]
-     [:confirmed [:= true]]]]])
+     [:confirmed [:= true]]]]
+
+   ;; W38: daemon folder browser and linked project folders
+   ["folder.list"
+    [:map [:type :string] [:rid :string] [:path {:optional true} :string]]]
+
+   ["project.link"
+    [:map
+     [:type :string]
+     [:rid :string]
+     [:project-id :string]
+     [:kind schema:linked-kind]
+     [:path :string]]]
+
+   ["project.link.status"
+    [:map [:type :string] [:rid :string] [:project-id :string]]]])
 
 ;; --- Daemon -> client
 
@@ -347,6 +366,30 @@
      [:design {:optional true} [:enum "restored" "unchanged"]]
      [:checkpoint-id {:optional true} :string]]]
 
+   ;; W38: folder browser listing and linked folder state (entries and
+   ;; facts are checked by app.main.data.ai.linked)
+   ["folder.list"
+    [:map
+     [:type :string]
+     [:rid :string]
+     [:path [:maybe :string]]
+     [:parent {:optional true} [:maybe :string]]
+     [:roots {:optional true} [:vector :any]]
+     [:entries [:vector :any]]
+     [:truncated {:optional true} :boolean]
+     [:facts {:optional true} [:maybe [:map-of :keyword :any]]]]]
+
+   ["project.linked"
+    [:map
+     [:type :string]
+     [:rid :string]
+     [:project-id :string]
+     [:linked :boolean]
+     [:kind {:optional true} :string]
+     [:linked-root {:optional true} :string]
+     [:engine {:optional true} [:maybe :string]]
+     [:stack {:optional true} [:maybe [:map-of :keyword :any]]]]]
+
    ["error"
     [:map
      [:type :string]
@@ -483,6 +526,29 @@
            :allow (boolean allow)}
     (some? remember)
     (assoc :remember (boolean remember))))
+
+;; W38: folder browser and linked folders
+
+(defn folder-list
+  [{:keys [rid path]}]
+  (cond-> {:type "folder.list"
+           :rid (or rid (next-rid))}
+    (string? path)
+    (assoc :path path)))
+
+(defn project-link
+  [{:keys [rid project-id kind path]}]
+  {:type "project.link"
+   :rid (or rid (next-rid))
+   :project-id (str project-id)
+   :kind (name kind)
+   :path path})
+
+(defn project-link-status
+  [{:keys [rid project-id]}]
+  {:type "project.link.status"
+   :rid (or rid (next-rid))
+   :project-id (str project-id)})
 
 (defn workflow-run
   [{:keys [rid name params]}]

@@ -7,7 +7,8 @@
 (ns app.main.devices
   "Device screen catalog: the screen sizes, in CSS points (the
   viewport size a browser reports, physical pixels divided by the
-  device pixel ratio), of current phones, tablets and foldables.
+  device pixel ratio), of current phones, tablets and foldables, plus
+  common game render resolutions (in pixels, W38).
 
   The workspace device picker reads it, and `app.main.constants`
   appends the devices it lacks to the board size presets, so each size
@@ -26,7 +27,7 @@
 
 (def groups
   "Picker group order."
-  [:phones :tablets :foldables])
+  [:phones :tablets :foldables :games])
 
 (defn- portrait-landscape
   "Tablet states: the default portrait size and its landscape swap."
@@ -143,7 +144,18 @@
    {:id :surface-duo-2 :name "Surface Duo 2" :group :foldables :width 540 :height 720
     :states [{:state :left-screen :width 540 :height 720}
              {:state :right-screen :width 540 :height 720}
-             {:state :spanned :width 1114 :height 720}]}])
+             {:state :spanned :width 1114 :height 720}]}
+
+   ;; --- Game screens (W38): render resolutions of game UI, in pixels.
+   ;; Full HD is the default board of a Game UI project. "Mobile
+   ;; landscape" is an iPhone Pro Max class phone held sideways
+   ;; (2532x1170 physical pixels).
+   {:id :game-full-hd :name "Full HD (1080p)" :group :games :width 1920 :height 1080}
+   {:id :game-qhd :name "QHD (1440p)" :group :games :width 2560 :height 1440}
+   {:id :game-hd :name "HD (720p)" :group :games :width 1280 :height 720}
+   {:id :game-4k :name "4K UHD (2160p)" :group :games :width 3840 :height 2160}
+   {:id :game-steam-deck :name "Steam Deck" :group :games :width 1280 :height 800}
+   {:id :game-mobile-landscape :name "Mobile landscape" :group :games :width 2532 :height 1170}])
 
 (def ^:private devices-by-id
   (into {} (map (juxt :id identity)) devices))
@@ -181,7 +193,8 @@
 (def ^:private group-preset-header
   {:phones "PHONES"
    :tablets "TABLETS"
-   :foldables "FOLDABLES"})
+   :foldables "FOLDABLES"
+   :games "GAMES"})
 
 (defn- state-preset-name
   [state]

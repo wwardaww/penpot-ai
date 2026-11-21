@@ -27,6 +27,7 @@
   :primary true
   :order 90
   :scopes #{:island :main-menu :command-palette}
+  :visible? (fn [state] (not (#{:game :existing} (get-in state [:penforge-project-settings (:current-project-id state)]))))
   :enabled? (fn [state] (not (building? state)))
   :run (fn [_]
          (st/emit! (build/start)))})

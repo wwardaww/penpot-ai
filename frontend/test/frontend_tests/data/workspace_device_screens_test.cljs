@@ -44,7 +44,7 @@
 
 (t/deftest tablets-and-foldables-have-states-phones-do-not
   (doseq [{:keys [id group] :as device} devices/devices]
-    (if (= :phones group)
+    (if (contains? #{:phones :games} group)
       (t/is (not (devices/has-states? device)) (str id))
       (t/is (<= 2 (count (:states device))) (str id)))))
 
@@ -58,7 +58,10 @@
 (t/deftest catalog-has-the-requested-devices
   (doseq [id [:iphone-18-pro :iphone-18-pro-max :iphone-17 :galaxy-s26
               :galaxy-a56 :pixel-10 :ipad-pro-13 :galaxy-tab-s11
-              :galaxy-z-fold-8 :galaxy-z-flip-8 :iphone-fold :surface-duo-2]]
+              :galaxy-z-fold-8 :galaxy-z-flip-8 :iphone-fold :surface-duo-2
+              ;; W38 game screens
+              :game-full-hd :game-qhd :game-hd :game-4k :game-steam-deck
+              :game-mobile-landscape]]
     (t/is (some? (devices/get-device id)) (str id))))
 
 ;; --- Board specs

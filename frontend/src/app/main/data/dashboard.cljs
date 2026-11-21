@@ -267,9 +267,11 @@
   "Creates a project. Without params it is auto named and opened for
   inline rename; with the `:ai` flag on it opens the Penforge
   create-project panel instead, which calls back with `:name` and
-  `:platform` (the platform is then stored in the project settings)."
+  `:platform` (the platform is then stored in the project settings).
+  `:on-created`, optional, is a fn of the new project returning one
+  more event to emit (W38 links the project folder with it)."
   ([] (create-project nil))
-  ([{:keys [platform] given-name :name :as options}]
+  ([{:keys [platform on-created] given-name :name :as options}]
    (ptk/reify ::create-project
      ptk/WatchEvent
      (watch [_ state _]
@@ -290,10 +292,14 @@
            (->> (rp/cmd! :create-project params)
                 (rx/tap on-success)
                 (rx/mapcat (fn [project]
-                             (if (some? platform)
-                               (rx/of (project-created project false)
-                                      (pf/update-project-settings (:id project) platform))
-                               (rx/of (project-created project)))))
+                             (rx/concat
+                              (if (some? platform)
+                                (rx/of (project-created project false)
+                                       (pf/update-project-settings (:id project) platform))
+                                (rx/of (project-created project)))
+                              (if (fn? on-created)
+                                (rx/of (on-created project))
+                                (rx/empty)))))
                 (rx/catch on-error))))))))
 
 ;; --- EVENT: duplicate-project

@@ -54,7 +54,8 @@
   (case group
     :phones    (tr "penforge.devices.group.phones")
     :tablets   (tr "penforge.devices.group.tablets")
-    :foldables (tr "penforge.devices.group.foldables")))
+    :foldables (tr "penforge.devices.group.foldables")
+    :games     (tr "penforge.devices.group.games")))
 
 (defn size-label
   "`402 × 874`: a device's default size in points."

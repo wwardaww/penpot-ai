@@ -6,7 +6,8 @@
 
 (ns app.main.ui.dashboard.penforge.platform-badge
   "Small pill on a dashboard project row that names the platform of the
-  project (Web / Mobile). Renders nothing while it is unknown."
+  project (Web / Mobile / Game UI / Existing). Renders nothing while it
+  is unknown."
   (:require-macros [app.main.style :as stl])
   (:require
    [app.main.data.penforge :as pf]
@@ -20,6 +21,15 @@
 (def ^:private ref:project-platforms
   (l/derived :penforge-project-settings st/state))
 
+(defn platform-label
+  "Translated name of a project platform."
+  [platform]
+  (case platform
+    :mobile   (tr "penforge.platform.mobile")
+    :game     (tr "penforge.platform.game")
+    :existing (tr "penforge.platform.existing")
+    (tr "penforge.platform.web")))
+
 (mf/defc platform-badge*
   [{:keys [project-id]}]
   (let [platforms (mf/deref ref:project-platforms)
@@ -28,8 +38,7 @@
       [:> text* {:as "span"
                  :typography t/body-small
                  :class (stl/css-case :badge true
-                                      :badge-mobile (= platform :mobile))
+                                      :badge-mobile (= platform :mobile)
+                                      :badge-linked (pf/linked-platform? platform))
                  :data-testid "penforge-platform-badge"}
-       (if (= platform :mobile)
-         (tr "penforge.platform.mobile")
-         (tr "penforge.platform.web"))])))
+       (platform-label platform)])))
