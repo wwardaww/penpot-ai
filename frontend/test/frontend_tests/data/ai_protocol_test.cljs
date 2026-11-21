@@ -30,6 +30,9 @@
   (t/testing "not json"
     (t/is (nil? (proto/decode "not json")))))
 
+(t/deftest decode-reads-the-plugin-restart-request
+  (t/is (= {:type "mcp.restart"} (proto/decode (json {"type" "mcp.restart"})))))
+
 (t/deftest decode-keeps-workflow-payloads
   (let [msg (proto/decode (json {"type" "workflow.event" "runId" "r1" "kind" "question"
                                  "payload" {"questionId" "q1" "text" "Pick"

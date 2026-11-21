@@ -403,6 +403,13 @@
                    (rx/filter true?)
                    (rx/map (fn [_] (mcp/connect-mcp))))
 
+              ;; A design tool found no plugin session (the plugin's frame
+              ;; went away and did not come back): start the plugin again;
+              ;; the watcher above asks it to connect once it is up.
+              (->> (messages stream)
+                   (rx/filter #(= "mcp.restart" (:type %)))
+                   (rx/map (fn [_] (mcp/init))))
+
               ;; A tab that pairs shares the token with the others.
               (->> mbc/stream
                    (rx/filter (mbc/type? :penforge/token))

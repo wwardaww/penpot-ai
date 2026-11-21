@@ -244,3 +244,40 @@ test("a tab busy with a task is not taken for suspended: the next task waits beh
     connection.lastHeartbeat = Date.now() - 120_000;
     await assert.rejects(bridge.executePluginTask(new PluginTask("test", {})), /appears to be suspended/);
 });
+
+test("a task that finds no plugin session asks the tabs to restart it and waits for it", async () => {
+    let asked = 0;
+    bridge.setSessionRecovery(() => {
+        asked++;
+        // the tab restarts its plugin a little later
+        setTimeout(() => void connect("tab-new"), 100);
+        return 1;
+    });
+    // the tab's old session id is gone; the restarted plugin has a new one
+    const [first, second] = await Promise.all([
+        bridge.executePluginTask(new PluginTask("test", {}), "tab-old"),
+        bridge.executePluginTask(new PluginTask("test", {})),
+    ]);
+    assert.equal(first.data, "tab-new");
+    assert.equal(second.data, "tab-new");
+    assert.equal(asked, 1, "tasks waiting at the same time share one restart request");
+});
+
+test("with no tab to ask, a task without a session fails at once", async () => {
+    bridge.setSessionRecovery(() => 0);
+    const started = Date.now();
+    await assert.rejects(bridge.executePluginTask(new PluginTask("test", {})), /No Penpot sessions are connected/);
+    assert.ok(Date.now() - started < 500);
+});
+
+test("a connected session is used without asking for a restart", async () => {
+    let asked = 0;
+    bridge.setSessionRecovery(() => {
+        asked++;
+        return 1;
+    });
+    await connect("tab-1");
+    const result = await bridge.executePluginTask(new PluginTask("test", {}), "tab-1");
+    assert.equal(result.data, "tab-1");
+    assert.equal(asked, 0);
+});

@@ -532,3 +532,14 @@ test("a tab without its own MCP session gets the plugin session of its file", as
         await routed.stop();
     }
 });
+
+test("a plugin restart request reaches only the tabs with an open file", async () => {
+    const dashboard = await authenticated();
+    const workspace = await withContext();
+    assert.equal(daemon.requestPluginRestart(), 1);
+    await workspace.next("mcp.restart");
+    // the dashboard tab gets nothing: its next message is the reply to a later request
+    dashboard.send({ type: "chat.history", rid: "after", conversationId: "c" });
+    const next = await dashboard.nextAny();
+    assert.notEqual(next.type, "mcp.restart");
+});

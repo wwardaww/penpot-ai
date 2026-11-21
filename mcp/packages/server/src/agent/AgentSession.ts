@@ -83,6 +83,11 @@ export class AgentSession implements AgentClient {
         return this.closeController.signal;
     }
 
+    /** Whether this tab is signed in and has an open file (it sent `context.set`). */
+    public get showsFile(): boolean {
+        return this.authenticated && this.context !== undefined;
+    }
+
     public send(message: DaemonMessage): void {
         if (this.socket.readyState === this.socket.OPEN) {
             this.socket.send(JSON.stringify(message));

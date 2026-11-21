@@ -102,6 +102,13 @@ export class PluginBridge implements TaskDispatchHost {
     private readonly taskConnections: Map<string, PenpotConnection> = new Map();
     private readonly dispatcher: TaskDispatcher;
     private connectionAuthenticator?: PluginConnectionAuthenticator;
+    private sessionRecovery?: () => number;
+    /** The running wait for a restarted plugin, shared by the tasks that need it. */
+    private recovering?: Promise<boolean>;
+
+    /** How long a task waits for a plugin that was asked to restart (Penforge). */
+    public static readonly SESSION_RECOVERY_MS = 15_000;
+    private static readonly SESSION_RECOVERY_POLL_MS = 250;
 
     /**
      * Collector of the rollbacks that task responses report, per tool execution.
@@ -140,6 +147,16 @@ export class PluginBridge implements TaskDispatchHost {
      */
     public setConnectionAuthenticator(authenticator: PluginConnectionAuthenticator): void {
         this.connectionAuthenticator = authenticator;
+    }
+
+    /**
+     * Lets a task that finds no plugin session ask the open tabs to restart their plugin, then wait
+     * for it (Penforge: the hidden plugin's frame can go away while the tab stays open).
+     *
+     * @param recover - asks the tabs to restart the plugin; returns how many tabs it asked
+     */
+    public setSessionRecovery(recover: (() => number) | undefined): void {
+        this.sessionRecovery = recover;
     }
 
     /**
@@ -469,6 +486,7 @@ export class PluginBridge implements TaskDispatchHost {
             }
             userToken = sessionContext.userToken;
         }
+        sessionId = await this.recoverSession(userToken, sessionId);
         // attach the result handler before dispatch can reject the task
         const resultPromise = task.getResultPromise();
         void this.dispatcher.dispatch(task, userToken, sessionId).catch((error) => {
@@ -484,6 +502,54 @@ export class PluginBridge implements TaskDispatchHost {
             }
             throw error;
         }
+    }
+
+    /**
+     * With {@link setSessionRecovery}: when no plugin session is connected at all, asks the open
+     * tabs to restart their plugin and waits up to {@link SESSION_RECOVERY_MS} for one. After such
+     * a restart, a requested `sessionId` (now gone) becomes the only live session, since the
+     * restarted plugin gets a new session id.
+     *
+     * @param userToken - the user whose sessions count
+     * @param sessionId - the requested session, if any
+     * @returns the session id to dispatch to
+     */
+    private async recoverSession(userToken: string | null, sessionId?: string): Promise<string | undefined> {
+        const recover = this.sessionRecovery;
+        if (!recover || (await this.dispatcher.discoverSessions(userToken)).length > 0) {
+            return sessionId;
+        }
+        this.recovering ??= this.waitForRestartedPlugin(userToken, recover).finally(() => {
+            this.recovering = undefined;
+        });
+        if (!(await this.recovering)) {
+            return sessionId;
+        }
+        // the restarted plugin has a new session id; the old one is gone for good
+        const sessions = await this.dispatcher.discoverSessions(userToken);
+        return sessionId && sessions.length === 1 ? sessions[0].sessionId : sessionId;
+    }
+
+    /**
+     * Asks the tabs to restart their plugin and waits for a session.
+     *
+     * @returns whether a session connected in time
+     */
+    private async waitForRestartedPlugin(userToken: string | null, recover: () => number): Promise<boolean> {
+        if (recover() === 0) {
+            return false;
+        }
+        this.logger.info("No Penpot plugin session for a task; asked the open tabs to restart the plugin");
+        const deadline = Date.now() + PluginBridge.SESSION_RECOVERY_MS;
+        while (Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, PluginBridge.SESSION_RECOVERY_POLL_MS));
+            if ((await this.dispatcher.discoverSessions(userToken)).length > 0) {
+                this.logger.info("Plugin session is back after the restart request");
+                return true;
+            }
+        }
+        this.logger.info("No plugin session came back after the restart request");
+        return false;
     }
 
     /**

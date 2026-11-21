@@ -137,6 +137,16 @@ export class PenforgeDaemon {
         PublishServices.install(this.publish);
     }
 
+    /**
+     * Asks the tabs with an open file to restart their MCP plugin (see
+     * {@link AgentServer.requestPluginRestart}).
+     *
+     * @returns how many tabs were asked
+     */
+    public requestPluginRestart(): number {
+        return this.server.requestPluginRestart();
+    }
+
     /** Pairing URL to open in the browser. */
     public get pairUrl(): string {
         return this.server.pairUrl;

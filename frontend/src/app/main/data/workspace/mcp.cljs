@@ -61,6 +61,12 @@
 (defonce interval-sub
   (atom nil))
 
+;; Generation of the bundled plugin started last. A new start runs before
+;; the stop of the previous one (both follow the same `::init`), and both
+;; use the same plugin id: the old stop must not close the new plugin.
+(defonce ^:private plugin-generation
+  (atom 0))
+
 ;; Resolves the promise that keeps the session Web Lock held; nil when none is.
 (defonce ^:private session-lock-release
   (atom nil))
@@ -221,7 +227,8 @@
   (ptk/reify ::init-mcp-plugin
     ptk/EffectEvent
     (effect [_ _ stream]
-      (let [manifest  (-> default-manifest
+      (let [this-run  (swap! plugin-generation inc)
+            manifest  (-> default-manifest
                           (assoc :url (str (u/join cf/public-uri "plugins/mcp/manifest.json")))
                           (assoc :host (str (u/join cf/public-uri "plugins/mcp/"))))
 
@@ -281,9 +288,15 @@
                          (.removeEventListener globals/window "message" on-message)
                          (when @announce?
                            (announce-session "disconnected" nil))
-                         (release-session-lock)
-                         (stop-reconnect-watcher!)
-                         (dp/close-plugin! default-manifest))))
+                         ;; a newer start owns the plugin, the lock and the watcher now
+                         (when (= this-run @plugin-generation)
+                           (release-session-lock)
+                           (stop-reconnect-watcher!)
+                           (dp/close-plugin! default-manifest)))))
+        ;; The runtime ignores a load while a plugin with the same id is
+        ;; registered, and a plugin whose frame went away can stay
+        ;; registered: close it first so this start always loads.
+        (dp/close-plugin! default-manifest)
         (.addEventListener globals/window "message" on-message)
         ;; A content script that said hello before this listener existed
         ;; says it again

@@ -390,6 +390,11 @@
      [:engine {:optional true} [:maybe :string]]
      [:stack {:optional true} [:maybe [:map-of :keyword :any]]]]]
 
+   ;; a design tool found no MCP plugin session for this tab: restart
+   ;; the hidden plugin
+   ["mcp.restart"
+    [:map [:type :string]]]
+
    ["error"
     [:map
      [:type :string]

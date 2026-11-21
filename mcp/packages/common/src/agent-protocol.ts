@@ -461,7 +461,16 @@ export type DaemonMessage =
     | AppsDaemonMessage
     | ChatChangedMessage
     | LinkedDaemonMessage
+    | McpRestartMessage
     | ErrorMessage;
+
+/**
+ * Asks the tab to restart its hidden MCP plugin: a design tool found no plugin session while the
+ * tab is connected to the daemon (the plugin's frame went away without coming back).
+ */
+export interface McpRestartMessage {
+    type: "mcp.restart";
+}
 
 // ---------------------------------------------------------------------------------------------
 // workflow questions

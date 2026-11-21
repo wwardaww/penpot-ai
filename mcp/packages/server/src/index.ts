@@ -77,6 +77,12 @@ async function main(): Promise<void> {
                 hosting,
             });
             await daemon.start();
+            // local daemon: a design tool that finds no plugin session asks the open tabs to restart
+            // it (server mode has many users, whose tabs must not be asked for another's task)
+            if (!hosting) {
+                const started = daemon;
+                server.pluginBridge.setSessionRecovery(() => started.requestPluginRestart());
+            }
         }
 
         // keep the process alive; stop child processes (Claude, dev servers) on every way out.

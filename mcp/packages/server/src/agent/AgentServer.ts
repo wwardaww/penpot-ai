@@ -150,6 +150,23 @@ export class AgentServer {
     }
 
     /**
+     * Asks every tab with an open file to restart its hidden MCP plugin (`mcp.restart`), for a
+     * design tool that found no plugin session.
+     *
+     * @returns how many tabs were asked
+     */
+    public requestPluginRestart(): number {
+        let asked = 0;
+        for (const session of this.sessions) {
+            if (session.showsFile) {
+                session.send({ type: "mcp.restart" });
+                asked++;
+            }
+        }
+        return asked;
+    }
+
+    /**
      * Starts listening.
      */
     public async start(): Promise<void> {
