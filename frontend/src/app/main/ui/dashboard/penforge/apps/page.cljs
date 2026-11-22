@@ -37,7 +37,7 @@
 (mf/defc apps-grid*
   "Cards of the listed apps, or the empty and loading notices."
   [{:keys [apps-state developer connected]}]
-  (let [{:keys [status items order pending errors logs phone error]} apps-state
+  (let [{:keys [status items order pending errors logs phone error file-names]} apps-state
 
         on-retry
         (mf/use-fn #(st/emit! (apps/fetch-apps)))]
@@ -68,6 +68,7 @@
        (for [app-id order]
          [:> app-card* {:key app-id
                         :app (get items app-id)
+                        :title (apps/app-title (get items app-id) file-names)
                         :developer developer
                         :connected connected
                         :pending (contains? pending app-id)

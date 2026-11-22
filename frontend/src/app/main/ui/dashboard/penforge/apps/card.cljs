@@ -240,10 +240,12 @@
 ;; --- Card
 
 (mf/defc app-card*
-  [{:keys [app developer pending error logs phone connected]}]
-  (let [{:keys [name project-name team-id file-id platform stack expo web
+  [{:keys [app title developer pending error logs phone connected]}]
+  (let [{:keys [project-name team-id file-id platform stack expo web
                 built-at thumbnail status app-path redesign]} app
 
+        ;; the page passes the title with the backend's file name (W39)
+        name       (or title (:name app))
         app-id     (apps/app-id app)
         redesigned (apps/redesigned? app)
         ;; a Re-Designed app that cannot start: the card says why
