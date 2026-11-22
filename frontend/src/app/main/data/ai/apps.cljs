@@ -19,14 +19,19 @@
   `{:status :loading|:loaded|:failed, :team-id, :rid, :items {id app},
   :order [id], :error {:code :message}, :errors {id {:code :reason
   :message}}, :pending #{id}, :logs {id {:loading :lines}}, :phone {id
-  phone}, :rids {rid [kind id]}}`, where `id` is the app id (`:app-id`;
-  the project id for a built app). App maps are the daemon's `AppInfo`
+  phone}, :rids {rid [kind id]}, :file-names {file-id name}}`, where
+  `id` is the app id (`:app-id`; the project id for a built app).
+  `:file-names` holds the Penpot names of the files of Re-Designed apps,
+  read from the backend (`:get-project-files`), because the daemon knows
+  a file's name only once a tab of it was opened. App maps are the daemon's `AppInfo`
   with kebab-case keys (`:app-id`, `:project-id`, `:redesign`,
   `:status {:state :url ...}`)."
   (:require
    [app.common.logging :as log]
+   [app.common.uuid :as uuid]
    [app.main.data.ai.client :as client]
    [app.main.data.ai.protocol :as proto]
+   [app.main.repo :as rp]
    [app.util.i18n :refer [tr]]
    [beicon.v2.core :as rx]
    [cuerdas.core :as str]
@@ -76,6 +81,36 @@
   [app]
   (let [{:keys [branch current-branch]} (:redesign app)]
     (and (string? branch) (not= branch current-branch))))
+
+(defn app-title
+  "The title of an app's card. A Re-Designed app is named after its
+  Penpot file: the name the backend gave (`file-names`, file id -> name)
+  wins over the daemon's, which falls back to the folder name while the
+  daemon has not seen the file open. The daemon's ` (<folder>)` suffix,
+  added when several apps share a name, is kept."
+  [{:keys [name file-id redesign]} file-names]
+  (let [file-name (when (and (map? redesign) (string? file-id))
+                    (get file-names file-id))]
+    (if (and (string? file-name) (not (str/blank? file-name)))
+      (let [{:keys [app-dir root]} redesign
+            folder (if (str/blank? app-dir)
+                     (last (str/split (str root) #"[\\/]+"))
+                     app-dir)
+            suffix (str " (" folder ")")]
+        (if (and (string? name) (not (str/blank? folder)) (str/ends-with? name suffix))
+          (str file-name suffix)
+          file-name))
+      name)))
+
+(defn missing-name-projects
+  "Projects with Re-Designed apps whose file name is not known yet."
+  [apps file-names]
+  (into #{}
+        (comp (filter #(and (redesigned? %)
+                            (string? (:file-id %))
+                            (not (contains? file-names (:file-id %)))))
+              (map :project-id))
+        apps))
 
 (defn- state-path
   [& ks]
@@ -188,12 +223,50 @@
 
 (declare fetch-apps)
 
+(defn- files-named
+  [names]
+  (ptk/reify ::files-named
+    ptk/UpdateEvent
+    (update [_ state]
+      (update-in state (state-path :file-names) merge names))))
+
+(defn- fetch-file-names
+  "Read the file names of the given Penpot projects from the backend
+  (one light query per project); failures keep the daemon's names."
+  [project-ids]
+  (ptk/reify ::fetch-file-names
+    ptk/WatchEvent
+    (watch [_ _ _]
+      (->> (rx/from (keep uuid/parse* project-ids))
+           (rx/merge-map
+            (fn [project-id]
+              (->> (rp/cmd! :get-project-files {:project-id project-id})
+                   (rx/map (fn [files]
+                             (files-named
+                              (into {}
+                                    (keep (fn [{:keys [id name]}]
+                                            (when (and (some? id) (string? name))
+                                              [(str id) name])))
+                                    files))))
+                   (rx/catch (fn [cause]
+                               (log/warn :hint "unable to read the file names" :cause cause)
+                               (rx/empty))))))))))
+
 (defn- handle-message
   [msg]
   (ptk/reify ::handle-message
     ptk/UpdateEvent
     (update [_ state]
       (apply-message state msg))
+
+    ptk/WatchEvent
+    (watch [_ state _]
+      (let [{:keys [items file-names]} (get-in state [:penforge :apps])
+            projects (when (= "apps.list" (:type msg))
+                       (missing-name-projects (vals items) file-names))]
+        (if (seq projects)
+          (rx/of (fetch-file-names projects))
+          (rx/empty))))
 
     ptk/EffectEvent
     (effect [_ state _]
@@ -332,7 +405,8 @@
     (update [_ state]
       (update-in state [:penforge :apps]
                  (fn [apps]
-                   (cond-> (assoc apps :team-id team-id)
+                   ;; file names are read again on each visit (renames)
+                   (cond-> (-> apps (assoc :team-id team-id) (dissoc :file-names))
                      (not= team-id (:team-id apps))
                      (dissoc :items :order :errors :logs :phone)))))
 

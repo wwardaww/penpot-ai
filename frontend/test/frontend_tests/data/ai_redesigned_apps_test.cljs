@@ -177,3 +177,38 @@
     (t/is (= 2 (count (re-seq #"penforge-app-card" grid))))
     (t/is (str/includes? grid "adissio landing"))
     (t/is (str/includes? grid "Shop"))))
+
+(t/deftest the-title-prefers-the-backend-file-name
+  (let [old    (assoc landing :name "landing" :file-name nil)
+        names  {(:file-id landing) "adissio landing"}
+        shared (assoc landing :name "landing (landing)")]
+    (t/is (= "adissio landing" (apps/app-title old names))
+          "an old record shows the Penpot file name, not the folder")
+    (t/is (= "landing" (apps/app-title old {})) "unknown name: the daemon's")
+    (t/is (= "landing" (apps/app-title old {(:file-id landing) "  "})))
+    (t/is (= "adissio landing (landing)" (apps/app-title shared names))
+          "the daemon's folder suffix stays")
+    (t/is (= "adissio (adissio)"
+             (apps/app-title (-> landing
+                                 (assoc :name "landing (adissio)")
+                                 (assoc-in [:redesign :app-dir] "")
+                                 (assoc-in [:redesign :root] "F:\\adissio"))
+                             {(:file-id landing) "adissio"}))
+          "an app at the linked folder's root uses the folder's name")
+    (t/is (= "Shop" (apps/app-title (assoc built :file-id (:file-id landing)) names))
+          "built apps keep their project name")))
+
+(t/deftest only-projects-with-unknown-file-names-are-read
+  (let [old (assoc landing :name "landing")]
+    (t/is (= #{project-id} (apps/missing-name-projects [old built] {})))
+    (t/is (= #{} (apps/missing-name-projects [old built] {(:file-id landing) "adissio landing"})))
+    (t/is (= #{} (apps/missing-name-projects [(dissoc old :file-id)] {})))))
+
+(t/deftest the-grid-shows-the-backend-file-name
+  (let [state (-> (listed)
+                  (assoc-in [:penforge :apps :items landing-id :name] "landing")
+                  (assoc-in [:penforge :apps :file-names] {(:file-id landing) "adissio landing"}))
+        grid  (render page/apps-grid* {:apps-state (get-in state [:penforge :apps])
+                                       :developer false :connected true})]
+    (t/is (str/includes? grid "adissio landing"))
+    (t/is (not (str/includes? grid ">landing<")))))
