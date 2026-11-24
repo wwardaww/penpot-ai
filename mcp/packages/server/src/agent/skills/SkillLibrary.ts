@@ -50,6 +50,7 @@ export class SkillLibrary {
         "auto-name",
         "build-plan",
         "cleanup-import",
+        "code-redesign-gaps",
         "design-md-export",
         "fix-comments",
         "instruct",
