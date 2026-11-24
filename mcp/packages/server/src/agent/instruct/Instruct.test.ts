@@ -182,6 +182,7 @@ describe("instruct", () => {
         const filter = request.toolFilter!;
         assert.notEqual(filter.check("Write", { file_path: join(output, "PenforgeUI", "guides", "x.md") }), null);
         assert.notEqual(filter.check("Write", { file_path: join(base, "x.md") }), null);
+        assert.notEqual(filter.check("Read", { file_path: join(output, "notes.txt") }), null);
         assert.notEqual(filter.check("Bash", { command: "npm install" }), null);
         assert.notEqual(filter.check("mcp__penpot__execute_code", {}), null);
         assert.equal(filter.check("mcp__penpot__get_node_properties", {}), null);

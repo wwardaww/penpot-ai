@@ -3,8 +3,8 @@ import { dirname, join } from "path";
 import type { WorkflowContext, WorkflowWorkspaceApi } from "@penpot/mcp-common";
 import { BuildLock } from "../build/BuildLock";
 import { LinkedFolders } from "../linked/LinkedFolders";
+import { LinkedToolFilter } from "../linked/LinkedToolFilter";
 import { RedesignScreens, type ScreenBoard } from "../linked/RedesignScreens";
-import { DesignToolFilter } from "../tools/DesignToolFilter";
 import { FolderPaths } from "../workspace/FolderPaths";
 import type { ProjectOutput } from "../workspace/ProjectOutput";
 import { DesignSpecExport, type ScreenFiles } from "./DesignSpecExport";
@@ -250,10 +250,11 @@ export class InstructExport {
                         `Animations: \`${join(factsDir, "animations.json")}\`.`,
                     ].join("\n"),
                     promptName: "instruct",
-                    toolFilter: new DesignToolFilter(
+                    toolFilter: new LinkedToolFilter(
                         this.ctx.workspace.root,
+                        [this.ctx.workspace.root],
                         guidesDir,
-                        "Only the guides are written in this step."
+                        true
                     ),
                 });
             } catch (error) {
