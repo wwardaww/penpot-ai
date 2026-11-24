@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import type { Persona, Platform } from "@penpot/mcp-common";
+import { SkillLibrary } from "../skills/SkillLibrary";
 
 /** Values filled into prompt templates. */
 export interface PromptVariables {
@@ -25,7 +26,8 @@ export interface PromptRequest extends PromptVariables {
  * Registry of the daemon's prompt templates.
  *
  * A system prompt is `prompts/base.md`, then `prompts/<persona>.md`, then the workflow's
- * `workflows/<name>.prompt.md`, then extra text. Templates may use the placeholders `{{persona}}`,
+ * `workflows/<name>.prompt.md`, then the core of the design skills when the workflow designs or
+ * writes UI ({@link SkillLibrary}, always on), then extra text. Templates may use the placeholders `{{persona}}`,
  * `{{platform}}` and `{{projectName}}`, and sections `{{#value}} … {{/value}}` that are kept only
  * when `value` is the current persona (`designer`, `developer`), platform (`web`, `mobile`, `game`) or
  * project type (`game`, `existing`).
@@ -38,10 +40,12 @@ export class PromptRegistry {
     /**
      * @param promptsDir - folder holding `base.md` and the persona prompts
      * @param workflowsDir - folder holding the `<name>.prompt.md` workflow prompts
+     * @param skills - the bundled design skills
      */
     constructor(
         private readonly promptsDir: string,
-        private readonly workflowsDir: string
+        private readonly workflowsDir: string,
+        private readonly skills: SkillLibrary = SkillLibrary.locate()
     ) {}
 
     /**
@@ -79,10 +83,15 @@ export class PromptRegistry {
                 parts.push(workflowPrompt);
             }
         }
-        if (request.extra) {
-            parts.push(request.extra);
+        const rendered = parts.map((part) => this.render(part, request));
+        const target = SkillLibrary.targetOf(request.workflow);
+        if (target !== null) {
+            rendered.push(this.render(this.skills.core(), request, [target]));
         }
-        return parts.map((part) => this.render(part, request).trim()).join("\n\n") + "\n";
+        if (request.extra) {
+            rendered.push(this.render(request.extra, request));
+        }
+        return rendered.map((part) => part.trim()).join("\n\n") + "\n";
     }
 
     /**
@@ -103,9 +112,10 @@ export class PromptRegistry {
      *
      * @param template - the template
      * @param variables - the values
+     * @param keep - further section names to keep
      */
-    public render(template: string, variables: PromptVariables): string {
-        const active = new Set<string>([variables.persona, variables.platform]);
+    public render(template: string, variables: PromptVariables, keep: readonly string[] = []): string {
+        const active = new Set<string>([variables.persona, variables.platform, ...keep]);
         if (variables.projectType) {
             active.add(variables.projectType);
         }

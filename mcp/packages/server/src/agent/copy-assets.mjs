@@ -1,6 +1,6 @@
 // Copies the Penforge daemon's prompt files to dist/agent/, where the bundled daemon looks for them.
 // Run from mcp/packages/server as part of `pnpm run build`.
-import { cpSync, existsSync, mkdirSync, readdirSync } from "fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "fs";
 import { join } from "path";
 
 const source = join("src", "agent");
@@ -8,6 +8,13 @@ const target = join("dist", "agent");
 
 // base and persona prompts
 cpSync(join(source, "prompts"), join(target, "prompts"), {
+    recursive: true,
+    filter: (path) => !/\.(ts|mjs)$/.test(path),
+});
+
+// design skills (W40): Markdown, licences and sources
+rmSync(join(target, "skills"), { recursive: true, force: true });
+cpSync(join(source, "skills"), join(target, "skills"), {
     recursive: true,
     filter: (path) => !/\.(ts|mjs)$/.test(path),
 });

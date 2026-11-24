@@ -115,6 +115,7 @@ export class CommentToolFilter implements WorkflowToolFilter {
         "list_canvas_comments",
         "generate_code_hints",
         "penforge_overview",
+        "penforge_skill",
         "high_level_overview",
         "penpot_api_info",
     ]);

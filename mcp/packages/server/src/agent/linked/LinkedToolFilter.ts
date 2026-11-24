@@ -19,6 +19,7 @@ export class LinkedToolFilter implements WorkflowToolFilter {
         "generate_code_hints",
         "capture_node_screenshot",
         "penforge_overview",
+        "penforge_skill",
         "high_level_overview",
         "penpot_api_info",
         "export_shape",

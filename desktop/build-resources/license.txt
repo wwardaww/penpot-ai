@@ -12,6 +12,8 @@ This installer also contains third-party software under their own licenses
 - sharp (Apache-2.0) and libvips (LGPL-3.0-or-later, dynamically linked)
 - Node packages of the Penforge daemon and media-processor (MIT, Apache-2.0,
   ISC and others), including the Claude Agent SDK (Anthropic terms)
+- Design rules shortened from taste-skill by Leonxlnx and no-ai-slop by
+  Peter Yang (both MIT)
 
 The AI features use the Claude Code CLI ("claude"), which is not part of this
 installer and is installed and logged in by the user.

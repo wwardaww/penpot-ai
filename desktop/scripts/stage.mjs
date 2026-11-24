@@ -184,6 +184,9 @@ function collectLicenses() {
         ["postgresql-LICENSE.txt", join(ROOT, "build-resources", "licenses", "postgresql-LICENSE.txt")],
         ["sharp-LICENSE.txt", join(RUNTIME, "media-processor", "node_modules", "sharp", "LICENSE")],
         ["claude-agent-sdk-LICENSE.md", join(RUNTIME, "daemon", "node_modules", "@anthropic-ai", "claude-agent-sdk", "LICENSE.md")],
+        // design skills bundled with the daemon (W40)
+        ["taste-skill-LICENSE.txt", join(REPO, "mcp", "packages", "server", "src", "agent", "skills", "taste-skill", "LICENSE")],
+        ["no-ai-slop-LICENSE.txt", join(REPO, "mcp", "packages", "server", "src", "agent", "skills", "no-ai-slop", "LICENSE")],
     ];
     for (const [name, from] of sources) {
         if (existsSync(from)) {
