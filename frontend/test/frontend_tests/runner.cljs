@@ -32,6 +32,7 @@
    [frontend-tests.data.ai-protocol-test]
    [frontend-tests.data.ai-prototype-test]
    [frontend-tests.data.ai-publish-test]
+   [frontend-tests.data.ai-redesign-checklist-test]
    [frontend-tests.data.ai-redesigned-apps-test]
    [frontend-tests.data.ai-token-sync-test]
    [frontend-tests.data.auth-test]
@@ -180,6 +181,7 @@
    [frontend-tests.ui.ai-build-test]
    [frontend-tests.ui.ai-chat-markdown-test]
    [frontend-tests.ui.ai-chat-ux-test]
+   [frontend-tests.ui.ai-conformance-test]
    [frontend-tests.ui.ai-design-md-test]
    [frontend-tests.ui.ai-design-system-binding-test]
    [frontend-tests.ui.ai-design-system-extract-test]
@@ -271,6 +273,7 @@
    'frontend-tests.data.ai-design-system-extract-test
    'frontend-tests.data.ai-design-system-test
    'frontend-tests.data.ai-linked-test
+   'frontend-tests.data.ai-redesign-checklist-test
    'frontend-tests.data.ai-ask-test
    'frontend-tests.data.ai-auto-name-test
    'frontend-tests.data.ai-adapt-test
@@ -441,6 +444,7 @@
    'frontend-tests.ui.ai-linked-test
    'frontend-tests.ui.ai-animations-test
    'frontend-tests.ui.ai-build-test
+   'frontend-tests.ui.ai-conformance-test
    'frontend-tests.ui.ai-build-changes-test
    'frontend-tests.ui.ai-preview-pane-test
    'frontend-tests.ui.ai-chat-markdown-test

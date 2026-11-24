@@ -30,6 +30,7 @@
    [app.main.ui.ds.foundations.assets.icon :refer [icon*] :as i]
    [app.main.ui.ds.foundations.typography :as t]
    [app.main.ui.ds.foundations.typography.text :refer [text*]]
+   [app.main.ui.workspace.ai.build.conformance :refer [conformance-report*]]
    [app.main.ui.workspace.ai.build.events :as build]
    [app.main.ui.workspace.ai.chat.markdown :refer [markdown*]]
    [app.util.dom :as dom]
@@ -561,6 +562,7 @@
       (when token-only
         [:> text* {:as "p" :typography t/body-small :class (stl/css :muted)}
          (tr "penforge.build.done.tokens-only")])
+      [:> conformance-report* {:conformance (:conformance result) :persona persona}]
       (when (seq assets)
         [:section {:class (stl/css :section)}
          [:> text* {:as "h3" :typography t/headline-small :class (stl/css :section-title)}

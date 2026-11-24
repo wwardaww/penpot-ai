@@ -314,7 +314,8 @@
                                                    {:name "Pause" :slug "pause" :guide "guides/pause.md"}]})]
     (t/is (= {:kind :existing :branch "penforge/redesign-20261121-1030" :files 3
               :screens-done 1 :screens-partial 1 :unmatched ["Cart badge animation"]
-              :outside [{:path "src/api.ts" :reason "logic" :detail "new API call"}]}
+              :outside [{:path "src/api.ts" :reason "logic" :detail "new API call"}]
+              :items []}
              existing))
     (t/is (= {:kind :game :folder "D:/Quest/PenforgeUI" :branch nil :screens 2 :pngs 4
               :guides 2 :assets 7}
