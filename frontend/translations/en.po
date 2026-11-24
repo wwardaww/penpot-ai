@@ -14609,3 +14609,172 @@ msgstr "Penforge cannot start this app: it has no dev or start script it knows. 
 #: src/app/main/ui/dashboard/penforge/apps/card.cljs
 msgid "penforge.apps.redesign.folder-missing"
 msgstr "The app folder is gone. Link the project's folder again from its workspace."
+
+# penforge:W41
+#: src/app/main/ui/workspace/ai/header_strip.cljs
+msgid "penforge.build.menu"
+msgstr "Build options"
+
+#: src/app/main/data/ai/actions/build.cljs
+msgid "penforge.instruct.action"
+msgstr "Instruct"
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.title.build"
+msgstr "Choose the app folder"
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.title.instruct"
+msgstr "Choose the folder for the specification"
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.intro.build"
+msgstr "Penforge writes the app to a folder on this computer. An empty folder is used as it is; any other folder gets a new folder inside it."
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.intro.instruct"
+msgstr "Penforge writes a PenforgeUI folder with images, tokens and guides, and no code. An empty folder is used as it is; any other folder gets a new folder inside it."
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.missing"
+msgstr "The app folder %s is missing, or is not the one Penforge made. Choose it again, or choose another one."
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.target.build"
+msgstr "The app goes to %s"
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.target.instruct"
+msgstr "PenforgeUI goes to %s"
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.target.empty"
+msgstr "The folder is empty and is used as it is."
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.target.existing"
+msgstr "Penforge already uses this folder for the project."
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.target.sub-folder"
+msgstr "The folder you chose is not empty, so Penforge makes this new folder in it. Your files stay as they are."
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.target.moves"
+msgstr "The app built so far stays in %s. The next build writes the whole app to the new folder."
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.confirm"
+msgstr "Use this folder"
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.change"
+msgstr "Change"
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.line.build"
+msgstr "App folder:"
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.line.instruct"
+msgstr "Folder:"
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.error.folder-refused"
+msgstr "This folder cannot be used. Choose a folder of your own, not a drive, your home folder, a system folder or the Penforge folder."
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.error.folder-taken"
+msgstr "This folder belongs to an app Penforge already works on. Choose another one."
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.error.inside-git"
+msgstr "This folder is inside a git repository. Build makes its own repository, so choose a folder outside yours."
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.error.not-writable"
+msgstr "Penforge cannot write to this folder. Choose another one."
+
+#: src/app/main/ui/workspace/ai/build/output_dialog.cljs
+msgid "penforge.output.error.build-running"
+msgstr "A build of this project is running. Wait until it ends."
+
+#: src/app/main/ui/workspace/ai/build/output.cljs
+msgid "penforge.output.error.generic"
+msgstr "The output folder could not be read. Try again."
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.title"
+msgstr "Instruct"
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.planning"
+msgstr "Reading the design"
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.intro"
+msgstr "Penforge writes the design as a specification for a developer: images, assets, tokens and one guide per screen. No code is written."
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.screens"
+msgstr "Screens to write: %s"
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.confirm"
+msgstr "Write the specification"
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.running"
+msgstr "Writing the specification"
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.step.screens"
+msgstr "Exporting %s (%s of %s)"
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.step.assets"
+msgstr "Exporting icons and images"
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.step.tokens"
+msgstr "Writing tokens and fonts"
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.step.guides"
+msgstr "Writing the guides (%s of %s done)"
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.step.write"
+msgstr "Writing the folder"
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.done.title"
+msgstr "The specification is ready"
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.done.summary"
+msgstr "%s screens with a guide each, %s assets, tokens and fonts."
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.done.missing"
+msgstr "No image could be taken of: %s"
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.done.kept"
+msgstr "Files you had changed were moved to the kept folder: %s"
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.error.no-screens"
+msgstr "The file has no screen boards yet."
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.error.busy"
+msgstr "Instruct is already running for this project."
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.error.folder"
+msgstr "The output folder cannot be used any more. Choose a folder again."
+
+#: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
+msgid "penforge.instruct.error.generic"
+msgstr "The specification could not be written."

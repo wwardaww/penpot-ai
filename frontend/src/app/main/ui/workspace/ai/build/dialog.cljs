@@ -31,6 +31,8 @@
    [app.main.ui.ds.foundations.typography :as t]
    [app.main.ui.ds.foundations.typography.text :refer [text*]]
    [app.main.ui.workspace.ai.build.events :as build]
+   [app.main.ui.workspace.ai.build.output :as output]
+   [app.main.ui.workspace.ai.build.output-dialog :refer [output-line*]]
    [app.main.ui.workspace.ai.chat.markdown :refer [markdown*]]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
@@ -48,6 +50,15 @@
   (l/derived #(:kept-instructions (build/get-changes %) "") st/state))
 
 ;; --- Pieces
+
+(mf/defc build-folder*
+  "Folder of the app, with a link to change it (W41)."
+  {::mf/private true}
+  []
+  (let [on-change (mf/use-fn
+                   #(st/emit! (output/change-folder :build build/folder-changed build/reopen)))]
+    [:> output-line* {:purpose :build
+                      :on-change on-change}]))
 
 (mf/defc step-icon*
   {::mf/private true}
@@ -300,6 +311,7 @@
       (when token-only
         [:> text* {:as "p" :typography t/body-small :class (stl/css :muted)}
          (tr "penforge.build.changes.token-only")])
+      [:> build-folder* {}]
       [:> instructions-fields* {:text (:text fields)
                                 :keep (:keep fields)
                                 :kept (:kept fields)
@@ -474,6 +486,7 @@
          :else [:> markdown* {:text (or summary "")}])]
       (when (seq screens)
         [:> screens* {:screens screens}])
+      [:> build-folder* {}]
       (when (and developer? (not nothing?))
         [:> developer-plan* {:developer developer
                              :stack-name @stack-name*

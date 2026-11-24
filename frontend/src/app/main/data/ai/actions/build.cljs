@@ -13,13 +13,18 @@
   disabled (\"Up to date\") when nothing changed. Update opens the
   dialog on the change list. \"Update with instructions…\" opens it
   too, so new instructions for the AI can go in without a design
-  change."
+  change.
+
+  W41: the Build button of the floating toolbar is a split button; its
+  dropdown also offers Instruct, which writes a specification without
+  code."
   (:require
    [app.main.data.ai.actions :as actions]
    [app.main.data.ai.preview :as preview]
    [app.main.store :as st]
    [app.main.ui.ds.foundations.assets.icon :as i]
    [app.main.ui.workspace.ai.build.events :as build]
+   [app.main.ui.workspace.ai.build.instruct :as instruct]
    [app.util.i18n :refer [tr]]))
 
 (defn building?
@@ -68,6 +73,28 @@
          (if (= :build (get-cta state))
            (st/emit! (build/start))
            (st/emit! (build/start-update))))})
+
+(defn instructing?
+  "Whether an Instruct run (plan or export) is going on."
+  [state]
+  (instruct/running? (instruct/get-instruct state)))
+
+(actions/register-action!
+ {:id :ai/instruct
+  :label #(tr "penforge.instruct.action")
+  :icon i/document
+  :order 91
+  :split-of :ai/build
+  :scopes #{:island :main-menu :command-palette}
+  ;; like Build: not for Game UI and Existing projects
+  :visible? (fn [state]
+              (let [build-action (get @actions/registry :ai/build)]
+                (boolean (and (some? build-action)
+                              ((:visible? build-action) state)))))
+  ;; a running export can be shown again
+  :enabled? (fn [state] (not (building? state)))
+  :run (fn [_]
+         (st/emit! (instruct/start)))})
 
 (actions/register-action!
  {:id :ai/build-instructions

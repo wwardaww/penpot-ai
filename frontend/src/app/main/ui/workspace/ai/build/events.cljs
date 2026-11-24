@@ -20,6 +20,10 @@
   instructions for the AI. A watcher keeps `[:penforge :build-changes]`
   (badge count) current while the AI session of the file runs.
 
+  Output folder (W41): the first build of a project asks for a folder
+  before it plans (`output/ensure-folder`); an update asks only when the
+  folder is gone.
+
   State lives under `[:penforge :build]`:
 
   - `:stage` `:idle` `:planning` `:plan` `:changes` `:review`
@@ -48,6 +52,7 @@
    [app.main.data.helpers :as dsh]
    [app.main.data.modal :as modal]
    [app.main.store :as st]
+   [app.main.ui.workspace.ai.build.output :as output]
    [beicon.v2.core :as rx]
    [beicon.v2.operators :as rxo]
    [cuerdas.core :as str]
@@ -230,18 +235,44 @@
    (run :planning "build-plan" (cond-> {:ask false}
                                  (some? mode) (assoc :mode mode)))))
 
+(defn start-plan
+  "Open the build dialog and plan a build."
+  []
+  (ptk/reify ::start-plan
+    ptk/WatchEvent
+    (watch [_ _ _]
+      (rx/of (stop)
+             (plan)
+             (modal/show modal-type {})))))
+
 (defn start
   "Open the build dialog and plan a build, unless a run is going on
-  (then only the dialog opens). Entry point of the Build button."
+  (then only the dialog opens). A project without an output folder
+  asks for one first (W41). Entry point of the Build button."
   []
   (ptk/reify ::start
     ptk/WatchEvent
     (watch [_ state _]
-      (rx/concat
-       (if (running? (get-build state))
-         (rx/empty)
-         (rx/of (stop) (plan)))
-       (rx/of (modal/show modal-type {}))))))
+      (if (running? (get-build state))
+        (rx/of (modal/show modal-type {}))
+        (rx/of (output/ensure-folder :build start-plan start-plan))))))
+
+(defn reopen
+  "Show the build dialog again (after the folder dialog was closed)."
+  []
+  (modal/show modal-type {}))
+
+(defn folder-changed
+  "Go on after the folder was changed from the dialog: a first plan does
+  not depend on the folder and stays; anything else starts over."
+  []
+  (ptk/reify ::folder-changed
+    ptk/WatchEvent
+    (watch [_ state _]
+      (let [{:keys [stage plan]} (get-build state)]
+        (if (and (= :plan stage) (= "full" (:mode plan)))
+          (rx/of (reopen))
+          (rx/of (start-plan)))))))
 
 (defn confirm
   "Build the shown plan. `overrides` are the developer's edits:
@@ -283,7 +314,7 @@
         (if (or (= "build-changes" (:workflow build))
                 (:update build))
           (rx/of (stop) (list-changes))
-          (rx/of (stop) (plan)))))))
+          (rx/of (start)))))))
 
 (defn cancel
   "Stop the running workflow (if any), forget the build state and close
@@ -466,18 +497,26 @@
   []
   (run :changes "build-changes" {}))
 
+(defn- start-review
+  []
+  (ptk/reify ::start-review
+    ptk/WatchEvent
+    (watch [_ _ _]
+      (rx/of (stop)
+             (list-changes)
+             (modal/show modal-type {})))))
+
 (defn start-update
   "Open the dialog on the changes since the last build: the Update
-  button. A running build only opens the dialog."
+  button. A running build only opens the dialog. When the app's folder
+  is gone, it asks for a folder and plans a build there (W41)."
   []
   (ptk/reify ::start-update
     ptk/WatchEvent
     (watch [_ state _]
-      (rx/concat
-       (if (running? (get-build state))
-         (rx/empty)
-         (rx/of (stop) (list-changes)))
-       (rx/of (modal/show modal-type {}))))))
+      (if (running? (get-build state))
+        (rx/of (modal/show modal-type {}))
+        (rx/of (output/ensure-folder :build start-review start-plan))))))
 
 (defn get-instructions
   "Instructions for the AI as `build-run` takes them, from the dialog's

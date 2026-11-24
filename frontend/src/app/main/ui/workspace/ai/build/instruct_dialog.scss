@@ -1,0 +1,90 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/typography.scss" as t;
+@use "ds/_utils.scss" as *;
+
+// Only for the modal placeholders (%modal-overlay-base,
+// %modal-container-base), until the modals move to the DS modal.
+@use "refactor/common-refactor.scss" as deprecated;
+
+.modal-overlay {
+  @extend %modal-overlay-base;
+}
+
+.modal-dialog {
+  @extend %modal-container-base;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-m);
+  inline-size: px2rem(520);
+  max-inline-size: px2rem(520);
+  max-block-size: 85vh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-s);
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  color: var(--color-foreground-primary);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-m);
+  min-block-size: 0;
+  overflow-y: auto;
+  color: var(--color-foreground-primary);
+}
+
+.text {
+  margin: 0;
+}
+
+.muted {
+  @include t.use-typography("body-small");
+
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.path {
+  @include t.use-typography("body-small");
+
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-s);
+}
+
+.done-icon {
+  color: var(--color-accent-success);
+}
+
+.error {
+  @include t.use-typography("body-medium");
+
+  margin: 0;
+  color: var(--color-accent-error);
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-s);
+}

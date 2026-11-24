@@ -114,6 +114,16 @@
 
 ;; --- Client -> daemon
 
+(def ^:private schema:output-pick
+  "Folder pick of the output folder messages (W41)."
+  [:map
+   [:type :string]
+   [:rid :string]
+   [:project-id :string]
+   [:purpose [:enum "build" "instruct"]]
+   [:path :string]
+   [:name {:optional true} :string]])
+
 (def schema:client-message
   [:multi {:dispatch :type :title "ClientMessage"}
    ["auth"
@@ -236,7 +246,15 @@
 
    ;; the font files of a linked project, for the import into the team
    ["fonts.files"
-    [:map [:type :string] [:rid :string] [:project-id :string]]]])
+    [:map [:type :string] [:rid :string] [:project-id :string]]]
+
+   ;; W41: output folder of web and mobile projects
+   ["project.output.status"
+    [:map [:type :string] [:rid :string] [:project-id :string]]]
+
+   ["project.output.preview" schema:output-pick]
+
+   ["project.output.set" schema:output-pick]])
 
 ;; --- Daemon -> client
 
@@ -412,6 +430,21 @@
      [:files [:vector [:map [:name :string] [:data :string]]]]
      [:google [:vector :string]]]]
 
+   ;; W41: output folder (reply to the project.output requests)
+   ["project.output"
+    [:map
+     [:type :string]
+     [:rid :string]
+     [:project-id :string]
+     [:app [:map [:state :string] [:path [:maybe :string]] [:built :boolean]]]
+     [:output [:map [:state :string] [:path [:maybe :string]]]]
+     [:target {:optional true}
+      [:map
+       [:picked :string]
+       [:path :string]
+       [:sub-folder :boolean]
+       [:existing :boolean]]]]]
+
    ;; a design tool found no MCP plugin session for this tab: restart
    ;; the hidden plugin
    ["mcp.restart"
@@ -576,6 +609,34 @@
   {:type "project.link.status"
    :rid (or rid (next-rid))
    :project-id (str project-id)})
+
+;; W41: output folder
+
+(defn project-output-status
+  [{:keys [rid project-id]}]
+  {:type "project.output.status"
+   :rid (or rid (next-rid))
+   :project-id (str project-id)})
+
+(defn- output-pick
+  [type {:keys [rid project-id purpose path name]}]
+  (cond-> {:type type
+           :rid (or rid (next-rid))
+           :project-id (str project-id)
+           :purpose (cljs.core/name purpose)
+           :path path}
+    (string? name)
+    (assoc :name name)))
+
+(defn project-output-preview
+  "Which folder Build or Instruct (`purpose`) would use for `path`."
+  [params]
+  (output-pick "project.output.preview" params))
+
+(defn project-output-set
+  "Use the folder that `path` gives."
+  [params]
+  (output-pick "project.output.set" params))
 
 (defn fonts-files
   [{:keys [rid project-id]}]

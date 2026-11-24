@@ -351,15 +351,17 @@
 
 ;; --- Change folder (project menu)
 
-(t/deftest change-folder-is-offered-for-linked-projects-only
+(t/deftest change-folder-is-offered-for-projects-with-a-known-type
   (let [game     (uuid/next)
         existing (uuid/next)
         web      (uuid/next)
-        settings {game :game existing :existing web :web}]
+        mobile   (uuid/next)
+        settings {game :game existing :existing web :web mobile :mobile}]
     (with-redefs [cf/flags (conj cf/flags :ai)]
       (t/is (change-folder/visible? settings {:id game}))
       (t/is (change-folder/visible? settings {:id existing}))
-      (t/is (not (change-folder/visible? settings {:id web})))
+      (t/is (change-folder/visible? settings {:id web}) "output folder (W41)")
+      (t/is (change-folder/visible? settings {:id mobile}) "output folder (W41)")
       (t/is (not (change-folder/visible? settings {:id (uuid/next)})) "platform not loaded yet")
       (t/is (not (change-folder/visible? settings {}))))
     (with-redefs [cf/flags (disj cf/flags :ai)]

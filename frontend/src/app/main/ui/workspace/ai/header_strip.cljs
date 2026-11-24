@@ -9,7 +9,10 @@
   header) and the `:island` scope (floating toolbar over the canvas).
 
   The right header is narrow, so its icon actions sit in one AI menu;
-  only `:primary` actions (status CTAs) stay visible as buttons."
+  only `:primary` actions (status CTAs) stay visible as buttons.
+
+  An `:island` action with `:split-of` sits in the dropdown of that
+  primary button (W41: Build and Instruct)."
   (:require-macros [app.main.style :as stl])
   (:require
    [app.main.data.ai.actions :as actions]
@@ -35,6 +38,21 @@
                         :enabled (actions/enabled? action state)
                         :label (actions/get-label action)}
                  (fn? (:badge action)) (assoc :badge ((:badge action) state)))))))
+
+(defn split-items
+  "Buttons of the floating toolbar: `{:item :menu}` per visible action,
+  `:menu` the items of its dropdown (the action itself first), nil when
+  no other action belongs to it."
+  [items]
+  (let [children (group-by (comp :split-of :action) items)]
+    (into []
+          (comp (remove (comp :split-of :action))
+                (map (fn [item]
+                       (let [own (get children (get-in item [:action :id]))]
+                         {:item item
+                          :menu (when (seq own)
+                                  (into [item] own))}))))
+          items)))
 
 (defn- use-scope-items
   "Visible actions of `scope` with their enabled flag, kept in sync with
@@ -149,16 +167,82 @@
                                :enabled enabled
                                :on-close close-menu}])]])])))
 
+(mf/defc split-menu-action*
+  {::mf/private true}
+  [{:keys [action enabled label on-close]}]
+  (let [;; Enter on the focused item reaches this through the menu, which
+        ;; clicks it
+        on-click
+        (mf/use-fn
+         (mf/deps action enabled on-close)
+         (fn [_]
+           (when enabled
+             (on-close)
+             (actions/run-action action :island))))]
+    [:> dropdown-menu-item* {:class (stl/css-case :menu-item true
+                                                  :menu-item-disabled (not enabled))
+                             :aria-disabled (not enabled)
+                             :on-click on-click}
+     [:> icon* {:icon-id (or (:icon action) i/effects)
+                :size "s"
+                :class (stl/css :menu-item-icon)}]
+     [:span {:class (stl/css :menu-item-name)} label]]))
+
+(mf/defc split-action*
+  "Primary action with a dropdown of the actions that belong to it."
+  [{:keys [item menu]}]
+  (let [{:keys [action enabled label badge]} item
+        show-menu*  (mf/use-state false)
+        show-menu?  (deref show-menu*)
+        toggle-menu
+        (mf/use-fn
+         (fn [event]
+           ;; the open menu closes on any document click; keep this one
+           ;; from reaching it
+           (dom/stop-propagation event)
+           (swap! show-menu* not)))
+        close-menu
+        (mf/use-fn #(reset! show-menu* false))]
+    [:div {:class (stl/css :split)}
+     [:> primary-action* {:action action
+                          :enabled enabled
+                          :label label
+                          :badge badge
+                          :scope :island}]
+     [:> icon-button* {:variant "primary"
+                       :class (stl/css :split-toggle)
+                       :has-tooltip false
+                       :aria-label (tr "penforge.build.menu")
+                       :aria-haspopup "menu"
+                       :aria-expanded show-menu?
+                       :data-testid "penforge-build-menu"
+                       :icon i/arrow-down
+                       :on-click toggle-menu}]
+     [:> dropdown-menu* {:show show-menu?
+                         :on-close close-menu
+                         :class (stl/css :menu)}
+      (for [{:keys [action enabled label]} menu]
+        [:> split-menu-action* {:key (str (:id action))
+                                :action action
+                                :enabled enabled
+                                :label label
+                                :on-close close-menu}])]]))
+
 (mf/defc island-actions*
   "Primary AI actions of the floating toolbar (the Build CTA)."
   []
   (let [items (use-scope-items :island)]
     (when (seq items)
       [:div {:class (stl/css :island-actions)}
-       (for [{:keys [action enabled label badge]} items]
-         [:> primary-action* {:key (str (:id action))
-                              :action action
-                              :enabled enabled
-                              :label label
-                              :badge badge
-                              :scope :island}])])))
+       (for [{:keys [item menu]} (split-items items)]
+         (let [{:keys [action enabled label badge]} item]
+           (if (some? menu)
+             [:> split-action* {:key (str (:id action))
+                                :item item
+                                :menu menu}]
+             [:> primary-action* {:key (str (:id action))
+                                  :action action
+                                  :enabled enabled
+                                  :label label
+                                  :badge badge
+                                  :scope :island}])))])))
