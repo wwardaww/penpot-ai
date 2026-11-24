@@ -18,7 +18,8 @@
   (:require
    [app.common.json :as json]
    [app.common.schema :as sm]
-   [app.common.uuid :as uuid]))
+   [app.common.uuid :as uuid]
+   [cuerdas.core :as str]))
 
 ;; --- Shared schemas
 
@@ -501,6 +502,16 @@
   []
   (str (uuid/next)))
 
+(defn- next-dialog-rid
+  "Return a request id of a dialog that shows its own errors."
+  []
+  (str "dialog-" (next-rid)))
+
+(defn dialog-rid?
+  "Whether a dialog sent the request `rid` and shows its errors itself."
+  [rid]
+  (and (string? rid) (str/starts-with? rid "dialog-")))
+
 ;; --- Client message constructors
 
 (defn auth
@@ -595,14 +606,14 @@
 (defn folder-list
   [{:keys [rid path]}]
   (cond-> {:type "folder.list"
-           :rid (or rid (next-rid))}
+           :rid (or rid (next-dialog-rid))}
     (string? path)
     (assoc :path path)))
 
 (defn project-link
   [{:keys [rid project-id kind path]}]
   {:type "project.link"
-   :rid (or rid (next-rid))
+   :rid (or rid (next-dialog-rid))
    :project-id (str project-id)
    :kind (name kind)
    :path path})
@@ -618,13 +629,13 @@
 (defn project-output-status
   [{:keys [rid project-id]}]
   {:type "project.output.status"
-   :rid (or rid (next-rid))
+   :rid (or rid (next-dialog-rid))
    :project-id (str project-id)})
 
 (defn- output-pick
   [type {:keys [rid project-id purpose path name]}]
   (cond-> {:type type
-           :rid (or rid (next-rid))
+           :rid (or rid (next-dialog-rid))
            :project-id (str project-id)
            :purpose (cljs.core/name purpose)
            :path path}

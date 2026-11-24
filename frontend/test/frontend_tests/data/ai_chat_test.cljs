@@ -8,6 +8,7 @@
   (:require
    [app.common.uuid :as uuid]
    [app.main.data.ai.chat :as chat]
+   [app.main.data.ai.protocol :as proto]
    [cljs.test :as t :include-macros true]))
 
 (def ^:private base
@@ -77,6 +78,14 @@
 (t/deftest errors-become-entries
   (let [chat (chat/apply-message base {:type "error" :code "busy" :message "Busy"})]
     (t/is (= [:error "busy"] ((juxt :kind :code) (first (:entries chat)))))))
+
+(t/deftest errors-of-dialog-requests-stay-out-of-the-chat
+  (let [error  {:type "error" :code "bad-request" :message "The folder does not exist"}
+        errors (fn [rid]
+                 (count (:entries (chat/apply-message chat/empty-chat (assoc error :rid rid)))))]
+    (t/is (= 0 (errors (:rid (proto/folder-list {:path "x"})))))
+    (t/is (= 0 (errors (:rid (proto/project-output-preview {:project-id "p" :purpose :build :path "x"})))))
+    (t/is (= 1 (errors (proto/next-rid))))))
 
 (t/deftest permission-cards-close-when-the-daemon-stops-waiting
   (let [request {:type "permission.request" :request-id "p1" :title "t" :description "d" :risk "low"}

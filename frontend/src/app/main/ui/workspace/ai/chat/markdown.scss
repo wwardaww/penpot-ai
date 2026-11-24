@@ -36,6 +36,10 @@
 
 .paragraph {
   margin: 0;
+
+  // the app-wide paragraph style is smaller than the list text
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .heading {
@@ -150,6 +154,7 @@
 .item {
   display: list-item;
   margin-block: var(--sp-xxs);
+  line-height: inherit;
 
   &::marker {
     color: var(--color-accent-primary);

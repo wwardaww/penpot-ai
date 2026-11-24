@@ -245,6 +245,10 @@
     (and (some? rid) (= rid (:history-rid chat)))
     (assoc chat :history-status :error)
 
+    ;; The dialog that asked shows the error.
+    (proto/dialog-rid? rid)
+    chat
+
     ;; A refused message action (W37): an edit gets its timeline back.
     (and (some? rid) (= rid (get-in chat [:pending-action :rid])))
     (let [{:keys [entries]} (:pending-action chat)]
