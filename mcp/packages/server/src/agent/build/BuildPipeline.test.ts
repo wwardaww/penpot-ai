@@ -87,7 +87,7 @@ class FakeClaude {
         }
         if (prompt.startsWith("## Step: scaffold")) {
             this.write("package.json", '{ "name": "app" }\n');
-            this.write("src/App.tsx", "routes\n");
+            this.write("src/App.tsx", '<Route path="/" /><Route path="/dashboard" />\n');
             this.write("src/screens/Login.tsx", "placeholder\n");
             this.write("src/screens/Dashboard.tsx", "placeholder\n");
             return { sessionId, text: `\`\`\`json\n${JSON.stringify({ stack: FakeClaude.stack() })}\n\`\`\`` };
@@ -96,7 +96,8 @@ class FakeClaude {
         if (screen) {
             const file = `src/screens/${screen}.tsx`;
             const old = this.read(file);
-            this.write(file, `${screen} v${Number(old.match(/ v(\d+)/)?.[1] ?? 0) + 1}\n`);
+            const version = Number(old.match(/ v(\d+)/)?.[1] ?? 0) + 1;
+            this.write(file, `${screen} v${version}${screen === "Dashboard" ? "" : ' navigate("/dashboard")'}\n`);
             this.write(`src/screens/${screen}.module.css`, `.${screen} {}\n`);
             if (screen === "Dashboard" && this.dashboardAlsoWrites) {
                 this.write(this.dashboardAlsoWrites, "touched by Dashboard\n");

@@ -23,6 +23,7 @@
    [app.main.ui.ds.buttons.button :refer [button*]]
    [app.main.ui.ds.foundations.typography :as t]
    [app.main.ui.ds.foundations.typography.text :refer [text*]]
+   [app.main.ui.workspace.ai.linked.checklist :refer [checklist* outcomes*]]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
    [okulary.core :as l]
@@ -37,6 +38,7 @@
     "inventory"  (tr "penforge.linked.step.inventory")
     "read"       (tr "penforge.linked.step.read")
     "brief"      (tr "penforge.linked.step.brief")
+    "compare"    (tr "penforge.redesign.step.compare")
     "git"        (tr "penforge.redesign.step.git")
     "checkpoint" (tr "penforge.redesign.step.checkpoint")
     "screens"    (tr "penforge.redesign.step.screens")
@@ -170,6 +172,7 @@
         (tr "penforge.redesign.done.existing" (:files data) (:screens-done data) (:screens-partial data))]
        (when (string? (:branch data))
          [:p {:class (stl/css :detail)} (tr "penforge.redesign.done.branch" (:branch data))])
+       [:> outcomes* {:items (:items data)}]
        (when (seq (:unmatched data))
          [:div {:class (stl/css :list-block)}
           [:p {:class (stl/css :detail)} (tr "penforge.redesign.done.unmatched")]
@@ -195,19 +198,33 @@
 
 (mf/defc redesign-card*
   "Props: `redesign` state, callbacks `on-confirm` (fn of the optional
-  instructions), `on-revert` (fn of paths), `on-dismiss`."
-  [{:keys [redesign on-confirm on-revert on-dismiss]}]
+  instructions and the choices on the checklist), `on-retry` (compare
+  again), `on-cancel` (stop the plan), `on-revert` (fn of paths),
+  `on-dismiss`."
+  [{:keys [redesign on-confirm on-retry on-cancel on-revert on-dismiss]}]
   (let [{:keys [status workflow plan result error progress]} redesign
         instructions* (mf/use-state "")
         instructions  (deref instructions*)
+        choices*      (mf/use-state {})
+        choices       (deref choices*)
+        failed        (redesign/checklist-failed? plan)
+        planning      (= :planning status)
+
+        on-choose
+        (mf/use-fn (fn [key checked] (swap! choices* assoc key checked)))
 
         on-instructions
         (mf/use-fn #(reset! instructions* (dom/get-target-val %)))
 
         confirm
         (mf/use-fn
-         (mf/deps instructions on-confirm)
-         (fn [_] (on-confirm instructions)))]
+         (mf/deps instructions choices on-confirm)
+         (fn [_] (on-confirm instructions choices)))]
+
+    ;; a new plan starts from its own checkboxes
+    (mf/with-effect [planning]
+      (when planning
+        (reset! choices* {})))
 
     (cond
       (nil? status)
@@ -216,7 +233,13 @@
       (= :planning status)
       [:section {:class (stl/css :card) :aria-busy true}
        [:> text* {:as "p" :typography t/body-medium :class (stl/css :title)}
-        (tr "penforge.redesign.planning")]]
+        (tr "penforge.redesign.planning")]
+       (when-let [text (step-text progress)]
+         [:p {:class (stl/css :detail)} text])
+       (when (fn? on-cancel)
+         [:div {:class (stl/css :actions)}
+          [:> button* {:variant "ghost" :type "button" :on-click on-cancel}
+           (tr "labels.cancel")]])]
 
       (= :confirm status)
       [:section {:class (stl/css :card)
@@ -224,6 +247,16 @@
        [:> text* {:as "h3" :typography t/headline-small :class (stl/css :title)}
         (tr "penforge.redesign.confirm.title")]
        [:> confirm-body* {:workflow workflow :plan plan}]
+       [:> checklist* {:items (redesign/checklist-items plan)
+                       :choices choices
+                       :on-choose on-choose}]
+       (when failed
+         [:div {:class (stl/css :list-block)
+                :role "alert"
+                :data-testid "penforge-redesign-compare-failed"}
+          [:p {:class (stl/css :detail :detail-error)}
+           (tr "penforge.redesign.checklist.failed")]
+          [:p {:class (stl/css :detail)} (tr "penforge.redesign.checklist.failed-hint")]])
        (when (= workflow "code-redesign")
          [:textarea {:class (stl/css :field)
                      :rows 2
@@ -234,8 +267,13 @@
        [:div {:class (stl/css :actions)}
         [:> button* {:variant "secondary" :type "button" :on-click on-dismiss}
          (tr "labels.cancel")]
+        (when failed
+          [:> button* {:variant "secondary" :type "button" :on-click on-retry}
+           (tr "penforge.redesign.checklist.retry")])
         [:> button* {:variant "primary" :type "button" :on-click confirm}
-         (tr "penforge.redesign.action")]]]
+         (if failed
+           (tr "penforge.redesign.checklist.look-only")
+           (tr "penforge.redesign.action"))]]]
 
       (contains? #{:running :reverting} status)
       [:section {:class (stl/css :card) :aria-busy true}
@@ -301,7 +339,9 @@
         on-open    (mf/use-fn #(st/emit! (linked/list-folder %)))
         on-choose  (mf/use-fn #(st/emit! (linked/choose-native-folder)))
         on-link    (mf/use-fn #(st/emit! (linked/link-current-project %)))
-        on-confirm (mf/use-fn #(st/emit! (redesign/confirm-redesign %)))
+        on-confirm (mf/use-fn #(st/emit! (redesign/confirm-redesign %1 %2)))
+        on-compare (mf/use-fn #(st/emit! (redesign/retry-plan)))
+        on-cancel  (mf/use-fn #(st/emit! (redesign/cancel-plan)))
         on-revert  (mf/use-fn #(st/emit! (redesign/revert-outside %)))
         on-dismiss (mf/use-fn #(st/emit! (redesign/dismiss-redesign)))
         not-linked (= :not-linked (get-in panel [:read :status]))]
@@ -324,5 +364,7 @@
                        :on-link on-link}]
        [:> redesign-card* {:redesign (:redesign panel)
                            :on-confirm on-confirm
+                           :on-retry on-compare
+                           :on-cancel on-cancel
                            :on-revert on-revert
                            :on-dismiss on-dismiss}]])))

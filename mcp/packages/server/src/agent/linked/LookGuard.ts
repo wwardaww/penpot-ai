@@ -11,6 +11,8 @@ export interface OutsideLookChange {
  * Check of a Re-Design diff (W38 look-only rule): flags files outside style, view, component,
  * asset and UI paths, and look files whose added lines bring logic (network calls, routes, state
  * stores, storage, data models). Heuristic and conservative: it lists, the user decides (Revert).
+ * Files of items the user checked before the run (W35) pass: a feature's files as they are, a
+ * component's files as long as they bring no more than UI state.
  */
 export class LookGuard {
     private static readonly ASSET_EXTENSIONS = new Set([
@@ -102,19 +104,23 @@ export class LookGuard {
      *
      * @param files - changed paths (relative, `/` separated) with the lines each gained
      * @param allowed - paths the user's own feature request covers (not flagged)
+     * @param components - paths of components the user asked for (UI state is fine, other logic is not)
      */
     public static check(
         files: Array<{ path: string; added: string[] }>,
-        allowed: readonly string[] = []
+        allowed: readonly string[] = [],
+        components: readonly string[] = []
     ): OutsideLookChange[] {
         const allowedSet = new Set(allowed.map((path) => LookGuard.normalize(path)));
+        const componentSet = new Set(components.map((path) => LookGuard.normalize(path)));
         const flagged: OutsideLookChange[] = [];
         for (const file of files) {
             const path = LookGuard.normalize(file.path);
             if (allowedSet.has(path)) {
                 continue;
             }
-            if (!LookGuard.isLookPath(path)) {
+            const component = componentSet.has(path) && !LookGuard.isProjectFile(path);
+            if (!component && !LookGuard.isLookPath(path)) {
                 flagged.push({
                     path: file.path,
                     reason: "path",
@@ -126,7 +132,7 @@ export class LookGuard {
             if (LookGuard.ASSET_EXTENSIONS.has(ext) || LookGuard.STYLE_EXTENSIONS.has(ext)) {
                 continue;
             }
-            const found = LookGuard.logicIn(file.added);
+            const found = LookGuard.logicIn(file.added, component);
             if (found !== null) {
                 flagged.push({ path: file.path, reason: "logic", detail: found });
             }
@@ -173,13 +179,35 @@ export class LookGuard {
         ].includes(ext);
     }
 
-    private static logicIn(lines: string[]): string | null {
+    /** Project files no UI component needs: dependencies, configuration, servers, migrations. */
+    private static isProjectFile(path: string): boolean {
+        return (
+            /(^|\/)(package(-lock)?\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|[\w.-]+\.config\.[a-z]+|\.env[\w.]*)$/i.test(
+                path
+            ) || /(^|\/)(api|server|backend|migrations?|prisma)(\/|$)/i.test(path)
+        );
+    }
+
+    /**
+     * Finds the first added line that is logic.
+     *
+     * @param lines - added lines
+     * @param uiState - whether UI state (reducers, contexts) is fine
+     */
+    private static logicIn(lines: string[], uiState: boolean): string | null {
         for (const line of lines) {
             const code = line.trim();
             if (code.startsWith("//") || code.startsWith("*") || code.startsWith("/*")) {
                 continue;
             }
             for (const [pattern, label] of LookGuard.LOGIC_PATTERNS) {
+                if (
+                    uiState &&
+                    label === "state store" &&
+                    !/\b(createSlice|createStore|defineStore|zustand)\b/.test(code)
+                ) {
+                    continue;
+                }
                 if (pattern.test(code)) {
                     return `${label}: ${code.length > 100 ? `${code.slice(0, 100)}…` : code}`;
                 }

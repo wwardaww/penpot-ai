@@ -1,4 +1,5 @@
 import type { LinkedProjectKind, WorkflowContext, WorkflowWorkspaceApi } from "@penpot/mcp-common";
+import type { RedesignDecision } from "./DesignGaps";
 import { LinkedGit } from "./LinkedGit";
 
 /** App of a Re-Design (W39): a Penpot file and the app folder its run changed. */
@@ -28,10 +29,12 @@ export interface RedesignRecord {
      * records written before)
      */
     apps?: RedesignedAppEntry[];
+    /** what the user decided the design may add, per Penpot file (W35; absent in older records) */
+    decisions?: RedesignDecision[];
 }
 
 /** A valid {@link RedesignRecord}, its `apps` checked (empty when absent). */
-export type ReadRedesignRecord = Omit<RedesignRecord, "apps"> & { apps: RedesignedAppEntry[] };
+export type ReadRedesignRecord = Omit<RedesignRecord, "apps" | "decisions"> & { apps: RedesignedAppEntry[] };
 
 /** Git plan of a Re-Design, for the confirm card. */
 export interface RedesignGitPlan {
@@ -175,6 +178,8 @@ export class RedesignBranch {
             createdAt: record?.branch === branch ? record.createdAt : now,
             updatedAt: now,
             ...(record?.branch === branch && Array.isArray(record.apps) ? { apps: record.apps } : {}),
+            // the user's decisions outlive a branch that was merged or deleted
+            ...(Array.isArray(record?.decisions) ? { decisions: record.decisions } : {}),
         } satisfies RedesignRecord);
         return { state: "ready", git, branch, baseBranch, baseCommit };
     }

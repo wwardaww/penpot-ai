@@ -1,0 +1,40 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/typography.scss" as t;
+
+.report {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  inline-size: 100%;
+}
+
+.line {
+  margin: 0;
+  color: var(--color-foreground-primary);
+}
+
+.line-clean {
+  color: var(--color-accent-primary);
+}
+
+.muted {
+  margin: 0;
+  color: var(--color-foreground-secondary);
+}
+
+.details {
+  @include t.use-typography("body-small");
+
+  color: var(--color-foreground-primary);
+  text-align: start;
+}
+
+.items {
+  margin: var(--sp-xs) 0 0;
+  padding-inline-start: var(--sp-l);
+}

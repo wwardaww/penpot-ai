@@ -14778,3 +14778,168 @@ msgstr "The output folder cannot be used any more. Choose a folder again."
 #: src/app/main/ui/workspace/ai/build/instruct_dialog.cljs
 msgid "penforge.instruct.error.generic"
 msgstr "The specification could not be written."
+
+# penforge:W35
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.step.compare"
+msgstr "Comparing the design with the app"
+
+#: src/app/main/ui/workspace/ai/linked/checklist.cljs
+msgid "penforge.redesign.checklist.intro"
+msgstr "The design has things your app does not have. Choose what to build; nothing is written before you confirm."
+
+#: src/app/main/ui/workspace/ai/linked/checklist.cljs
+msgid "penforge.redesign.checklist.components"
+msgstr "New parts of the interface"
+
+#: src/app/main/ui/workspace/ai/linked/checklist.cljs
+msgid "penforge.redesign.checklist.components-hint"
+msgstr "They only open, close or switch what is on the screen."
+
+#: src/app/main/ui/workspace/ai/linked/checklist.cljs
+msgid "penforge.redesign.checklist.features"
+msgstr "New features"
+
+#: src/app/main/ui/workspace/ai/linked/checklist.cljs
+msgid "penforge.redesign.checklist.features-hint"
+msgstr "They need data, new pages or other logic in the app."
+
+#: src/app/main/ui/workspace/ai/linked/checklist.cljs
+msgid "penforge.redesign.checklist.screens"
+msgstr "On: %s"
+
+#: src/app/main/ui/workspace/ai/linked/checklist.cljs
+msgid "penforge.redesign.checklist.decided"
+msgstr "Decided before (%s)"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.checklist.failed"
+msgstr "The design could not be compared with the app, so it is not known what the app does not have."
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.checklist.failed-hint"
+msgstr "Try again, or change the look only: nothing new is added then."
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.checklist.retry"
+msgstr "Compare again"
+
+#: src/app/main/ui/workspace/ai/linked/panel.cljs
+msgid "penforge.redesign.checklist.look-only"
+msgstr "Change the look only"
+
+#: src/app/main/ui/workspace/ai/linked/checklist.cljs
+msgid "penforge.redesign.item.title"
+msgstr "What the design adds:"
+
+#: src/app/main/ui/workspace/ai/linked/checklist.cljs
+msgid "penforge.redesign.item.added"
+msgstr "Added"
+
+#: src/app/main/ui/workspace/ai/linked/checklist.cljs
+msgid "penforge.redesign.item.left-out"
+msgstr "Left out (your choice)"
+
+#: src/app/main/ui/workspace/ai/linked/checklist.cljs
+msgid "penforge.redesign.item.not-done"
+msgstr "Not done"
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.clean"
+msgstr "The app follows your flows, design system and animations."
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.left"
+msgstr "Points that still differ from the design: %s"
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.unchecked"
+msgstr "The app could not be compared with the design this time."
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.fixed"
+msgstr "Fixed on the way: %s"
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.details"
+msgstr "Show them"
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.more"
+msgstr "…and %s more"
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.elsewhere"
+msgstr "In screens this build did not touch: %s"
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.skipped"
+msgstr "Not checked: %s"
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.check.flows"
+msgstr "flows"
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.check.values"
+msgstr "colors, sizes and fonts"
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.check.components"
+msgstr "components"
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.check.animations"
+msgstr "animations"
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.route-missing"
+msgstr "The screen \"%s\" cannot be reached."
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.route-extra"
+msgstr "The app has a page the design does not have: %s"
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.start-screen"
+msgstr "The app does not start on \"%s\"."
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.link-missing"
+msgstr "\"%s\" on \"%s\" does not lead to \"%s\"."
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.back-missing"
+msgstr "\"%s\" on \"%s\" does not go back."
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.overlay-missing"
+msgstr "\"%s\" on \"%s\" does not open \"%s\"."
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.url-missing"
+msgstr "\"%s\" on \"%s\" does not open %s."
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.hardcoded"
+msgstr "%s is written into the app instead of the token %s."
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.off-system-color"
+msgstr "The color %s is not in the design system."
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.component-missing"
+msgstr "The component \"%s\" is not a shared part of the app."
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.component-unused"
+msgstr "\"%s\" does not use the component \"%s\"."
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.animation-missing"
+msgstr "The animation of \"%s\" on \"%s\" is missing."
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.motion-not-loaded"
+msgstr "The animations of the design do not run in the app."

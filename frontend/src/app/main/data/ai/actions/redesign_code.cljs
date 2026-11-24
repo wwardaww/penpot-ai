@@ -15,7 +15,9 @@
   folder, without touching the game's code.
 
   Flow: the action runs the workflow's `plan` step, the chat shows a
-  confirm card (branch, what changes), confirming runs `run`; git
+  confirm card (branch, what changes, and for an Existing project the
+  checklist of what the design has and the app does not, W35),
+  confirming runs `run` with the user's choices; git
   questions (uncommitted changes, no repository) show in the chat
   timeline; the summary card offers to revert changes outside the look
   (`revert`).
@@ -57,6 +59,31 @@
 (defn running?
   [redesign]
   (contains? running-statuses (:status redesign)))
+
+(defn checklist-items
+  "Items of a plan's checklist (W35); none when the comparison failed or
+  the workflow has no checklist."
+  [plan]
+  (let [{:keys [state items]} (:checklist plan)]
+    (if (= "ready" state) (vec items) [])))
+
+(defn checklist-failed?
+  [plan]
+  (= "failed" (get-in plan [:checklist :state])))
+
+(defn item-checked?
+  "State of an item's checkbox: the user's choice on this card (`choices`,
+  a map item key → boolean), else the plan's."
+  [choices {:keys [key checked]}]
+  (get choices key (true? checked)))
+
+(defn get-decisions
+  "The user's choices as the `decisions` param of a run: one entry per
+  item of the plan."
+  [plan choices]
+  (mapv (fn [{:keys [key] :as item}]
+          {:key key :build (item-checked? choices item)})
+        (checklist-items plan)))
 
 (defn- after-revert
   "The run result once `reverted` files went back to the look before."
@@ -129,7 +156,8 @@
        :screens-done (count (filter #(= "done" (:status %)) screens))
        :screens-partial (count (filter #(= "partial" (:status %)) screens))
        :unmatched (vec (:unmatched result))
-       :outside (vec (:outside-look result))})))
+       :outside (vec (:outside-look result))
+       :items (vec (:items result))})))
 
 ;; --- State readers
 
@@ -199,17 +227,54 @@
           (rx/empty))))))
 
 (defn confirm-redesign
-  "Run the planned Re-Design; `instructions` is optional text for the AI."
-  [instructions]
-  (ptk/reify ::confirm-redesign
+  "Run the planned Re-Design; `instructions` is optional text for the AI
+  and `choices` the user's answers on the checklist (item key → boolean)."
+  ([instructions] (confirm-redesign instructions nil))
+  ([instructions choices]
+   (ptk/reify ::confirm-redesign
+     ptk/WatchEvent
+     (watch [_ state _]
+       (let [{:keys [status plan]} (get-redesign state)
+             decisions (get-decisions plan choices)]
+         (if (= :confirm status)
+           (rx/of (run-step :running
+                            (cond-> {:action "run"}
+                              (seq decisions)
+                              (assoc :decisions decisions)
+
+                              (and (string? instructions) (not (str/blank? instructions)))
+                              (assoc :instructions (str/trim instructions)))))
+           (rx/empty)))))))
+
+(defn retry-plan
+  "Plan again: the comparison of the design with the app failed."
+  []
+  (ptk/reify ::retry-plan
     ptk/WatchEvent
     (watch [_ state _]
       (if (= :confirm (:status (get-redesign state)))
-        (rx/of (run-step :running
-                         (cond-> {:action "run"}
-                           (and (string? instructions) (not (str/blank? instructions)))
-                           (assoc :instructions (str/trim instructions)))))
+        (rx/of (run-step :planning {:action "plan"}))
         (rx/empty)))))
+
+(defn cancel-plan
+  "Stop a running plan (the comparison may take a while) and close the
+  card. Nothing was written."
+  []
+  (ptk/reify ::cancel-plan
+    ptk/UpdateEvent
+    (update [_ state]
+      (if (= :planning (:status (get-redesign state)))
+        (-> state
+            (assoc-in (conj redesign-path :status) :cancelled)
+            (assoc-in (conj redesign-path :rid) nil))
+        state))
+
+    ptk/WatchEvent
+    (watch [_ state _]
+      (let [{:keys [status run-id]} (get-redesign state)]
+        (if (and (= :cancelled status) (some? run-id))
+          (rx/of (chat/cancel-workflow run-id))
+          (rx/empty))))))
 
 (defn revert-outside
   "Put the listed files (changes outside the look) back as they were

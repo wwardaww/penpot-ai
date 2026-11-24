@@ -457,7 +457,7 @@ class FakeClaude {
         }
         if (prompt.startsWith("## Step: scaffold")) {
             this.write("package.json", '{ "name": "chess" }\n');
-            this.write("src/App.tsx", "routes\n");
+            this.write("src/App.tsx", '<Route path="/" /><Route path="/dashboard" />\n');
             return json({ stack: FakeClaude.stack() });
         }
         if (prompt.startsWith("## Step: apply the change request")) {
@@ -477,7 +477,7 @@ class FakeClaude {
         const screen = /## Step: (?:build|update) the screen "([^"]+)"/.exec(prompt)?.[1];
         if (screen) {
             const file = `src/screens/${screen}.tsx`;
-            this.write(file, `${screen} ${this.turn}-${this.prompts.length}\n`);
+            this.write(file, `${screen} ${this.turn}-${this.prompts.length} navigate("/dashboard")\n`);
             return json({ files: [file] });
         }
         return { sessionId, text: "ok" };

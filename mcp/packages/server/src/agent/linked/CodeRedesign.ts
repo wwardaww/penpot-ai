@@ -3,12 +3,14 @@ import { createLogger } from "../../logger";
 import { AppFolders } from "../apps/AppFolders";
 import { ReadOnlyGit } from "../apps/ReadOnlyGit";
 import { ensureCheckpoint } from "../checkpoints/Checkpoints";
+import { type Checklist, DesignGaps } from "./DesignGaps";
 import { LinkedProjectPrompt } from "./LinkedProjectPrompt";
 import { LinkedToolFilter } from "./LinkedToolFilter";
 import { LinkedWorkspace } from "./LinkedWorkspace";
 import { LookGuard, type OutsideLookChange } from "./LookGuard";
 import { type RedesignGitPlan, RedesignBranch, type RedesignRecord } from "./RedesignBranch";
 import { LinkedGit } from "./LinkedGit";
+import { RedesignDecisions, type RedesignItemResult } from "./RedesignDecisions";
 import { RedesignScreens, type ScreenBoard } from "./RedesignScreens";
 
 /** Params of the `code-redesign` workflow. */
@@ -19,6 +21,8 @@ export interface CodeRedesignParams {
     instructions?: string;
     /** files to revert (`revert`), from the last run's `outsideLook` list */
     files?: string[];
+    /** the user's choices on the plan's checklist (`run`); earlier decisions apply where none is given */
+    decisions?: { key: string; build: boolean }[];
 }
 
 /** Status of one screen after a run. */
@@ -39,6 +43,8 @@ export interface CodeRedesignRunResult {
     screens: RedesignScreenStatus[];
     unmatched: string[];
     outsideLook: OutsideLookChange[];
+    /** what came of each item of the checklist */
+    items: RedesignItemResult[];
     cancelled?: true;
 }
 
@@ -64,11 +70,25 @@ export class CodeRedesign {
 
     constructor(private readonly ctx: WorkflowContext) {}
 
-    /** Tells what a run would do: git state, branch, screens. */
-    public async plan(): Promise<RedesignGitPlan & { action: "plan"; screens: ScreenBoard[] }> {
+    /**
+     * Tells what a run would do: git state, branch, screens, and the checklist of what the design has
+     * and the app does not, for the user to decide. Writes nothing in the app.
+     */
+    public async plan(): Promise<RedesignGitPlan & { action: "plan"; screens: ScreenBoard[]; checklist: Checklist }> {
         const { root } = this.folder();
         const git = await new RedesignBranch(this.ctx, root, "existing").plan();
-        return { action: "plan", ...git, screens: await new RedesignScreens(this.ctx).list() };
+        const screens = await new RedesignScreens(this.ctx).list();
+        return { action: "plan", ...git, screens, checklist: await this.checklist(root, screens) };
+    }
+
+    private async checklist(root: string, screens: ScreenBoard[]): Promise<Checklist> {
+        if (screens.length === 0) {
+            return { state: "ready", items: [] };
+        }
+        this.progress("compare", "Comparing the design with the app");
+        const { decisions } = await RedesignDecisions.read(this.ctx.workspace, root, this.ctx.context.fileId);
+        const { head, dirty } = await new LinkedGit(root).state();
+        return new DesignGaps(this.ctx, root).checklist(screens, decisions, { head, dirty });
     }
 
     /** Applies the new look to the app's code. */
@@ -83,13 +103,21 @@ export class CodeRedesign {
         if (prepared.state !== "ready") {
             return CodeRedesign.cancelled();
         }
+        const { fileId } = this.ctx.context;
+        const planned = await new DesignGaps(this.ctx, root).planned();
+        const decisions = (await RedesignDecisions.read(this.ctx.workspace, root, fileId)).decide(
+            this.ctx,
+            planned,
+            params.decisions
+        );
+        await decisions.store(this.ctx.workspace, fileId);
         this.progress("checkpoint", "Saving a checkpoint");
         await ensureCheckpoint(this.ctx, "Before Re-Design", "code-redesign");
         const headBefore = (await prepared.git.state()).head ?? prepared.baseCommit;
         this.progress("edit", "Applying the new look to the code");
         const instructions = (params.instructions ?? "").trim().slice(0, 8000);
         const answer = await this.ctx.runner.run({
-            prompt: CodeRedesign.prompt(root, prepared.branch, screens, instructions),
+            prompt: CodeRedesign.prompt(root, prepared.branch, screens, decisions, instructions),
             promptName: "code-redesign",
             toolFilter: new LinkedToolFilter(this.ctx.workspace.root, [root, this.ctx.workspace.root], root, true),
         });
@@ -105,7 +133,14 @@ export class CodeRedesign {
                 added: file.status === "D" ? [] : await prepared.git.addedLines(prepared.baseCommit, file.path),
             }))
         );
-        const outsideLook = LookGuard.check(files, instructions.length > 0 ? report.featureFiles : []);
+        const items = decisions.report(answer.text, new Set(changed.map((file) => file.path)));
+        await decisions.store(this.ctx.workspace, fileId);
+        const allowed = decisions.allowedFiles();
+        const outsideLook = LookGuard.check(
+            files,
+            [...allowed.feature, ...(instructions.length > 0 ? report.featureFiles : [])],
+            allowed.component
+        );
         if (commit !== null) {
             await this.recordApps(root, prepared.branch, headBefore);
         }
@@ -119,6 +154,7 @@ export class CodeRedesign {
             screens: report.screens,
             unmatched: report.unmatched,
             outsideLook,
+            items,
         };
     }
 
@@ -183,7 +219,13 @@ export class CodeRedesign {
         return { root: folder.root };
     }
 
-    private static prompt(root: string, branch: string, screens: ScreenBoard[], instructions: string): string {
+    private static prompt(
+        root: string,
+        branch: string,
+        screens: ScreenBoard[],
+        decisions: RedesignDecisions,
+        instructions: string
+    ): string {
         return [
             `Apply the new look from the Penpot design to the app in \`${root}\` (git branch \`${branch}\`).`,
             "",
@@ -194,9 +236,11 @@ export class CodeRedesign {
             "",
             LinkedProjectPrompt.LOOK_ONLY_RULE,
             "",
+            ...decisions.promptLines(),
+            "",
             instructions.length > 0
                 ? `The user's instructions from the chat (they may ask for more than the look; do only what they ask):\n${instructions}`
-                : "The user gave no further instructions: change the look only.",
+                : "The user gave no further instructions: change the look, and build the items above only.",
         ].join("\n");
     }
 
@@ -242,11 +286,15 @@ export class CodeRedesign {
             screens: [],
             unmatched: [],
             outsideLook: [],
+            items: [],
             cancelled: true,
         };
     }
 
-    private progress(step: "git" | "checkpoint" | "screens" | "edit" | "guard" | "commit", text: string): void {
+    private progress(
+        step: "compare" | "git" | "checkpoint" | "screens" | "edit" | "guard" | "commit",
+        text: string
+    ): void {
         this.ctx.emit("progress", { step, text });
     }
 

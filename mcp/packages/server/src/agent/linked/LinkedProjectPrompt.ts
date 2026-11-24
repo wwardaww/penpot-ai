@@ -2,6 +2,7 @@ import { readFile } from "fs/promises";
 import { join } from "path";
 import type { AgentContext } from "@penpot/mcp-common";
 import { ProjectFonts, type ProjectFontsInfo } from "./ProjectFonts";
+import type { RedesignDecision } from "./DesignGaps";
 import type { ProjectLink } from "./ProjectLink";
 
 /** Workspace parts the prompt section needs. */
@@ -26,8 +27,9 @@ export class LinkedProjectPrompt {
     public static readonly LOOK_ONLY_RULE = [
         "You may change ONLY the look of this project: styles, layout, visual components, assets, fonts,",
         "colours, spacing and copy that is part of the UI. Do not add or change features, logic, data, APIs,",
-        "routes, state, data models or game rules, unless the user asked for that in this chat. Something in",
-        "the design that looks like a new feature is not a request: leave it out and mention it.",
+        "routes, state, data models or game rules, unless the user asked for that in words or checked it on",
+        "the Re-Design list. Something in the design that the project does not have is not a request by itself:",
+        "leave it out and mention it.",
     ].join("\n");
 
     /**
@@ -62,8 +64,13 @@ export class LinkedProjectPrompt {
             type === "game"
                 ? "Never change the game's code or engine assets; the Re-Design button exports specs, PNGs and " +
                   "guides into a `PenforgeUI/` folder."
-                : "The app's code changes only through the Re-Design button, on its own git branch.",
+                : "The app's code changes only through the Re-Design button, on its own git branch. What the design " +
+                  "has and the app does not (a menu, a form) is fine to draw; Re-Design shows it as a checklist and " +
+                  "the user decides every item there. In this chat you may still add what the user asks for in words.",
         ];
+        if (type === "existing") {
+            lines.push(...(await LinkedProjectPrompt.decisionLines(workspace, context.fileId)));
+        }
         const fonts = await readFile(join(workspace.metaDir, ProjectFonts.FILE), "utf8")
             .then((text) => JSON.parse(text) as ProjectFontsInfo)
             .catch(() => null);
@@ -76,6 +83,29 @@ export class LinkedProjectPrompt {
             lines.push("", "### What the project is (project brief)", "````markdown", brief, "````");
         }
         return lines.join("\n");
+    }
+
+    /** Lines with the items the user decided for this file, or none. */
+    private static async decisionLines(workspace: LinkedPromptWorkspace, fileId: string): Promise<string[]> {
+        const record = await readFile(join(workspace.metaDir, "redesign.json"), "utf8")
+            .then((text) => JSON.parse(text) as { root?: unknown; decisions?: unknown })
+            .catch(() => null);
+        if (record === null || record.root !== workspace.linked?.root || !Array.isArray(record.decisions)) {
+            return [];
+        }
+        const decisions = (record.decisions as Array<Partial<RedesignDecision> | null>).filter(
+            (decision) => decision?.fileId === fileId && typeof decision.name === "string"
+        );
+        if (decisions.length === 0) {
+            return [];
+        }
+        return [
+            "",
+            "Decided for the last Re-Design (the user can change it on the next list):",
+            ...decisions
+                .slice(0, 40)
+                .map((decision) => `- ${decision!.name}: ${decision!.build === true ? "build" : "leave out"}`),
+        ];
     }
 
     /** Reads the brief, cut to {@link MAX_BRIEF_CHARS}; null when there is none. */
