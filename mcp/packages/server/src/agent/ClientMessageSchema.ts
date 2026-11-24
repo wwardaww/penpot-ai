@@ -4,6 +4,15 @@ import type { ClientMessage } from "@penpot/mcp-common";
 const id = z.string().min(1).max(256);
 const base64 = z.string().max(20 * 1024 * 1024);
 
+/** folder pick of the output folder messages (W41) */
+const outputFolder = {
+    rid: id,
+    projectId: id,
+    purpose: z.enum(["build", "instruct"]),
+    path: z.string().min(1).max(4096),
+    name: z.string().max(1024).optional(),
+};
+
 const attachment = z.discriminatedUnion("kind", [
     z.object({
         kind: z.literal("node"),
@@ -126,6 +135,10 @@ export class ClientMessageSchema {
         }),
         z.object({ type: z.literal("project.link.status"), rid: id, projectId: id }),
         z.object({ type: z.literal("fonts.files"), rid: id, projectId: id }),
+        // W41: output folder of web and mobile projects
+        z.object({ type: z.literal("project.output.status"), rid: id, projectId: id }),
+        z.object({ type: z.literal("project.output.preview"), ...outputFolder }),
+        z.object({ type: z.literal("project.output.set"), ...outputFolder }),
     ]);
 
     /**

@@ -1,0 +1,127 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Copyright (c) KALEIDOS SUBSIDIARY SL
+
+@use "ds/typography.scss" as t;
+@use "ds/_borders.scss" as *;
+@use "ds/_utils.scss" as *;
+
+.modal-overlay {
+  display: flex;
+  position: fixed;
+  justify-content: center;
+  align-items: center;
+  z-index: var(--z-index-set);
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  background-color: var(--overlay-color);
+}
+
+.modal-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-l);
+  inline-size: px2rem(560);
+  max-inline-size: calc(100vw - var(--sp-xxxl) * 2);
+  max-block-size: calc(100vh - var(--sp-xxxl) * 2);
+  padding: var(--sp-xxxl);
+  overflow-y: auto;
+  border: $b-2 solid var(--color-background-quaternary);
+  border-radius: $br-8;
+  background-color: var(--color-background-primary);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-s);
+}
+
+.title {
+  color: var(--color-foreground-primary);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-l);
+}
+
+.intro {
+  margin: 0;
+  color: var(--color-foreground-primary);
+  overflow-wrap: anywhere;
+}
+
+.target {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  padding: var(--sp-m);
+  border-radius: $br-8;
+  background-color: var(--color-background-tertiary);
+}
+
+.target-text {
+  @include t.use-typography("body-medium");
+
+  margin: 0;
+  color: var(--color-foreground-primary);
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  @include t.use-typography("body-small");
+
+  margin: 0;
+  color: var(--color-foreground-secondary);
+  overflow-wrap: anywhere;
+}
+
+.warning {
+  color: var(--color-accent-warning);
+}
+
+.error {
+  @include t.use-typography("body-small");
+
+  margin: 0;
+  color: var(--color-accent-error);
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-s);
+}
+
+.folder-line {
+  @include t.use-typography("body-small");
+
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-xs);
+}
+
+.folder-label {
+  color: var(--color-foreground-secondary);
+}
+
+.folder-path {
+  color: var(--color-foreground-primary);
+  overflow-wrap: anywhere;
+}
+
+.folder-change {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-accent-primary);
+  cursor: pointer;
+}

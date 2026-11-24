@@ -2,6 +2,7 @@ import type { AgentContext, Attachment, RunnerEvent, WorkflowToolsApi } from "@p
 import type { ClaudeRunner, RunnerConversation, ToolPermissionHandler } from "../runner/ClaudeRunner";
 import { LinkedProjectPrompt } from "../linked/LinkedProjectPrompt";
 import type { PromptRegistry } from "../prompts/promptRegistry";
+import { AppFolderPrompt } from "../workspace/AppFolderPrompt";
 import type { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import { AttachmentPrompt } from "./AttachmentPrompt";
 import { AnimationSettings } from "../animations/AnimationSettings";
@@ -38,9 +39,15 @@ export interface TurnRequest {
  * attachments), and runs the turn in the project folder.
  */
 export class TurnRunner {
+    /**
+     * @param runner - runs the turns
+     * @param prompts - the prompt templates
+     * @param askForFolder - whether Build asks the user for a folder (W41; not in server mode)
+     */
     constructor(
         public readonly runner: ClaudeRunner,
-        private readonly prompts: PromptRegistry
+        private readonly prompts: PromptRegistry,
+        private readonly askForFolder = false
     ) {}
 
     /**
@@ -76,13 +83,21 @@ export class TurnRunner {
         });
         // the linked project's brief is user content: added after the template rendering (W38)
         const linked = await LinkedProjectPrompt.section(setup.workspace, context);
-        const systemPrompt = linked ? `${built}\n${linked}\n` : built;
-        const input = await new AttachmentPrompt(setup.tools).build(request.text, request.attachments);
+        // the app may be in a folder the user picked instead of `app-src/` (W41)
+        const app = new AppFolderPrompt(setup.workspace);
+        const isChat = !request.workflow || request.workflow === "chat";
+        const noApp = isChat && this.askForFolder ? app.noAppSection(context) : "";
+        const section = [linked, app.section(context), noApp].filter(Boolean).join("\n\n");
+        const systemPrompt = section ? `${app.text(built)}\n${section}\n` : built;
+        // a chat message is the user's text; a workflow's prompt is the daemon's
+        const text = isChat ? request.text : app.text(request.text);
+        const input = await new AttachmentPrompt(setup.tools).build(text, request.attachments);
         yield* this.runner.send(conversation, input, {
             cwd: setup.workspace.root,
             systemPromptAppend: systemPrompt,
             allowedTools: request.allowedTools,
-            permissions: setup.permissions,
+            permissions: app.permissions(setup.permissions),
+            additionalDirectories: app.directories,
             signal: setup.signal,
         });
     }

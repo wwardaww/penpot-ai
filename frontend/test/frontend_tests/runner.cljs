@@ -185,6 +185,7 @@
    [frontend-tests.ui.ai-design-system-extract-test]
    [frontend-tests.ui.ai-design-system-test]
    [frontend-tests.ui.ai-linked-test]
+   [frontend-tests.ui.ai-output-test]
    [frontend-tests.ui.ai-pair-test]
    [frontend-tests.ui.ai-preview-pane-test]
    [frontend-tests.ui.ai-visual-qa-test]
@@ -439,6 +440,7 @@
    'frontend-tests.ui.ai-design-system-extract-test
    'frontend-tests.ui.ai-design-system-test
    'frontend-tests.ui.ai-linked-test
+   'frontend-tests.ui.ai-output-test
    'frontend-tests.ui.ai-animations-test
    'frontend-tests.ui.ai-build-test
    'frontend-tests.ui.ai-build-changes-test

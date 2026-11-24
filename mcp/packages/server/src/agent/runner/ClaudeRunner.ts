@@ -90,6 +90,11 @@ export interface RunnerOptions {
      */
     allowedTools?: readonly string[];
     /**
+     * Folders outside `cwd` Claude may work in (W41 app folder), for runners without a permission
+     * channel; runners that ask `permissions` for every use ignore it.
+     */
+    additionalDirectories?: readonly string[];
+    /**
      * Complete environment of the Claude process (API key runner); the daemon's own
      * environment, without nested-session variables, when omitted.
      */

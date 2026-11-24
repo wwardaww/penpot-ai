@@ -62,7 +62,7 @@
 (def hidden-actions
   "AI actions that make no sense in a design system file: it builds no
   app and has no screens."
-  #{:ai/build :ai/preview :ai/share :ai/accounts :ai/phone-live
+  #{:ai/build :ai/instruct :ai/preview :ai/share :ai/accounts :ai/phone-live
     :ai/visual-qa :ai/token-sync :ai/generate-screen :ai/wire-prototype
     :ai/adapt-mobile :ai/adapt-desktop :ai/design-md})
 

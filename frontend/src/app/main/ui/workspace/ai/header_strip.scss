@@ -74,6 +74,18 @@
   white-space: nowrap;
 }
 
+// split button: main action and dropdown toggle (W41)
+.split {
+  display: flex;
+  position: relative;
+  align-items: stretch;
+  gap: px2rem(1);
+}
+
+.split-toggle {
+  flex-shrink: 0;
+}
+
 .island-actions {
   display: flex;
   align-items: center;

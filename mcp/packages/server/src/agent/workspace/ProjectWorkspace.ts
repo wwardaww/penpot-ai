@@ -7,7 +7,9 @@ import { promisify } from "util";
 import type { ProjectRepo, WorkflowWorkspaceApi } from "@penpot/mcp-common";
 import type { ProjectLink, ProjectLinkFields } from "../linked/ProjectLink";
 import { ProjectLinkRecord } from "../linked/ProjectLink";
+import { AppFolder } from "./AppFolder";
 import { ProjectPathGuard } from "./pathGuard";
+import { type ProjectOutput, type ProjectOutputFields, ProjectOutputRecord } from "./ProjectOutput";
 import { renameWithRetry } from "./renameWithRetry";
 
 const execFileAsync = promisify(execFile);
@@ -16,8 +18,10 @@ const execFileAsync = promisify(execFile);
  * Folder of one Penpot project on disk (`<PENFORGE_HOME>/projects/<project-id>/`).
  *
  * Holds two git repositories, `design/` and `app-src/`, and the daemon's metadata folder
- * `.penforge/`. Every path handed out is checked by a {@link ProjectPathGuard} on the project root
- * and, for a Game UI or Existing project (W38), the linked folder of this computer.
+ * `.penforge/`. The app of a web or mobile project may be in a folder the user picked instead of
+ * `app-src/` (W41, {@link appSrcDir}). Every path handed out is checked by a
+ * {@link ProjectPathGuard} on the project root, that app folder and, for a Game UI or Existing
+ * project (W38), the linked folder of this computer.
  */
 export class ProjectWorkspace implements WorkflowWorkspaceApi {
     /** Pattern of acceptable project ids (Penpot uses UUIDs). */
@@ -28,11 +32,14 @@ export class ProjectWorkspace implements WorkflowWorkspaceApi {
 
     public readonly root: string;
     public readonly designDir: string;
-    public readonly appSrcDir: string;
+    /** `app-src/` in the project folder; the app's folder for projects built there */
+    public readonly internalAppDir: string;
     public readonly metaDir: string;
     public readonly guard: ProjectPathGuard;
     /** link to a folder of this computer (W38), from `project.json` */
     private link: ProjectLink | null = null;
+    /** output folder the user picked (W41), from `project.json` */
+    private output: ProjectOutput | null = null;
     /** Pending atomic writes per metadata file, so writes to one file never overlap. */
     private readonly writeQueues = new Map<string, Promise<void>>();
 
@@ -51,7 +58,7 @@ export class ProjectWorkspace implements WorkflowWorkspaceApi {
         }
         this.root = join(projectsDir, projectId);
         this.designDir = join(this.root, "design");
-        this.appSrcDir = join(this.root, "app-src");
+        this.internalAppDir = join(this.root, "app-src");
         this.metaDir = join(this.root, ".penforge");
         this.guard = new ProjectPathGuard(this.root);
     }
@@ -61,10 +68,48 @@ export class ProjectWorkspace implements WorkflowWorkspaceApi {
      */
     public async ensure(): Promise<void> {
         await mkdir(join(this.metaDir, "chat"), { recursive: true });
-        for (const repo of ["design", "app-src"] as ProjectRepo[]) {
-            await this.ensureRepo(repo);
+        const info = await this.readJson<(ProjectLinkFields & ProjectOutputFields) | null>("project.json", null);
+        this.setOutput(ProjectOutputRecord.read(info));
+        await this.ensureRepo(this.designDir, "design");
+        // the app folder the user picked is created by the pick only, never here
+        if (this.appSrcDir === this.internalAppDir) {
+            await this.ensureRepo(this.internalAppDir, "app-src");
         }
-        this.setLink(ProjectLinkRecord.read(await this.readJson<ProjectLinkFields | null>("project.json", null)));
+        this.setLink(ProjectLinkRecord.read(info));
+    }
+
+    /**
+     * Folder of the generated app: the folder the user picked (W41), else `app-src/` in the project
+     * folder. A picked folder that went away stays the answer, so nothing is written elsewhere.
+     */
+    public get appSrcDir(): string {
+        return this.output?.appRoot ?? this.internalAppDir;
+    }
+
+    /** The output folder the user picked (W41), or null. */
+    public get outputFolder(): ProjectOutput | null {
+        return this.output;
+    }
+
+    /** The app folder outside the project folder while it is the one Penforge made, else null. */
+    public get appRoot(): string | null {
+        return this.guard.appRoot;
+    }
+
+    /**
+     * Sets the project's output folder. The guard accepts the app folder only while it is the one
+     * Penforge made for this project ({@link AppFolder.isOwn}); call again to check a folder that
+     * came back or went away.
+     *
+     * @param output - the output folder, or null for none
+     */
+    public setOutput(output: ProjectOutput | null): void {
+        this.output = output;
+        const appRoot = output?.appRoot ?? null;
+        if (appRoot !== null) {
+            AppFolder.protectParents(appRoot);
+        }
+        this.guard.setAppRoot(appRoot !== null && AppFolder.isOwn(appRoot, this.projectId) ? appRoot : null);
     }
 
     /** The project's link to a folder of this computer (W38), or null. */
@@ -128,6 +173,9 @@ export class ProjectWorkspace implements WorkflowWorkspaceApi {
 
     public async commitAll(repo: ProjectRepo, message: string): Promise<string | null> {
         const dir = this.repoDir(repo);
+        if (dir === this.output?.appRoot && !AppFolder.isOwn(dir, this.projectId)) {
+            throw new Error(`The app folder ${JSON.stringify(dir)} is missing or not the one Penforge made`);
+        }
         await this.git(dir, ["add", "-A"]);
         const status = await this.git(dir, ["status", "--porcelain"]);
         if (status.trim().length === 0) {
@@ -195,8 +243,7 @@ export class ProjectWorkspace implements WorkflowWorkspaceApi {
         return this.guard.resolve(join(this.metaDir, ...name.split("/")));
     }
 
-    private async ensureRepo(repo: ProjectRepo): Promise<void> {
-        const dir = this.repoDir(repo);
+    private async ensureRepo(dir: string, repo: ProjectRepo): Promise<void> {
         await mkdir(dir, { recursive: true });
         const isRepo = await this.git(dir, ["rev-parse", "--show-toplevel"])
             .then((top) => this.guard.resolve(top.trim()) === this.guard.resolve(dir))

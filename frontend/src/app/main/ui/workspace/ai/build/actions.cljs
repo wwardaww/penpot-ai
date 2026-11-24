@@ -10,4 +10,7 @@
   palette), lives in `app.main.data.ai.actions.build` (W09) and opens
   this dialog through `app.main.ui.workspace.ai.build.events/start`."
   (:require
-   [app.main.ui.workspace.ai.build.dialog]))
+   [app.main.ui.workspace.ai.build.dialog]
+   ;; W41: Instruct dialog and the folder dialog of Build and Instruct
+   [app.main.ui.workspace.ai.build.instruct-dialog]
+   [app.main.ui.workspace.ai.build.output-dialog]))

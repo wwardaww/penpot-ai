@@ -23,6 +23,8 @@ import { McpToolsClient } from "./tools/McpToolsClient";
 import type { PluginSessionDirectory } from "./tools/PluginSessions";
 import { WorkflowEngine } from "./workflows/WorkflowEngine";
 import { WorkflowRegistry } from "./workflows/WorkflowRegistry";
+import { OutputFolders } from "./workspace/OutputFolders";
+import { OutputService } from "./workspace/OutputService";
 import { WorkspaceManager } from "./workspace/WorkspaceManager";
 
 /** Replaceable parts of the daemon (tests use a fake runner and no MCP endpoint). */
@@ -77,12 +79,13 @@ export class PenforgeDaemon {
         this.runner = parts.runner ?? createRunner(config, this.hosting?.turns());
         this.registry = parts.registry ?? WorkflowRegistry.withShippedWorkflows();
         this.tools = parts.tools === undefined ? new McpToolsClient(config.mcpUrl) : parts.tools;
-        const turns = new TurnRunner(this.runner, parts.prompts ?? PromptRegistry.locate());
+        const turns = new TurnRunner(this.runner, parts.prompts ?? PromptRegistry.locate(), this.hosting === null);
         this.chat = new ChatService(turns);
         this.workflows = new WorkflowEngine(this.registry, turns);
         const devServers = parts.devServers ?? new DevServerManager();
         const workspaces = this.hosting?.workspaces ?? new WorkspaceManager(config.projectsDir);
         this.previews = new PreviewService(devServers);
+        const folders = new LinkedFolders(config.home);
         const downloads = new DownloadRegistry();
         // W33: built apps on the dashboard; local mode only (server mode runs apps in the sandbox)
         this.apps = new AppsService(
@@ -115,9 +118,15 @@ export class PenforgeDaemon {
                 authTimeoutMs: parts.authTimeoutMs ?? 10_000,
                 apps: this.apps,
                 links: new LinkService(
-                    new LinkedFolders(config.home),
+                    folders,
                     workspaces,
                     this.hosting ? "Linked folders are available in the desktop app or local daemon only" : null
+                ),
+                // W41: server mode keeps apps in the project folder
+                outputs: new OutputService(
+                    new OutputFolders(folders, config.projectsDir),
+                    workspaces,
+                    this.hosting ? "Output folders are available in the desktop app or local daemon only" : null
                 ),
             },
             () => ({

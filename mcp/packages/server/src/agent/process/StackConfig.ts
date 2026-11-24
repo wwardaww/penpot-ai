@@ -70,6 +70,17 @@ export class StackConfig {
         if (file === null) {
             throw new AgentError("not-configured", "There is no generated app for this project yet");
         }
+        // W41: an app folder the user picked may be gone, or may not be Penforge's any more
+        if (workspace.appSrcDir !== workspace.internalAppDir) {
+            workspace.setOutput(workspace.outputFolder);
+            if (workspace.appRoot === null) {
+                throw new AgentError(
+                    "bad-request",
+                    `The app folder ${workspace.appSrcDir} is not on this computer`,
+                    "folder-missing"
+                );
+            }
+        }
         return StackConfig.parse(file, workspace.appSrcDir, policy);
     }
 

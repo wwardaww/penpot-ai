@@ -5,11 +5,12 @@
 ;; Copyright (c) KALEIDOS SUBSIDIARY SL
 
 (ns app.main.ui.dashboard.penforge.change-folder
-  "\"Change folder…\" of a Game UI or Existing project (dashboard project
-  menu): pick another folder for the project, for example the right
-  app of a monorepo after a wrong sub-folder was picked at creation.
-  The daemon reads the new folder from scratch the next time a file of
-  the project opens."
+  "\"Change folder…\" of the dashboard project menu. A Game UI or
+  Existing project picks another linked folder, for example the right
+  app of a monorepo after a wrong sub-folder was picked at creation; the
+  daemon reads the new folder from scratch the next time a file of the
+  project opens. A web or mobile project picks another output folder
+  for Build and Instruct (W41)."
   (:require-macros [app.main.style :as stl])
   (:require
    [app.main.data.ai.linked :as linked]
@@ -25,6 +26,9 @@
    [app.main.ui.ds.foundations.typography :as t]
    [app.main.ui.ds.foundations.typography.heading :refer [heading*]]
    [app.main.ui.ds.foundations.typography.text :refer [text*]]
+   [app.main.ui.workspace.ai.build.output :as output]
+   ;; registers the output folder modal
+   [app.main.ui.workspace.ai.build.output-dialog]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
    [okulary.core :as l]
@@ -35,13 +39,13 @@
   (l/derived :penforge-project-settings st/state))
 
 (defn visible?
-  "Whether the project menu offers \"Change folder…\" for `project`: a
-  Game UI or Existing project (`settings` maps project ids to their
+  "Whether the project menu offers \"Change folder…\" for `project`: one
+  with a known project type (`settings` maps project ids to their
   platform), with the AI features on."
   [settings project]
   (and (pf/enabled?)
        (some? (:id project))
-       (pf/linked-platform? (get settings (:id project)))))
+       (contains? pf/platforms (some-> (get settings (:id project)) keyword))))
 
 (defn can-change?
   "True when `folder` (`{:path :facts}`) fits a project of `platform`
@@ -50,10 +54,22 @@
   (and (nil? (linked/folder-problem platform folder))
        (not= (:path folder) current-root)))
 
+(defn get-modal
+  "Modal type and props of the dialog for `project` of `platform`."
+  [platform project]
+  (if (pf/linked-platform? platform)
+    [:penforge-change-folder {:project project}]
+    [output/modal-type {:project-id (:id project)
+                        :project-name (:name project)
+                        :dashboard true
+                        :on-done #(ntf/success (tr "penforge.change-folder.done"))}]))
+
 (defn open
   "Show the dialog for `project`."
   [project]
-  (st/emit! (modal/show :penforge-change-folder {:project project})))
+  (let [platform     (pf/get-project-platform @st/state (:id project))
+        [type props] (get-modal platform project)]
+    (st/emit! (modal/show type props))))
 
 (def ^:private ref:linked
   (l/derived #(get-in % [:penforge :linked]) st/state =))

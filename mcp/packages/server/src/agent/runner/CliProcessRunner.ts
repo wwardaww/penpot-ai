@@ -122,6 +122,9 @@ export class CliProcessRunner implements ClaudeRunner {
             "--append-system-prompt",
             opts.systemPromptAppend,
         ];
+        for (const directory of opts.additionalDirectories ?? []) {
+            args.push("--add-dir", directory);
+        }
         if (conversation.resumeSessionId) {
             args.push("--resume", conversation.resumeSessionId);
         }
