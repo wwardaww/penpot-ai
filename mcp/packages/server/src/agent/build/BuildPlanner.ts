@@ -13,6 +13,8 @@ import {
     type Stack,
     StackSchema,
 } from "./BuildFiles";
+import { MotionFile } from "../conformance/MotionFile";
+import { PrototypeLinks } from "../conformance/PrototypeLinks";
 import { DesignToolFilter } from "../tools/DesignToolFilter";
 import { BuildError } from "./BuildError";
 import { BuildLock } from "./BuildLock";
@@ -191,6 +193,7 @@ export class BuildPlanner {
             ],
             themeFile: previous?.themeFile,
             themeFormat: previous?.themeFormat,
+            animations: await MotionFile.library(this.ctx.workspace.appSrcDir, reply.stack),
         });
         const screens = this.planScreens(design, reply.screens);
         return {
@@ -217,7 +220,11 @@ export class BuildPlanner {
         for (const board of design.boards) {
             const known = map.boards[board.id];
             if (known === undefined) {
-                screens.push({ boardId: board.id, name: board.name, route: routes.next(board.name), status: "new" });
+                // an overlay is built with the screens that open it
+                if (!design.overlays.has(board.id)) {
+                    const route = routes.next(board.name);
+                    screens.push({ boardId: board.id, name: board.name, route, status: "new" });
+                }
             } else if (known.route !== null) {
                 const status = known.hash === board.hash ? "same" : "changed";
                 screens.push({ boardId: board.id, name: board.name, route: known.route, status });
@@ -229,6 +236,10 @@ export class BuildPlanner {
                 screens.push({ boardId, name: entry.name, route: entry.route, status: "removed" });
             }
         }
+        BuildPlanner.markOpeners(screens, design, (board) => {
+            const known = map.boards[board.id];
+            return known === undefined || (known.route === null && known.hash !== board.hash);
+        });
         const names = (status: PlanScreen["status"]) => screens.filter((s) => s.status === status).map((s) => s.name);
         const work = screens.some((screen) => screen.status !== "same");
         return {
@@ -261,13 +272,23 @@ export class BuildPlanner {
             const first = proposed.findIndex((other) => other.boardId === screen.boardId) === index;
             return first && boards.has(screen.boardId);
         });
-        const list: { boardId: string; route?: string }[] =
+        const all: { boardId: string; route?: string }[] =
             chosen.length > 0 ? chosen : design.boards.map((board) => ({ boardId: board.id }));
-        const start = design.flows.find((flow) => boards.has(flow.startingBoardId))?.startingBoardId;
+        // overlays are parts of the screens that open them, not screens with a route
+        const own = all.filter((screen) => !design.overlays.has(screen.boardId));
+        const list = own.length > 0 ? own : all;
+        const start = design.flows.find((flow) =>
+            list.some((screen) => screen.boardId === flow.startingBoardId)
+        )?.startingBoardId;
         const routes = new Routes();
+        // the app opens on the start screen of the first flow
+        const startRoute = start === undefined ? null : routes.claim("/", boards.get(start)!.name);
         return list.map((screen) => {
             const board = boards.get(screen.boardId)!;
-            const wanted = screen.route ?? (screen.boardId === start ? "/" : undefined);
+            if (startRoute !== null && screen.boardId === start) {
+                return { boardId: board.id, name: board.name, route: startRoute, status: "new" as const };
+            }
+            const wanted = screen.route;
             return {
                 boardId: board.id,
                 name: board.name,
@@ -275,6 +296,31 @@ export class BuildPlanner {
                 status: "new" as const,
             };
         });
+    }
+
+    /**
+     * Marks the screens that open a changed overlay as changed (an overlay has no turn of its own).
+     *
+     * @param screens - screens of the plan, changed in place
+     * @param design - the design
+     * @param changed - tells whether an overlay board must be built again
+     */
+    public static markOpeners(
+        screens: PlanScreen[],
+        design: DesignSnapshot,
+        changed: (board: DesignBoard) => boolean
+    ): void {
+        for (const board of design.boards) {
+            if (!design.overlays.has(board.id) || !changed(board)) {
+                continue;
+            }
+            const openers = PrototypeLinks.openers(design.links, board.id);
+            for (const screen of screens) {
+                if (screen.status === "same" && openers.includes(screen.boardId)) {
+                    screen.status = "changed";
+                }
+            }
+        }
     }
 
     private planPrompt(design: DesignSnapshot, previous: Stack | null): string {
@@ -305,12 +351,24 @@ export class BuildPlanner {
             navigation.length > 0 ? navigation.join("\n") : "- none",
             flows.length > 0 ? flows.join("\n") : "",
             "",
+            ...this.overlayLines(design),
             previous
                 ? `## Current stack (keep it unless it cannot work)\n\`\`\`json\n${JSON.stringify(previous, null, 2)}\n\`\`\``
                 : "",
         ]
             .filter((line, index, all) => line !== "" || all[index - 1] !== "")
             .join("\n");
+    }
+
+    private overlayLines(design: DesignSnapshot): string[] {
+        const names = new Map(design.boards.map((board) => [board.id, board.name]));
+        const lines = [...design.overlays].flatMap((id) => {
+            const openers = PrototypeLinks.openers(design.links, id).map((opener) => names.get(opener) ?? "?");
+            return names.has(id) ? [`- "${names.get(id)}" (${id}), opened from ${openers.join(", ")}`] : [];
+        });
+        return lines.length === 0
+            ? []
+            : ["## Overlays (modals, sheets, menus; they get no route and are no screens)", ...lines, ""];
     }
 
     // output ----------------------------------------------------------------------------------

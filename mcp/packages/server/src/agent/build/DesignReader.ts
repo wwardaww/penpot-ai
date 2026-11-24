@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import type { WorkflowToolsApi } from "@penpot/mcp-common";
+import { type PrototypeLink, PrototypeLinks } from "../conformance/PrototypeLinks";
 
 /** Top-level board of the design with its content hash. */
 export interface DesignBoard {
@@ -26,6 +27,10 @@ export interface DesignSnapshot {
     boards: DesignBoard[];
     edges: DesignEdge[];
     flows: { name: string; startingBoardId: string }[];
+    /** every prototype interaction, with back, overlay and URL actions (W35) */
+    links: PrototypeLink[];
+    /** boards that only show as overlays of other screens (W35) */
+    overlays: Set<string>;
 }
 
 /**
@@ -68,7 +73,8 @@ export class DesignReader {
             name: String(flow.name ?? ""),
             startingBoardId: String(flow.startingBoardId ?? ""),
         }));
-        return { boards: result, edges, flows };
+        const links = PrototypeLinks.read(boards, this.array(graph.edges));
+        return { boards: result, edges, flows, links, overlays: PrototypeLinks.overlayBoards(links, flows) };
     }
 
     /** Hashes a board's code hints; falls back to its properties when code hints fail. */

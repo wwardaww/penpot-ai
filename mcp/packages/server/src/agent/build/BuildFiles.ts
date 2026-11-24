@@ -49,6 +49,8 @@ export const StackSchema = z.object({
     themeFile: z.string().max(200).optional(),
     /** format of that block: `react-native`, `js-web`, `css` or `tailwind` (W21) */
     themeFormat: z.string().max(40).optional(),
+    /** library the animations of the design run with (W35) */
+    animations: z.enum(["framer-motion", "css", "reanimated"]).optional(),
 });
 
 export type Stack = z.infer<typeof StackSchema>;

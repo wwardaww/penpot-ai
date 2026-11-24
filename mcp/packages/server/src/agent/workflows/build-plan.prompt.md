@@ -1,6 +1,6 @@
 ## Task: plan the app
 
-You plan how to turn the open design into a working {{platform}} app in `app-src/`. You only plan
+You plan how to turn the open design into a working {{platform}} app in its own folder. You only plan
 now: do not write files and do not change the design. The user confirms the plan before anything
 is built.
 
@@ -27,7 +27,18 @@ Choose the stack:
   The dev server must stay on this computer: pass `--host 127.0.0.1` (never `0.0.0.0`).
 
 Decide which top-level boards are screens (skip boards that only hold components, notes or
-assets) and give each screen a route; the first screen of the main flow gets `/`.
+assets) and give each screen a route; the first screen of the main flow gets `/`. Boards listed
+under "Overlays" are parts of the screens that open them: they are no screens and get no route.
+
+Plan the app on the design, not next to it: routes and links exactly as the prototype wires them, one
+code component per design component that repeats or comes from the design system, colors, sizes and
+fonts from the theme, and the animations of the design
+{{#web}}
+(Framer Motion for React, CSS keyframes for other web stacks).
+{{/web}}
+{{#mobile}}
+(Reanimated).
+{{/mobile}}
 
 {{#designer}}
 The `summary` is for a designer: 3 to 6 short sentences in plain words about what the app will do
@@ -57,7 +68,7 @@ End your reply with exactly one fenced ```json block in this shape:
   },
   "screens": [{ "boardId": "…", "name": "Login", "route": "/" }],
   "components": [{ "name": "PrimaryButton", "purpose": "Filled button used on Login and Dashboard" }],
-  "tree": "app-src/\n  src/\n    screens/\n    components/",
+  "tree": "src/\n    screens/\n    components/",
   "notes": "Anything the build steps must know (fonts, assets, tricky layouts)."
 }
 ```

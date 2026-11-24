@@ -14,7 +14,12 @@ import { TokenThemeNote } from "../tokens/TokenThemeNote";
 import { BuildInstructions, type BuildInstructionSet, type InstructionsInput } from "../changes/BuildInstructions";
 import { type ChangeRequest, ChangeRequests } from "../changes/ChangeRequests";
 import { ChangeTracker } from "../changes/ChangeTracker";
+import { BuildPlanner } from "./BuildPlanner";
 import { DesignReader, type DesignSnapshot } from "./DesignReader";
+import { BuildConformance, ComponentsReplySchema, type ConformanceScope } from "../conformance/BuildConformance";
+import type { BuiltScreen } from "../conformance/ConformanceChecker";
+import type { ConformanceSummary, Finding } from "../conformance/ConformanceReport";
+import { MotionFile } from "../conformance/MotionFile";
 
 /** Developer edits of a plan, sent with `build-run`. */
 export const BuildOverridesSchema = z.object({
@@ -71,6 +76,8 @@ export interface AppBuilderOptions {
     preBuild?: PreBuildRunner;
     /** fix turns after a failed install or check before giving up */
     maxFixAttempts?: number;
+    /** turns that make the app follow the design when the conformance check finds something (W35) */
+    maxConformAttempts?: number;
     /** change requests and build records (W34) */
     tracker?: ChangeTracker;
 }
@@ -83,10 +90,11 @@ interface CommandFailure {
 }
 
 /**
- * Builder of the app in `app-src/` from a confirmed plan (`build-run` workflow).
+ * Builder of the app in the project's app folder from a confirmed plan (`build-run` workflow).
  *
- * Steps: pre-build workflows, scaffold (full builds), one Claude turn per screen to build, install
- * and check (typecheck, build) with autonomous fix turns, commit to the `app-src` git repository
+ * Steps: pre-build workflows, scaffold (full builds), the generated motion file, one Claude turn per
+ * screen to build, the conformance check against the design with fix turns (W35), install
+ * and check (typecheck, build) with autonomous fix turns, commit to the app's git repository
  * and update `.penforge/map.json` (board → files). Incremental builds only regenerate new and
  * changed screens; edits a turn makes to files of other screens are reverted. Progress is reported
  * per step (`progress` events with `step`, `id`, `status`, …); technical output goes to
@@ -128,6 +136,9 @@ export class AppBuilder {
     private readonly executor: CommandExecutor;
     private readonly preBuild: PreBuildRunner | null;
     private readonly maxFixAttempts: number;
+    private readonly maxConformAttempts: number;
+    /** design contract, motion file and conformance check of this build (W35) */
+    private readonly conformance: BuildConformance;
     /** Claude session shared by the turns of one build */
     private session: string | undefined;
     /** note on the generated design token theme, added to the build prompts (W21) */
@@ -156,6 +167,8 @@ export class AppBuilder {
         this.executor = options.executor ?? new ProcessCommandExecutor();
         this.preBuild = options.preBuild ?? null;
         this.maxFixAttempts = options.maxFixAttempts ?? 3;
+        this.maxConformAttempts = options.maxConformAttempts ?? 2;
+        this.conformance = new BuildConformance(ctx, (text) => this.log(text));
         this.tracker = options.tracker ?? new ChangeTracker(ctx);
     }
 
@@ -265,6 +278,16 @@ export class AppBuilder {
         this.step("prepare", "done");
 
         let stack = plan.stack;
+        const library = await MotionFile.library(this.ctx.workspace.appSrcDir, {
+            ...stack,
+            name: overrides.stackName?.trim() || stack.name,
+        });
+        await this.unlessCancelled("the design contract", () =>
+            this.conformance.begin(
+                screens.filter((screen) => screen.status !== "removed"),
+                library
+            )
+        );
         // pre-build workflows work on the app: on a full build they run once it is scaffolded
         if (!full) {
             await this.runPreBuild(AppBuilder.withTokenSync(stack, this.request));
@@ -274,6 +297,9 @@ export class AppBuilder {
             stack = await this.scaffold(plan, screens, overrides);
             await this.runPreBuild(stack);
         }
+        // the stack of a full build may differ from the planned one
+        stack = await this.recordAnimations(full ? { ...stack, animations: undefined } : stack);
+        await this.unlessCancelled("the motion file", () => this.conformance.writeMotion(stack.animations!));
         this.themeNote = await TokenThemeNote.forBuild(this.ctx.workspace);
 
         const targets = screens.filter((screen) =>
@@ -293,11 +319,16 @@ export class AppBuilder {
             await this.removeScreens(removed, map!);
         }
         await this.settleConflicts();
+        const touched = full ? null : new Set(targets.map((screen) => screen.boardId));
+        const builtScreens = () => this.builtScreens(screens, built, map);
+        await this.conform(builtScreens, touched, start, owners);
 
         // a token-only update ran no Claude turn: the token sync checked the theme itself
         if (this.turns > 0) {
             await this.installAndCheck(stack, full || (await this.dependenciesChanged(start)));
         }
+        // the report describes the code as it is committed
+        const scope = await this.recheck(builtScreens, touched, start);
 
         this.step("save", "running");
         const names = targets.map((screen) => screen.name);
@@ -311,12 +342,17 @@ export class AppBuilder {
 
         // only the token sync changed the app (no Claude turn)
         const tokenOnly = !full && this.turns === 0 && (this.request?.changes.tokens.length ?? 0) > 0;
+        const mode = full ? "full" : tokenOnly ? "tokens" : "incremental";
         const record = await this.tracker.recordBuild({
-            mode: full ? "full" : tokenOnly ? "tokens" : "incremental",
+            mode,
             boardHashes: Object.fromEntries(Object.entries(nextMap.boards).map(([id, board]) => [id, board.hash])),
             changeRequest: this.request?.id ?? null,
             instructions: this.instructions ? BuildInstructions.record(this.instructions) : null,
         });
+
+        const conformance = await this.unlessCancelled("the conformance report", () =>
+            this.conformance.finish(scope, mode, record?.n ?? null)
+        );
 
         this.ctx.emit("result", {
             planId: plan.planId,
@@ -329,6 +365,7 @@ export class AppBuilder {
             tokenOnly,
             assets: this.assets,
             conflicts: this.conflicts.map((conflict) => conflict.text),
+            conformance: conformance ?? null,
             preview: true,
         });
         return {
@@ -369,7 +406,8 @@ export class AppBuilder {
             const known = map.boards[board.id];
             const change = changes.get(board.id);
             if (known === undefined) {
-                if (change?.status === "added") {
+                // an overlay is built with the screens that open it
+                if (change?.status === "added" && !design.overlays.has(board.id)) {
                     screens.push({
                         boardId: board.id,
                         name: board.name,
@@ -388,6 +426,10 @@ export class AppBuilder {
                 screens.push({ boardId, name: entry.name, route: entry.route, status: "removed" });
             }
         }
+        BuildPlanner.markOpeners(screens, design, (board) => {
+            const status = changes.get(board.id)?.status;
+            return status === "added" || status === "changed";
+        });
         return {
             schemaVersion: 1,
             planId: request.id,
@@ -453,7 +495,8 @@ export class AppBuilder {
         lines.push(
             "",
             "All screens:",
-            ...screens.filter((s) => s.status !== "removed").map((s) => `- "${s.name}" → ${s.route}`)
+            ...screens.filter((s) => s.status !== "removed").map((s) => `- "${s.name}" → ${s.route}`),
+            ...this.conformance.appLines()
         );
         this.addNotes(lines, "", undefined);
         lines.push(
@@ -463,7 +506,8 @@ export class AppBuilder {
             '{ "files": ["src/…"], "conflicts": [], "assets": [] }',
             "```"
         );
-        await this.turn(lines.join("\n"));
+        const reply = await this.turn(lines.join("\n"));
+        await this.keepComponents(reply.text);
         this.step("apply", "done", request.id);
     }
 
@@ -504,6 +548,124 @@ export class AppBuilder {
         this.step("apply", "done", "conflicts", "conflicts");
     }
 
+    // conformance (W35) -----------------------------------------------------------------------
+
+    /** Records the animation library in `stack.json`, kept for the life of the app. */
+    private async recordAnimations(stack: Stack): Promise<Stack> {
+        const animations = stack.animations ?? (await MotionFile.library(this.ctx.workspace.appSrcDir, stack));
+        if (stack.animations !== animations) {
+            stack = { ...stack, animations };
+            await this.files.writeStack(stack);
+        }
+        return stack;
+    }
+
+    /** Screens of the app with their files: just built, or from the last build. */
+    private builtScreens(screens: PlanScreen[], built: Map<string, string[]>, map: BuildMap | null): BuiltScreen[] {
+        return screens
+            .filter((screen) => screen.status !== "removed")
+            .map(({ boardId, name, route }) => ({
+                boardId,
+                name,
+                route,
+                files: built.get(boardId) ?? map?.boards[boardId]?.files ?? [],
+            }));
+    }
+
+    private async scopeOf(touched: Set<string> | null, start: string): Promise<ConformanceScope> {
+        return {
+            boards: touched,
+            files: new Set(await this.git.changedFiles(start, await this.git.snapshot())),
+            flows: (this.request?.changes.flows.length ?? 0) > 0,
+        };
+    }
+
+    /**
+     * Checks the code against the design; what does not follow it goes back to Claude, a few times
+     * at most. Edits to files of screens neither touched nor named by a point are undone. A build
+     * without a Claude turn (tokens only) is checked and reported, not fixed.
+     */
+    private async conform(
+        screens: () => BuiltScreen[],
+        touched: Set<string> | null,
+        start: string,
+        owners: Map<string, string>
+    ): Promise<void> {
+        this.step("conform", "running");
+        let findings = await this.findings(screens, touched, start);
+        for (let attempt = 1; findings.length > 0 && this.turns > 0 && attempt <= this.maxConformAttempts; attempt++) {
+            const detail = `${findings.length}`;
+            this.step("conform-fix", "running", detail, `conform-fix-${attempt}`);
+            const allowed = BuildConformance.boardsOf(findings);
+            const before = await this.git.snapshot();
+            const reply = await this.turn(this.conformance.fixPrompt(findings));
+            await this.keepComponents(reply.text);
+            const changed = await this.git.changedFiles(before, await this.git.snapshot());
+            const foreign = changed.filter((file) => {
+                const owner = owners.get(file);
+                return owner !== undefined && touched !== null && !touched.has(owner) && !allowed.has(owner);
+            });
+            if (foreign.length > 0) {
+                await this.git.restore(before, foreign);
+                this.log(`Reverted changes to other screens' files: ${foreign.join(", ")}`);
+            }
+            this.step("conform-fix", "done", detail, `conform-fix-${attempt}`);
+            if (changed.length === foreign.length) {
+                // nothing was changed: the same turn again would not help
+                break;
+            }
+            findings = await this.findings(screens, touched, start);
+        }
+        for (const finding of findings) {
+            this.log(`Does not follow the design: ${finding.text}`);
+        }
+        this.step("conform", "done");
+    }
+
+    private async findings(
+        screens: () => BuiltScreen[],
+        touched: Set<string> | null,
+        start: string
+    ): Promise<Finding[]> {
+        const scope = await this.scopeOf(touched, start);
+        const found = await this.unlessCancelled("the conformance check", () =>
+            this.conformance.check(screens(), scope)
+        );
+        return found ?? [];
+    }
+
+    /** Last check of a build, on the code as it is saved. */
+    private async recheck(
+        screens: () => BuiltScreen[],
+        touched: Set<string> | null,
+        start: string
+    ): Promise<ConformanceScope> {
+        await this.findings(screens, touched, start);
+        return this.scopeOf(touched, start);
+    }
+
+    private async keepComponents(text: string): Promise<void> {
+        const reply = JsonReply.parse(text, ComponentsReplySchema);
+        const components = (reply?.components ?? []).flatMap((component) => {
+            const file = this.normalizePath(component.file);
+            return file === null ? [] : [{ ...component, file }];
+        });
+        await this.unlessCancelled("the components", () => this.conformance.addComponents(components));
+    }
+
+    /** Runs a conformance step; a failure is logged and never fails the build. */
+    private async unlessCancelled<T>(what: string, body: () => Promise<T>): Promise<T | null> {
+        try {
+            return await body();
+        } catch (error) {
+            if (this.ctx.signal.aborted) {
+                throw error;
+            }
+            this.log(`Conformance: ${what} failed: ${error instanceof Error ? error.message : String(error)}`);
+            return null;
+        }
+    }
+
     // steps -----------------------------------------------------------------------------------
 
     private async runPreBuild(stack: Stack): Promise<void> {
@@ -522,6 +684,7 @@ export class AppBuilder {
         this.step("scaffold", "running", stackName);
         const result = await this.turn(this.scaffoldPrompt(plan, screens, overrides));
         const reply = JsonReply.parse(result.text, AppBuilder.ScaffoldReplySchema);
+        await this.keepComponents(result.text);
         // the theme file recorded by the pre-build token sync (W21) stays recorded
         const current = await this.files.readStack();
         const theme = { themeFile: current?.themeFile, themeFormat: current?.themeFormat };
@@ -550,6 +713,7 @@ export class AppBuilder {
         this.ctx.emit("progress", { ...progress, label, status: "running" });
         const before = await this.git.snapshot();
         const result = await this.turn(this.screenPrompt(plan, screens, screen, previous, owners, overrides));
+        await this.keepComponents(result.text);
         const after = await this.git.snapshot();
         let changed = await this.git.changedFiles(before, after);
 
@@ -563,7 +727,7 @@ export class AppBuilder {
             changed = changed.filter((file) => !foreign.includes(file));
         }
         const claimed = (JsonReply.parse(result.text, AppBuilder.ScreenReplySchema)?.files ?? [])
-            .map(AppBuilder.normalizePath)
+            .map((file) => this.normalizePath(file))
             .filter((file): file is string => file !== null && !foreign.includes(file));
         const files = [...new Set([...previous, ...changed, ...claimed])]
             .filter((file) => this.git.exists(file))
@@ -580,6 +744,8 @@ export class AppBuilder {
         });
         await this.turn(
             [
+                "## Step: remove deleted screens",
+                "",
                 "These screens were deleted from the design. Remove them from the app: delete their files,",
                 "their routes and every link to them. Keep the rest of the app working.",
                 "",
@@ -656,8 +822,11 @@ export class AppBuilder {
         if (this.ctx.signal.aborted) {
             throw new Error("cancelled");
         }
+        // the step names itself in the first line; the app folder follows it
+        const [title, ...rest] = prompt.split("\n");
+        const folder = `App folder (the app's files live here, write nothing outside it): \`${this.ctx.workspace.appSrcDir}\``;
         const result = await this.ctx.runner.run({
-            prompt,
+            prompt: [title, "", folder, ...rest].join("\n"),
             promptName: "build-run",
             resumeSessionId: this.session,
         });
@@ -680,7 +849,7 @@ export class AppBuilder {
             }
         }
         for (const asset of extras.assets) {
-            const file = AppBuilder.normalizePath(asset.file);
+            const file = this.normalizePath(asset.file);
             if (file !== null && !this.assets.some((known) => known.file === file)) {
                 this.assets.push({ file, source: asset.source.trim(), license: asset.license.trim() });
             }
@@ -694,7 +863,7 @@ export class AppBuilder {
         const lines = [
             "## Step: scaffold the app",
             "",
-            "Create the project in `app-src/` (it may already hold an older version; replace what does",
+            "Create the project in the app folder (it may already hold an older version; replace what does",
             "not fit). Set up the tooling, global styles and design tokens taken from the design",
             "(colors, typography, spacing), the shared components below, and routing with one route per",
             "screen. Create every screen as a simple placeholder at the path you will fill later; the",
@@ -715,12 +884,21 @@ export class AppBuilder {
         if (plan.tree.trim()) {
             lines.push("", "Planned folder tree:", "```", plan.tree.trimEnd(), "```");
         }
+        lines.push(...this.conformance.appLines());
         this.addNotes(lines, plan.notes, overrides.notes);
         lines.push(
             "",
-            "End your reply with a ```json block holding the final stack:",
+            "End your reply with a ```json block holding the final stack and the code component of each",
+            "design component you made (`components` may be empty):",
             "```json",
-            JSON.stringify({ stack: AppBuilder.stackExample(plan.stack) }, null, 2),
+            JSON.stringify(
+                {
+                    stack: AppBuilder.stackExample(plan.stack),
+                    components: [{ design: "Cards/Task card", name: "TaskCard", file: "src/components/TaskCard.tsx" }],
+                },
+                null,
+                2
+            ),
             "```"
         );
         return lines.join("\n");
@@ -735,12 +913,13 @@ export class AppBuilder {
         overrides: BuildOverrides
     ): string {
         const routes = new Map(screens.map((s) => [s.boardId, s]));
-        const navigation = plan.navigation
+        const planned = plan.navigation
             .filter((edge) => edge.from === screen.boardId && routes.has(edge.to))
             .map((edge) => {
                 const target = routes.get(edge.to)!;
                 return `- ${edge.trigger} on "${edge.sourceName}" → "${target.name}" (${target.route})`;
             });
+        const navigation = this.conformance.navigationLines(screen.boardId) ?? planned;
         const update = screen.status === "changed";
         const lines = [
             `## Step: ${update ? "update" : "build"} the screen "${screen.name}"`,
@@ -757,6 +936,7 @@ export class AppBuilder {
             "",
             "All screens:",
             ...screens.filter((s) => s.status !== "removed").map((s) => `- "${s.name}" → ${s.route}`),
+            ...this.conformance.screenLines(screen.boardId),
         ];
         const change = this.request?.changes.screens.find((s) => s.boardId === screen.boardId);
         if (update && change !== undefined && this.request !== null) {
@@ -780,9 +960,10 @@ export class AppBuilder {
         this.addNotes(lines, plan.notes, overrides.notes);
         lines.push(
             "",
-            "End your reply with a ```json block listing the files of this screen, relative to `app-src/`:",
+            "End your reply with a ```json block listing the files of this screen, relative to the app folder,",
+            "and the code components you made for design components (may be empty):",
             "```json",
-            '{ "files": ["src/screens/Example.tsx"] }',
+            '{ "files": ["src/screens/Example.tsx"], "components": [] }',
             "```"
         );
         return lines.join("\n");
@@ -793,7 +974,7 @@ export class AppBuilder {
             `## Step: fix the ${failure.step === "install" ? "dependency installation" : "build"}`,
             "",
             `The command \`${failure.command.join(" ")}\` ${failure.outcome.timedOut ? "timed out" : `failed with exit code ${failure.outcome.code}`}.`,
-            "Fix the cause in the code or configuration of `app-src/`. Do not run commands; the build is",
+            "Fix the cause in the code or configuration of the app folder. Do not run commands; the build is",
             "checked again after your reply. Do not remove features or screens to make it pass.",
             "",
             "Output (last part):",
@@ -905,12 +1086,12 @@ export class AppBuilder {
         );
     }
 
-    /** Normalizes a path Claude reported to a forward-slash path inside `app-src/`, or null. */
-    private static normalizePath(file: string): string | null {
-        const clean = file
-            .replace(/\\/g, "/")
-            .replace(/^\.\//, "")
-            .replace(/^app-src\//, "");
+    /** Normalizes a path Claude reported to a forward-slash path inside the app folder, or null. */
+    private normalizePath(file: string): string | null {
+        const root = `${this.ctx.workspace.appSrcDir.replace(/\\/g, "/").replace(/\/+$/, "")}/`;
+        const forward = file.replace(/\\/g, "/");
+        const inside = forward.toLowerCase().startsWith(root.toLowerCase());
+        const clean = (inside ? forward.slice(root.length) : forward).replace(/^\.\//, "").replace(/^app-src\//, "");
         if (
             clean.length === 0 ||
             clean.startsWith("/") ||

@@ -14,6 +14,8 @@ export type BuildStep =
     | "cleanup"
     | "install"
     | "check"
+    | "conform"
+    | "conform-fix"
     | "fix"
     | "save";
 
@@ -59,8 +61,14 @@ export class BuildText {
                 return dev ? (detail ?? "Building") : "Checking that everything works";
             case "fix":
                 return dev ? `Fixing build errors (attempt ${detail})` : "Fixing a small problem";
+            case "conform":
+                return dev ? "Checking the code against the design" : "Comparing the app with your design";
+            case "conform-fix":
+                return dev
+                    ? `Fixing ${detail} point(s) that differ from the design`
+                    : "Matching the app to your design";
             case "save":
-                return dev ? "Committing to app-src" : "Saving the app";
+                return dev ? "Committing the app" : "Saving the app";
         }
     }
 
@@ -79,7 +87,7 @@ export class BuildText {
 
     public nothingChanged(): string {
         return this.isDeveloper
-            ? "No board changed since the last build; app-src is up to date."
+            ? "No board changed since the last build; the app is up to date."
             : "Your app already matches the design. Nothing changed since the last build.";
     }
 
