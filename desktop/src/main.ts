@@ -101,6 +101,10 @@ function guardWindow(win: BrowserWindow, origin: string): void {
         if (!isSameOrigin(url, origin)) {
             event.preventDefault();
             openExternal(url);
+            // the waiting window of a starting app: the app opens in the browser, so nothing is left to show
+            if (["", "about:blank"].includes(win.webContents.getURL())) {
+                win.close();
+            }
         }
     });
     win.webContents.setWindowOpenHandler(({ url }) => {

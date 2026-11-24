@@ -8,6 +8,9 @@ export const FRONTEND_FLAGS = [
     "disable-email-verification",
     "disable-secure-session-cookies",
     "disable-admin-console",
+    // the questions about the user, the team step and the release notes belong to the Penpot service;
+    // the persona question waits for them
+    "disable-onboarding",
 ];
 
 export interface ConfigJsParams {

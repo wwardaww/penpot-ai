@@ -59,6 +59,7 @@ describe("service settings", () => {
         const body = configJs({ origin: "http://127.0.0.1:9000", agentPort: 9006, bridgePort: 9005, version: "0.1.0" });
         assert.match(body, /var penpotFlags = "enable-ai enable-mcp/);
         assert.ok(FRONTEND_FLAGS.includes("disable-registration"));
+        assert.ok(FRONTEND_FLAGS.includes("disable-onboarding"));
         assert.match(body, /var penforgeDesktop = true;/);
     });
 });
