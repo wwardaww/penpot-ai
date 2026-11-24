@@ -592,7 +592,7 @@ export class AppBuilder {
         owners: Map<string, string>
     ): Promise<void> {
         this.step("conform", "running");
-        let findings = await this.findings(screens, touched, start);
+        let findings = await this.findings(screens, await this.scopeOf(touched, start));
         for (let attempt = 1; findings.length > 0 && this.turns > 0 && attempt <= this.maxConformAttempts; attempt++) {
             const detail = `${findings.length}`;
             this.step("conform-fix", "running", detail, `conform-fix-${attempt}`);
@@ -614,7 +614,7 @@ export class AppBuilder {
                 // nothing was changed: the same turn again would not help
                 break;
             }
-            findings = await this.findings(screens, touched, start);
+            findings = await this.findings(screens, await this.scopeOf(touched, start));
         }
         for (const finding of findings) {
             this.log(`Does not follow the design: ${finding.text}`);
@@ -622,12 +622,7 @@ export class AppBuilder {
         this.step("conform", "done");
     }
 
-    private async findings(
-        screens: () => BuiltScreen[],
-        touched: Set<string> | null,
-        start: string
-    ): Promise<Finding[]> {
-        const scope = await this.scopeOf(touched, start);
+    private async findings(screens: () => BuiltScreen[], scope: ConformanceScope): Promise<Finding[]> {
         const found = await this.unlessCancelled("the conformance check", () =>
             this.conformance.check(screens(), scope)
         );
@@ -640,8 +635,9 @@ export class AppBuilder {
         touched: Set<string> | null,
         start: string
     ): Promise<ConformanceScope> {
-        await this.findings(screens, touched, start);
-        return this.scopeOf(touched, start);
+        const scope = await this.scopeOf(touched, start);
+        await this.findings(screens, scope);
+        return scope;
     }
 
     private async keepComponents(text: string): Promise<void> {
