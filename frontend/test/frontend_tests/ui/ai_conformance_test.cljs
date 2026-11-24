@@ -129,6 +129,11 @@
     (t/is (str/includes? html "penforge.build.conformance.clean"))
     (t/is (str/includes? html "penforge.build.conformance.fixed"))
     (t/is (not (str/includes? html "<details"))))
+  (let [html (render-report {:status "clean" :fixed 0 :left 0 :elsewhere 0 :items []
+                             :skipped [{:check "values" :reason "no theme"}]}
+                            :designer)]
+    (t/is (str/includes? html "penforge.build.conformance.clean-partly")
+          "what was not checked is not claimed"))
   (let [report {:status "findings" :fixed 0 :left 3 :elsewhere 4 :items [link-finding]
                 :skipped [{:check "values" :reason "no theme"}]}
         html   (render-report report :designer)

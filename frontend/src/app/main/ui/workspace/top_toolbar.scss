@@ -24,6 +24,11 @@
   display: flex;
   align-items: center;
   flex-direction: column;
+
+  // `inset-inline-start: 50%` leaves half of the viewport as available width,
+  // which is too little for the AI buttons
+  inline-size: max-content;
+  max-inline-size: calc(100% - var(--sp-l));
   padding: var(--sp-m);
   border-radius: $br-8;
   border: $b-2 solid var(--menu-border-color);
@@ -59,7 +64,9 @@
 .toolbar-options {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: var(--sp-xs);
   margin: 0;
   opacity: 1;

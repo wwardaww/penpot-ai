@@ -166,6 +166,10 @@
 }
 
 .task-box {
+  // the app-wide input reset hides native checkboxes
+  appearance: auto;
+  inline-size: $sz-12;
+  block-size: $sz-12;
   margin: 0;
   margin-inline-end: var(--sp-xs);
   vertical-align: middle;

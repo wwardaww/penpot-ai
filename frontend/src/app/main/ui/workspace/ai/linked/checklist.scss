@@ -6,6 +6,7 @@
 
 @use "ds/typography.scss" as t;
 @use "ds/_borders.scss" as *;
+@use "ds/_sizes.scss" as *;
 
 .checklist,
 .group {
@@ -42,7 +43,11 @@
 }
 
 .item-check {
+  // the app-wide input reset hides native checkboxes
+  appearance: auto;
   flex-shrink: 0;
+  inline-size: $sz-16;
+  block-size: $sz-16;
   margin: var(--sp-xxs) 0 0;
   accent-color: var(--color-accent-primary);
 }

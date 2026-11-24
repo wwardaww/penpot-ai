@@ -14849,6 +14849,10 @@ msgid "penforge.build.conformance.clean"
 msgstr "The app follows your flows, design system and animations."
 
 #: src/app/main/ui/workspace/ai/build/conformance.cljs
+msgid "penforge.build.conformance.clean-partly"
+msgstr "What could be checked matches the design."
+
+#: src/app/main/ui/workspace/ai/build/conformance.cljs
 msgid "penforge.build.conformance.left"
 msgstr "Points that still differ from the design: %s"
 

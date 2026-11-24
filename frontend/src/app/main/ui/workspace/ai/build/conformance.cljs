@@ -70,6 +70,8 @@
         (cond
           (= status "unchecked") (tr "penforge.build.conformance.unchecked")
           (pos? left) (tr "penforge.build.conformance.left" left)
+          ;; never claim what was not checked
+          (seq skipped) (tr "penforge.build.conformance.clean-partly")
           :else (tr "penforge.build.conformance.clean"))]
        (when (pos? fixed)
          [:> text* {:as "p" :typography t/body-small :class (stl/css :muted)}

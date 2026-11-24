@@ -65,6 +65,16 @@
   gap: var(--sp-s);
   color: var(--color-foreground-primary);
   cursor: pointer;
+
+  input {
+    // the app-wide input reset hides native radio buttons
+    appearance: auto;
+    flex-shrink: 0;
+    inline-size: $sz-16;
+    block-size: $sz-16;
+    margin: 0;
+    accent-color: var(--color-accent-primary);
+  }
 }
 
 .row-disabled .row-label {
