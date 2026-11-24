@@ -1,6 +1,7 @@
 import { readdir, readFile } from "fs/promises";
 import { join } from "path";
 import type { AppCheckpointInfo, AppInfo, AppRunStatus, Platform } from "@penpot/mcp-common";
+import { ProjectOutputRecord } from "../workspace/ProjectOutput";
 import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import { AppThumbnail } from "./AppThumbnail";
 import { RedesignedApps } from "./RedesignedApps";
@@ -114,7 +115,8 @@ export class AppCatalog {
         if (!map || !stack) {
             return null;
         }
-        const appSrcDir = join(root, "app-src");
+        // W41: the folder the user picked, else `app-src/` in the project folder
+        const appSrcDir = ProjectOutputRecord.read(project)?.appRoot ?? join(root, "app-src");
         const devArgv = AppCatalog.devArgv(stack);
         const expo = devArgv.includes("expo") && devArgv.includes("start");
         const platform = AppCatalog.platform(stack.platform) ?? AppCatalog.platform(project?.platform) ?? "web";

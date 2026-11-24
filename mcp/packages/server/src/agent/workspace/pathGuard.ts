@@ -163,15 +163,17 @@ export class PathGuard {
 
 /**
  * Guard of one project: its own folder (`<PENFORGE_HOME>/projects/<id>/`), plus the folder of this
- * computer the project is linked to (W38 Game UI / Existing project), when there is one.
+ * computer the project is linked to (W38 Game UI / Existing project) and the app folder the user
+ * picked for a web or mobile project (W41), when there is one.
  *
  * Relative paths resolve against the project folder only. An absolute path is accepted when it
- * lies inside either root, with the same rules for each root (links followed, `..`, UNC, device
- * names and alternate data streams refused). The linked root belongs to this guard alone: other
- * projects' guards never see it.
+ * lies inside one of the roots, with the same rules for each root (links followed, `..`, UNC,
+ * device names and alternate data streams refused). The linked root and the app root belong to
+ * this guard alone: other projects' guards never see them.
  */
 export class ProjectPathGuard extends PathGuard {
     private linked: PathGuard | null = null;
+    private app: PathGuard | null = null;
 
     /**
      * Creates a guard for a project folder.
@@ -197,33 +199,40 @@ export class ProjectPathGuard extends PathGuard {
      * @param root - an absolute folder path (it must exist when paths are checked), or null
      */
     public setLinkedRoot(root: string | null): void {
-        if (root === null) {
-            this.linked = null;
-            return;
-        }
-        const platformPath = this.platform === "win32" ? path.win32 : path.posix;
-        if (!platformPath.isAbsolute(root)) {
-            throw new PathOutsideRootError(root, this.root);
-        }
-        this.linked = new PathGuard(root, this.platform);
+        this.linked = this.rootGuard(root);
+    }
+
+    /** The app folder outside the project folder (W41), or null. */
+    public get appRoot(): string | null {
+        return this.app?.root ?? null;
     }
 
     /**
-     * Resolves a path inside the project folder, or an absolute path inside the linked folder.
+     * Sets or clears the app folder outside the project folder (W41). The caller checked that it is
+     * the folder Penforge made for this project.
+     *
+     * @param root - an absolute folder path, or null
+     */
+    public setAppRoot(root: string | null): void {
+        this.app = this.rootGuard(root);
+    }
+
+    /**
+     * Resolves a path inside the project folder, or an absolute path inside the linked folder or
+     * the app folder.
      *
      * @param candidate - an absolute path, or a path relative to the project folder
      * @returns the resolved real path
-     * @throws PathOutsideRootError if the path is in neither root or not acceptable
+     * @throws PathOutsideRootError if the path is in none of the roots or not acceptable
      */
     public override resolve(candidate: string): string {
         try {
             return super.resolve(candidate);
         } catch (error) {
-            const linked = this.linked;
-            if (!(error instanceof PathOutsideRootError) || linked === null || !this.isAbsolutePath(candidate)) {
+            if (!(error instanceof PathOutsideRootError) || !this.isAbsolutePath(candidate)) {
                 throw error;
             }
-            return linked.resolve(candidate);
+            return this.resolveOutside(candidate, error);
         }
     }
 
@@ -238,6 +247,32 @@ export class ProjectPathGuard extends PathGuard {
             throw new PathOutsideRootError(String(candidate), this.root);
         }
         return this.linked.resolve(candidate);
+    }
+
+    /** Resolves an absolute path outside the project folder in the app folder or the linked folder. */
+    private resolveOutside(candidate: string, outside: PathOutsideRootError): string {
+        if (this.app !== null) {
+            try {
+                return this.app.resolve(candidate);
+            } catch {
+                // not in the app folder, or the folder went away
+            }
+        }
+        if (this.linked === null) {
+            throw outside;
+        }
+        return this.linked.resolve(candidate);
+    }
+
+    private rootGuard(root: string | null): PathGuard | null {
+        if (root === null) {
+            return null;
+        }
+        const platformPath = this.platform === "win32" ? path.win32 : path.posix;
+        if (!platformPath.isAbsolute(root)) {
+            throw new PathOutsideRootError(root, this.root);
+        }
+        return new PathGuard(root, this.platform);
     }
 
     private isAbsolutePath(candidate: string): boolean {

@@ -1,10 +1,14 @@
 import type { AgentContext, Platform } from "@penpot/mcp-common";
 import { createLogger } from "../../logger";
 import { type ProjectLink, type ProjectLinkFields, ProjectLinkRecord } from "../linked/ProjectLink";
+import { type ProjectOutput, type ProjectOutputFields, ProjectOutputRecord } from "./ProjectOutput";
 import { ProjectWorkspace } from "./ProjectWorkspace";
 
-/** Content of `.penforge/project.json` (with the W38 link fields of a linked project). */
-export interface ProjectInfo extends ProjectLinkFields {
+/**
+ * Content of `.penforge/project.json` (with the W38 link fields of a linked project and the W41
+ * output folder fields).
+ */
+export interface ProjectInfo extends ProjectLinkFields, ProjectOutputFields {
     projectId: string;
     projectName?: string;
     teamId: string;
@@ -104,6 +108,31 @@ export class WorkspaceManager {
                 updatedAt: now,
             });
             workspace.setLink(link);
+        });
+        return workspace;
+    }
+
+    /**
+     * Stores a project's output folder (W41) in `project.json`, in turn with the context updates,
+     * and applies it to the open workspace.
+     *
+     * @param projectId - the Penpot project id
+     * @param output - the output folder
+     * @throws when `project.json` cannot be written
+     */
+    public async setOutput(projectId: string, output: ProjectOutput): Promise<ProjectWorkspace> {
+        const workspace = await this.get(projectId);
+        await this.queue(workspace, async () => {
+            const previous = await workspace.readJson<Partial<ProjectInfo> | null>("project.json", null);
+            const now = new Date().toISOString();
+            await workspace.writeJson("project.json", {
+                projectId,
+                createdAt: now,
+                ...previous,
+                ...ProjectOutputRecord.fields(output),
+                updatedAt: now,
+            });
+            workspace.setOutput(output);
         });
         return workspace;
     }

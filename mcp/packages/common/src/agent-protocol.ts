@@ -260,7 +260,8 @@ export type ClientMessage =
     | PreviewStopMessage
     | AppsClientMessage
     | ChatEditClientMessage
-    | LinkedClientMessage;
+    | LinkedClientMessage
+    | OutputClientMessage;
 
 // ---------------------------------------------------------------------------------------------
 // daemon -> client
@@ -461,6 +462,7 @@ export type DaemonMessage =
     | AppsDaemonMessage
     | ChatChangedMessage
     | LinkedDaemonMessage
+    | ProjectOutputMessage
     | McpRestartMessage
     | ErrorMessage;
 
@@ -609,11 +611,16 @@ export interface WorkflowWorkspaceApi {
     readonly projectId: string;
     readonly root: string;
     readonly designDir: string;
+    /**
+     * Folder of the generated app: the folder the user picked (W41, outside `root`), else
+     * `app-src/` in the project folder.
+     */
     readonly appSrcDir: string;
     readonly metaDir: string;
     /**
      * Resolves a path inside the project folder (or an absolute path inside the linked folder of a
-     * Game UI / Existing project, W38); throws for anything outside.
+     * Game UI / Existing project, W38, or inside the project's app folder, W41); throws for anything
+     * outside.
      */
     resolve(path: string): string;
     /** the folder of this computer a Game UI / Existing project is linked to, when it exists (W38) */
@@ -1087,3 +1094,103 @@ export interface FontsFilesReplyMessage {
 }
 
 export type LinkedDaemonMessage = FolderListReplyMessage | ProjectLinkedMessage | FontsFilesReplyMessage;
+
+// ---------------------------------------------------------------------------------------------
+// output folder of a web or mobile project (W41): where Build and Instruct write
+
+/** What an output folder is picked for. */
+export type OutputPurpose = "build" | "instruct";
+
+/** Request for the output folder of a project; needs no `context.set`. The reply is `project.output`. */
+export interface ProjectOutputStatusMessage {
+    type: "project.output.status";
+    rid: string;
+    projectId: string;
+}
+
+/**
+ * Request for the folder Penforge would use when the user picks `path` (nothing is created). The
+ * reply is `project.output` with `target`, or an `error` (`bad-request` with an
+ * {@link OutputRefusalReason}).
+ */
+export interface ProjectOutputPreviewMessage {
+    type: "project.output.preview";
+    rid: string;
+    projectId: string;
+    purpose: OutputPurpose;
+    /** absolute path of the folder the user picked */
+    path: string;
+    /** project name, for the sub-folder of a folder that is not empty */
+    name?: string;
+}
+
+/**
+ * Request to use the picked folder: creates the sub-folder when one is needed and remembers the
+ * choice in the project's `.penforge/project.json`. For `build`, the folder becomes the project's
+ * app folder (marker file and a git repository of its own). The reply is `project.output`, or an
+ * `error` like {@link ProjectOutputPreviewMessage}.
+ */
+export interface ProjectOutputSetMessage {
+    type: "project.output.set";
+    rid: string;
+    projectId: string;
+    purpose: OutputPurpose;
+    path: string;
+    name?: string;
+}
+
+export type OutputClientMessage = ProjectOutputStatusMessage | ProjectOutputPreviewMessage | ProjectOutputSetMessage;
+
+/** Why a folder is refused as an output folder (client translates; `message` is English). */
+export type OutputRefusalReason =
+    | LinkRefusalReason
+    /** the app or linked folder of another project, or a folder inside an app folder */
+    | "folder-taken"
+    /** inside a git repository Penforge did not make (Build only) */
+    | "inside-git"
+    /** the folder cannot be created or written */
+    | "not-writable"
+    /** a build of the project is running */
+    | "build-running";
+
+/** Where Build writes the app. */
+export interface OutputAppState {
+    /**
+     * `none`: nothing built and no folder picked; `internal`: an app built in the project folder
+     * before W41, which stays there; `ready`: the picked folder; `missing`: the picked folder is
+     * gone or is no longer the one Penforge made
+     */
+    state: "none" | "internal" | "ready" | "missing";
+    path: string | null;
+    /** an app was built (there is something to update) */
+    built: boolean;
+}
+
+/** Folder remembered for Build and Instruct. */
+export interface OutputFolderState {
+    state: "none" | "ready" | "missing";
+    path: string | null;
+}
+
+/** Folder Penforge would use for a picked folder. */
+export interface OutputTarget {
+    /** the folder the user picked (real path) */
+    picked: string;
+    /** the folder to use: `picked` itself or a sub-folder of it */
+    path: string;
+    /** `path` is a sub-folder, because `picked` is not empty */
+    subFolder: boolean;
+    /** `path` is a folder Penforge already made for this project */
+    existing: boolean;
+}
+
+/** Output folder of a project (reply to the `project.output.*` requests). */
+export interface ProjectOutputMessage {
+    type: "project.output";
+    rid: string;
+    projectId: string;
+    app: OutputAppState;
+    output: OutputFolderState;
+    /** reply to a preview only */
+    target?: OutputTarget;
+}

@@ -19,6 +19,7 @@ import type { McpToolsClient } from "./tools/McpToolsClient";
 import type { PluginSessionDirectory } from "./tools/PluginSessions";
 import type { WorkflowEngine } from "./workflows/WorkflowEngine";
 import type { ProjectWorkspace } from "./workspace/ProjectWorkspace";
+import type { OutputService } from "./workspace/OutputService";
 import type { WorkspaceManager } from "./workspace/WorkspaceManager";
 
 /** Services and settings shared by all sessions. */
@@ -41,6 +42,8 @@ export interface AgentSessionDeps {
     apps?: AppsService;
     /** folder browser and project links of Game UI / Existing projects (W38) */
     links?: LinkService;
+    /** output folders of web and mobile projects (W41) */
+    outputs?: OutputService;
 }
 
 /** WebSocket close code for policy violations (bad or missing authentication). */
@@ -281,7 +284,20 @@ export class AgentSession implements AgentClient {
                 return this.links().status(this, message);
             case "fonts.files":
                 return this.links().fonts(this, message);
+            case "project.output.status":
+                return this.outputs().status(this, message);
+            case "project.output.preview":
+                return this.outputs().preview(this, message);
+            case "project.output.set":
+                return this.outputs().set(this, message);
         }
+    }
+
+    private outputs(): OutputService {
+        if (!this.deps.outputs) {
+            throw new AgentError("not-implemented", "Output folders are not available in this daemon");
+        }
+        return this.deps.outputs;
     }
 
     private links(): LinkService {

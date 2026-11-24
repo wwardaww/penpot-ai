@@ -41,7 +41,7 @@ export class DesignToolFilter implements WorkflowToolFilter {
         private readonly writableDir: string | null,
         private readonly reason = "Not available in this step."
     ) {
-        const writable = writableDir ? DesignToolFilter.relativeGlob(projectRoot, writableDir) : null;
+        const writable = writableDir ? DesignToolFilter.ruleGlob(projectRoot, writableDir) : null;
         this.allowedTools = [
             ...DesignToolFilter.READ,
             ...DesignToolFilter.READ_ONLY_PENPOT.map((name) => `${DesignToolFilter.PENPOT_PREFIX}${name}`),
@@ -65,7 +65,7 @@ export class DesignToolFilter implements WorkflowToolFilter {
                 return null;
             }
             return this.writableDir
-                ? `Only files inside ${DesignToolFilter.relativeGlob(this.projectRoot, this.writableDir).replace(/\/\*\*$/, "/")} may be changed in this step.`
+                ? `Only files inside ${DesignToolFilter.folderName(this.projectRoot, this.writableDir)} may be changed in this step.`
                 : "No file may be changed in this step.";
         }
         return this.reason;
@@ -73,12 +73,33 @@ export class DesignToolFilter implements WorkflowToolFilter {
 
     private inside(file: string): boolean {
         const absolute = isAbsolute(file) ? resolve(file) : resolve(this.projectRoot, file);
-        const rel = relative(resolve(this.writableDir!), absolute);
+        const norm = (value: string) => (process.platform === "win32" ? value.toLowerCase() : value);
+        const rel = relative(norm(resolve(this.writableDir!)), norm(absolute));
         return rel.length > 0 && !rel.startsWith("..") && !isAbsolute(rel);
     }
 
-    /** `app-src/**` style rule path of a folder, relative to the working directory. */
-    private static relativeGlob(root: string, dir: string): string {
-        return `${relative(root, dir).split("\\").join("/")}/**`;
+    /**
+     * Rule path of a folder: `app-src/**` style below the working directory, else absolute
+     * (`//c/apps/shop/**`, W41 app folders).
+     */
+    private static ruleGlob(root: string, dir: string): string {
+        if (DesignToolFilter.isBelow(root, dir)) {
+            return `${relative(root, dir).split("\\").join("/")}/**`;
+        }
+        const absolute = resolve(dir)
+            .split("\\")
+            .join("/")
+            .replace(/^([A-Za-z]):/, (_match, drive: string) => `/${drive.toLowerCase()}`);
+        return `/${absolute}/**`;
+    }
+
+    /** Name of the writable folder as Claude is told it: `app-src/`, or an absolute path. */
+    private static folderName(root: string, dir: string): string {
+        return DesignToolFilter.isBelow(root, dir) ? `${relative(root, dir).split("\\").join("/")}/` : dir;
+    }
+
+    private static isBelow(root: string, dir: string): boolean {
+        const rel = relative(root, dir);
+        return rel.length > 0 && !rel.startsWith("..") && !isAbsolute(rel);
     }
 }
