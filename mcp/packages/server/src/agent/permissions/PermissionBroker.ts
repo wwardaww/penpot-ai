@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { PermissionRequestMessage, PermissionRisk } from "@penpot/mcp-common";
+import type { PermissionClosedMessage, PermissionRequestMessage, PermissionRisk } from "@penpot/mcp-common";
 
 /** Question put to the user before Claude may do something. */
 export interface PermissionPrompt {
@@ -36,7 +36,7 @@ export class PermissionBroker implements PermissionAsker {
      * @param timeoutMs - time after which an unanswered question counts as denied
      */
     constructor(
-        private readonly send: (message: PermissionRequestMessage) => void,
+        private readonly send: (message: PermissionRequestMessage | PermissionClosedMessage) => void,
         private readonly timeoutMs: number = 5 * 60_000
     ) {}
 
@@ -52,7 +52,11 @@ export class PermissionBroker implements PermissionAsker {
                 this.pending.delete(requestId);
                 resolve(answer);
             };
-            const onAbort = () => finish(PermissionBroker.DENIED);
+            const onAbort = () => {
+                finish(PermissionBroker.DENIED);
+                // the card must not stay open: an answer would reach nobody
+                this.send({ type: "permission.closed", requestId });
+            };
             const timer = setTimeout(onAbort, this.timeoutMs);
             signal.addEventListener("abort", onAbort, { once: true });
             this.pending.set(requestId, finish);

@@ -311,6 +311,14 @@
         chat))
     chat))
 
+(defn- apply-permission-closed
+  "The daemon stopped waiting for an answer (denied): the card closes. A
+  card the user answered meanwhile keeps that answer."
+  [chat {:keys [request-id]}]
+  (update-entry chat
+                #(and (= :permission (:kind %)) (= request-id (:id %)) (nil? (:answer %)))
+                assoc :answer :denied))
+
 (defn apply-message
   "Reduce a daemon message into the chat state."
   [chat msg]
@@ -325,6 +333,7 @@
                                              :title (:title msg)
                                              :description (:description msg)
                                              :risk (keyword (:risk msg))})
+    "permission.closed"  (apply-permission-closed chat msg)
     "workflow.started"   (apply-workflow-started chat msg)
     "workflow.event"     (apply-workflow-event chat msg)
     "workflow.done"      (apply-workflow-done chat msg)

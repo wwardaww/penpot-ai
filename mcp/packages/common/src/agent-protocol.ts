@@ -335,6 +335,12 @@ export interface PermissionRequestMessage {
     risk: PermissionRisk;
 }
 
+/** A permission question ended without the user's answer (timed out, run ended): denied. */
+export interface PermissionClosedMessage {
+    type: "permission.closed";
+    requestId: string;
+}
+
 export interface WorkflowStartedMessage {
     type: "workflow.started";
     rid: string;
@@ -452,6 +458,7 @@ export type DaemonMessage =
     | ChatDoneMessage
     | ChatHistoryMessage
     | PermissionRequestMessage
+    | PermissionClosedMessage
     | WorkflowStartedMessage
     | WorkflowEventMessage
     | WorkflowDoneMessage

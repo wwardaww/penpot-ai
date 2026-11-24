@@ -314,6 +314,9 @@
      [:description :string]
      [:risk [:enum "low" "medium" "high"]]]]
 
+   ["permission.closed"
+    [:map [:type :string] [:request-id :string]]]
+
    ["workflow.started"
     [:map [:type :string] [:rid :string] [:run-id :string] [:name :string]]]
 

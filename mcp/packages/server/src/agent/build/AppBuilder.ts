@@ -9,6 +9,7 @@ import { BuildLock } from "./BuildLock";
 import { type BuildStep, BuildText } from "./BuildText";
 import { type CommandExecutor, type CommandOutcome, ProcessCommandExecutor } from "./CommandExecutor";
 import { JsonReply } from "./JsonReply";
+import { NoCommandsFilter } from "./NoCommandsFilter";
 import { Routes } from "./Routes";
 import { TokenThemeNote } from "../tokens/TokenThemeNote";
 import { BuildInstructions, type BuildInstructionSet, type InstructionsInput } from "../changes/BuildInstructions";
@@ -825,6 +826,7 @@ export class AppBuilder {
             prompt: [title, "", folder, ...rest].join("\n"),
             promptName: "build-run",
             resumeSessionId: this.session,
+            toolFilter: new NoCommandsFilter(),
         });
         this.session = result.sessionId ?? this.session;
         this.turns++;

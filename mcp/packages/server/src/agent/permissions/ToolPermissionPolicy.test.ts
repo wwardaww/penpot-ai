@@ -152,13 +152,28 @@ test("asks before running a command and remembers the answer for the same progra
 });
 
 test("the broker counts an aborted question as denied", async () => {
-    const sent: unknown[] = [];
+    const sent: { type: string; requestId: string }[] = [];
     const broker = new PermissionBroker((message) => sent.push(message));
     const abort = new AbortController();
     const answer = broker.ask({ title: "t", description: "d", risk: "low" }, abort.signal);
     abort.abort();
     assert.deepEqual(await answer, { allow: false, remember: false });
-    assert.equal(sent.length, 1);
+    // the tab closes the card: nobody waits for its answer any more
+    assert.deepEqual(
+        sent.map((message) => message.type),
+        ["permission.request", "permission.closed"]
+    );
+    assert.equal(sent[1].requestId, sent[0].requestId);
+});
+
+test("a question nobody answers is denied and closed after the time limit", async () => {
+    const sent: { type: string }[] = [];
+    const broker = new PermissionBroker((message) => sent.push(message), 20);
+    assert.deepEqual(await broker.ask({ title: "t", description: "d", risk: "low" }, signal), {
+        allow: false,
+        remember: false,
+    });
+    assert.equal(sent.at(-1)!.type, "permission.closed");
 });
 
 test("the broker matches a response to its request", async () => {

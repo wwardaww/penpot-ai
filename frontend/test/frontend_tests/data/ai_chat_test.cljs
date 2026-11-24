@@ -78,6 +78,16 @@
   (let [chat (chat/apply-message base {:type "error" :code "busy" :message "Busy"})]
     (t/is (= [:error "busy"] ((juxt :kind :code) (first (:entries chat)))))))
 
+(t/deftest permission-cards-close-when-the-daemon-stops-waiting
+  (let [request {:type "permission.request" :request-id "p1" :title "t" :description "d" :risk "low"}
+        closed  {:type "permission.closed" :request-id "p1"}
+        answer  #(-> % :entries peek :answer)
+        chat    (chat/apply-message chat/empty-chat request)]
+    (t/is (= :denied (answer (chat/apply-message chat closed))))
+    (t/is (= :allowed (answer (chat/apply-message (chat/answer-entry chat "p1" :allowed) closed)))
+          "an answer the user gave stays")
+    (t/is (nil? (answer (chat/apply-message chat (assoc closed :request-id "p2")))))))
+
 (t/deftest permission-requests-wait-for-an-answer
   (let [chat  (-> base
                   (chat/apply-message {:type "permission.request" :request-id "p1" :title "Write files"
