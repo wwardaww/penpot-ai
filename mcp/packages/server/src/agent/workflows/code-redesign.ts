@@ -5,10 +5,14 @@ import { CodeRedesign, type CodeRedesignParams, RedesignError } from "../linked/
  * Re-Design of an Existing project's code (W38): applies the new look from Penpot to the linked
  * app on its own git branch `penforge/redesign-<yyyymmdd-hhmm>`, look only.
  *
- * Params `{action?: "plan"|"run"|"revert", instructions?, files?}`. `plan` (default) emits `result
- * {action:"plan", git, dirty, currentBranch, branch, continuing, screens}`; `run` may ask (`stash` /
+ * Params `{action?: "plan"|"run"|"revert", instructions?, decisions?, files?}`. `plan` (default) compares
+ * the design with the app (`progress {step: compare}`, read-only) and emits `result {action:"plan",
+ * git, dirty, currentBranch, branch, continuing, screens, checklist}` (`checklist` = `{state:"ready",
+ * items:[{key, name, kind: component|feature, screens, what, why, checked, decided}]}` or `{state:
+ * "failed", message}`); `run` takes the user's choices (`decisions: [{key, build}]`), may ask (`stash` /
  * `commit` / `cancel`, `init` / `cancel`), emits `progress {step: git|checkpoint|edit|commit|guard}`
- * and `result` (`CodeRedesignRunResult`: branch, files changed, screens, unmatched, `outsideLook`);
+ * and `result` (`CodeRedesignRunResult`: branch, files changed, screens, unmatched, `outsideLook`,
+ * `items: [{key, name, kind, outcome: added|left-out|not-done, note?}]`);
  * `revert {files}` takes files of the `outsideLook` list back (`result {action:"revert", reverted,
  * commit}`). Refusals emit `result {action, error: code, message}` and fail the run.
  */
