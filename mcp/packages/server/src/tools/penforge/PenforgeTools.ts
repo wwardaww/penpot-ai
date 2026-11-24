@@ -8,6 +8,7 @@ import { OpenPublishTool } from "../../agent/publish/OpenPublishTool";
 import { ListBoardsTool } from "./ListBoardsTool";
 import { ListCanvasCommentsTool } from "./ListCanvasCommentsTool";
 import { PenforgeOverviewTool } from "./PenforgeOverviewTool";
+import { PenforgeSkillTool } from "./PenforgeSkillTool";
 import { ResolveCanvasCommentTool } from "./ResolveCanvasCommentTool";
 import { UpdateDesignNodeTool } from "./UpdateDesignNodeTool";
 import { UpdatePrototypeTool } from "./UpdatePrototypeTool";
@@ -66,6 +67,8 @@ export class PenforgeTools {
             new GetAnimationsTool(mcpServer),
             new UpdateAnimationsTool(mcpServer),
             new GetAnimationSpecTool(mcpServer),
+            // W40: full text of the bundled design skills
+            new PenforgeSkillTool(mcpServer),
         ];
     }
 }

@@ -1,0 +1,106 @@
+{
+  "name": "taste-skill",
+  "url": "https://github.com/Leonxlnx/taste-skill",
+  "commit": "6c0b5c78f5d31776e2210305abaa210cdc0030bf",
+  "date": "2026-11-22T21:10:05+01:00",
+  "license": "MIT",
+  "modified": "Markdown only, shortened by build-bundle.mjs: front matter, code blocks and whatever needs upstream's scripts, hooks, browser checker or asset kit is left out. sha256 is of the file here (LF line ends), upstreamSha256 of the upstream file. adapter.md is Penforge's own.",
+  "files": [
+    {
+      "file": "LICENSE",
+      "upstream": "LICENSE",
+      "upstreamSha256": "4575a543ab88dad12ccea7d97e563d0bce5b448b06072e65d3264497dad326df",
+      "sha256": "4575a543ab88dad12ccea7d97e563d0bce5b448b06072e65d3264497dad326df"
+    },
+    {
+      "file": "reference/overview.md",
+      "upstream": "skills/taste-skill/SKILL.md",
+      "upstreamSha256": "0c7a5852a5217be79cab422c6d58329b776f0c25bd6da8a7a01707ce75be6206",
+      "sha256": "84a5cad73c5e8cb215bbf24515b89c632cdf633f41f217c5108940305f0dacc9"
+    },
+    {
+      "file": "reference/layout.md",
+      "upstream": "skills/taste-skill/references/layout-v4.md",
+      "upstreamSha256": "6316217db46993977700cf4203cc29f96cad0d7bf3a97e877241b1be0901fd19",
+      "sha256": "159f44932f9dbc3d8823df58f6750a801b55c3ac5f5eead4a965326c73fb3b41"
+    },
+    {
+      "file": "reference/sections.md",
+      "upstream": "skills/taste-skill/references/sections.md",
+      "upstreamSha256": "999cb82dba04d205052725e93a240fcb59be1c1d7ab31129a191eb6f4ee31e89",
+      "sha256": "9ed89f6fab0be658b68670651854c8e4f40ea38399c4221bf096002dcdfb0013"
+    },
+    {
+      "file": "reference/system.md",
+      "upstream": "skills/taste-skill/references/system.md",
+      "upstreamSha256": "f6bfbdb36b49c4584b4fd10ff24e9e97098bd93d09da3e08e8424500ee641d01",
+      "sha256": "51f33e2b9c5a06c5d23ea5631a89956943baff58f2aa550c25ded0bcf79078e1"
+    },
+    {
+      "file": "reference/cards.md",
+      "upstream": "skills/taste-skill/references/cards.md",
+      "upstreamSha256": "f70d8c41c55ff7e777b5ce51cbe61fee05c024b268c744beb53528ec8a4869a1",
+      "sha256": "0e26e67f7b274c1aac0c96c3436062d716c59d335b33c39817c0ac62187cec6a"
+    },
+    {
+      "file": "reference/photos.md",
+      "upstream": "skills/taste-skill/references/photos.md",
+      "upstreamSha256": "b115cafc205ee20f19e6e90d061d24d31460966f1bd4315fb3434ca2d560c33e",
+      "sha256": "a5912e246c7a32d578aaf543257cc8b45eeb4a83d63117c974f02175fef9eb20"
+    },
+    {
+      "file": "reference/grounds.md",
+      "upstream": "skills/taste-skill/references/backgrounds.md",
+      "upstreamSha256": "b8d593ffaadcc390503d86fc094ed3bf4e070c1ee7927c1e1c1251443409c9c1",
+      "sha256": "044e7632b223b157c612c38e1b43c71d7d45dfc1fd4e6723c6930369106210af"
+    },
+    {
+      "file": "reference/icons.md",
+      "upstream": "skills/taste-skill/references/icons.md",
+      "upstreamSha256": "d385f027d63d488a27ae63bef8bcff2cb4358e74cb0ad7454e4e9da6a49f8381",
+      "sha256": "f8f3065f978e4f16bb0421a3d5ab80eed0c88fdf9ca2687c33f654cde48abf08"
+    },
+    {
+      "file": "reference/diagrams.md",
+      "upstream": "skills/taste-skill/references/diagrams.md",
+      "upstreamSha256": "2aafd9ad74d2fc620174c23aa48f9ce6201ce33c1b441630973af9509a9b723e",
+      "sha256": "eb97f67d85f9d01a55c733ad2ee35d9b24a5d41c1f2ed591ea213701ba9dc843"
+    },
+    {
+      "file": "reference/motion.md",
+      "upstream": "skills/taste-skill/references/motion.md",
+      "upstreamSha256": "d7bc6fe01cab8a1c1e921309291828c68f875a25907317279842cf306391c373",
+      "sha256": "a6b441274959dc746ec1fc4c306e96a5a32f0a0928cc4875b080a461d38a5f86"
+    },
+    {
+      "file": "reference/copy.md",
+      "upstream": "skills/taste-skill/references/copy.md",
+      "upstreamSha256": "607520bc4213e06e6635f4fa44915d3fb5482b5b2e3779faa0a5c9d2abcc9e69",
+      "sha256": "fd867aa4057562bc55d7d61ba3561ef3045e41b44b6c22144370e4d820b7e2e5"
+    },
+    {
+      "file": "reference/copy-voice.md",
+      "upstream": "skills/taste-skill/references/copy-voice.md",
+      "upstreamSha256": "3a287b8f10384229aa52e6d75480fddc377aafd05f7d0ee9d1a180d2ebf44e8a",
+      "sha256": "0536fce50b4996e78489a2afb243344b1e244a7891bc19178fa849726592b84d"
+    },
+    {
+      "file": "reference/copy-registers.md",
+      "upstream": "skills/taste-skill/references/copy-registers.md",
+      "upstreamSha256": "8e2e6d5b9ef09e38bfdd2f1c9a32796bd91c1f3f99c6c51abbbe89d99119d6fd",
+      "sha256": "556c8a0935441a6342878e89e7396188a9a60ab5cb81d507916b98e8375d9049"
+    },
+    {
+      "file": "reference/copy-moves.md",
+      "upstream": "skills/taste-skill/references/copy-moves.md",
+      "upstreamSha256": "6e5c7eb52ab5cbe61c07eb936c3d17d4432f02dbae2da1f1bbab5e9aef7b2400",
+      "sha256": "0b8658b1526d2c43dc2ba13e79f29ef5a00445f4fb9830d6cca8077b8eab76ab"
+    },
+    {
+      "file": "reference/copy-tells.md",
+      "upstream": "skills/taste-skill/references/copy-tells.md",
+      "upstreamSha256": "e113d4f788f64e44e92cefa0823be4cf0662f2806ed87f91aa52d9cf8877d6ed",
+      "sha256": "588c9f0d9cec5140f7af43f5afc28f5e49385e22c2e300603da9f35ad90a1744"
+    }
+  ]
+}

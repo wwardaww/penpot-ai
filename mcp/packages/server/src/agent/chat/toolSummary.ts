@@ -22,6 +22,7 @@ export class ToolSummary {
         [/^mcp__penpot__(get_animations|get_animation_spec)$/, "Reading the animations"],
         [/^mcp__penpot__(generate_code_hints)$/, "Studying the design's structure"],
         [/^mcp__penpot__(penforge_design_system)$/, "Checking the design system"],
+        [/^mcp__penpot__(penforge_skill)$/, "Checking the design rules"],
         [/^mcp__penpot__/, "Using Penpot"],
         [/^(Read|Glob|Grep|LS|NotebookRead)$/, "Reading project files"],
         [/^(Write|Edit|MultiEdit|NotebookEdit)$/, "Updating project files"],
