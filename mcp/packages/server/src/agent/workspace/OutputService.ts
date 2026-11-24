@@ -70,7 +70,9 @@ export class OutputService {
                 appRoot = target.path;
             }
             const output: ProjectOutput = {
-                outputRoot: target.path,
+                // Build and Instruct each ask for their own folder: the specification must not land in
+                // the app's repository because the app was built first
+                outputRoot: message.purpose === "instruct" ? target.path : (workspace.outputFolder?.outputRoot ?? null),
                 appRoot,
                 outputAt: new Date().toISOString(),
             };
@@ -135,7 +137,7 @@ export class OutputService {
                       ? { state: "internal", path: workspace.internalAppDir, built }
                       : { state: "none", path: null, built: false },
             output:
-                output === null
+                output === null || output.outputRoot === null
                     ? { state: "none", path: null }
                     : {
                           state: this.paths.isRealFolder(output.outputRoot) ? "ready" : "missing",

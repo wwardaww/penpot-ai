@@ -318,6 +318,26 @@ describe("refused folders", () => {
 });
 
 describe("the app folder of a project", () => {
+    test("and the folder of Instruct are picked and kept apart", async () => {
+        const app = join(user, "shop");
+        const spec = join(user, "spec");
+        mkdirSync(app);
+        mkdirSync(spec);
+        await send("set", "project-a", app);
+        await send("set", "project-a", spec, "instruct");
+        restart();
+
+        const status = await send("status", "project-a");
+        assert.equal(status.app.path, app);
+        assert.deepEqual(status.output, { state: "ready", path: spec });
+        assert.equal((await workspaces.get("project-a")).appSrcDir, app);
+
+        const other = join(user, "shop-two");
+        mkdirSync(other);
+        await send("set", "project-a", other);
+        assert.deepEqual((await send("status", "project-a")).output, { state: "ready", path: spec });
+    });
+
     test("is remembered over a restart, with only metadata in the Penforge home", async () => {
         const folder = join(user, "shop");
         mkdirSync(folder);
@@ -327,7 +347,7 @@ describe("the app folder of a project", () => {
 
         const status = await send("status", "project-a");
         assert.deepEqual(status.app, { state: "ready", path: folder, built: true });
-        assert.deepEqual(status.output, { state: "ready", path: folder });
+        assert.deepEqual(status.output, { state: "none", path: null }, "Instruct still asks for its own folder");
         const workspace = await workspaces.get("project-a");
         assert.equal(workspace.appSrcDir, folder);
         assert.equal(workspace.resolve(join(folder, "src", "new.ts")), join(folder, "src", "new.ts"));

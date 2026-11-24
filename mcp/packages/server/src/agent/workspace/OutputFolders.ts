@@ -163,7 +163,10 @@ export class OutputFolders {
         }
         const free = (folder: string) => !claims.some((claim) => this.paths.same(claim.path, folder));
         if (OutputFolders.isEmpty(picked) && free(picked)) {
-            return { path: picked, existing: current !== null && this.paths.same(current.outputRoot, picked) };
+            return {
+                path: picked,
+                existing: current?.outputRoot ? this.paths.same(current.outputRoot, picked) : false,
+            };
         }
         // the sub-folder an earlier pick of the same folder made
         for (const earlier of [current?.appRoot, current?.outputRoot]) {
@@ -285,7 +288,7 @@ export class OutputFolders {
         const link = ProjectLinkRecord.read(info);
         return [
             ...(output?.appRoot ? [{ projectId, path: output.appRoot, kind: "app" as const }] : []),
-            ...(output ? [{ projectId, path: output.outputRoot, kind: "output" as const }] : []),
+            ...(output?.outputRoot ? [{ projectId, path: output.outputRoot, kind: "output" as const }] : []),
             ...(link ? [{ projectId, path: link.root, kind: "linked" as const }] : []),
         ];
     }

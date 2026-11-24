@@ -151,10 +151,13 @@
   (t/testing "Instruct"
     (t/is (output/needs-folder? :instruct (status "none" "none")))
     (t/is (output/needs-folder? :instruct (status "internal" "none")))
+    (t/is (output/needs-folder? :instruct (status "ready" "none"))
+          "Instruct does not take the folder Build picked")
     (t/is (output/needs-folder? :instruct (status "ready" "missing")))
     (t/is (not (output/needs-folder? :instruct (status "none" "ready")))))
   (t/testing "the dialog starts at the known folder"
     (t/is (= "F:/apps/shop" (output/get-start-path (status "none" "ready"))))
+    (t/is (some? (output/get-start-path (status "ready" "none"))) "else at the app folder")
     (t/is (nil? (output/get-start-path (status "missing" "missing")))))
   (t/testing "Change folder moves the app once there is one"
     (t/is (= :instruct (output/get-purpose nil)))

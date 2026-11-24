@@ -191,7 +191,7 @@
          (when (and loaded truncated)
            [:p {:class (stl/css :muted)} (tr "penforge.folder-browser.truncated")])]])
 
-     (when (and loaded (string? path))
+     (when (and loaded (string? path) (seq badges))
        [:div {:class (stl/css :facts)}
         [:> text* {:as "span" :typography t/body-small :class (stl/css :picked)}
          (tr "penforge.folder-browser.picked")]

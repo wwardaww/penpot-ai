@@ -5,8 +5,8 @@ import path from "path";
  * (`outputRoot`, `appRoot`, `outputAt`). Never sent to the Penpot backend.
  */
 export interface ProjectOutput {
-    /** folder Build and Instruct write to (real path) */
-    outputRoot: string;
+    /** folder Instruct writes to (real path); null until the user picked one for Instruct */
+    outputRoot: string | null;
     /** the app folder, once Build prepared one; null while the app stays in the project folder */
     appRoot: string | null;
     /** ISO time of the last pick */
@@ -15,7 +15,7 @@ export interface ProjectOutput {
 
 /** Fields of `project.json` that hold a {@link ProjectOutput}. */
 export interface ProjectOutputFields {
-    outputRoot?: string;
+    outputRoot?: string | null;
     appRoot?: string | null;
     outputAt?: string;
 }
@@ -29,12 +29,14 @@ export class ProjectOutputRecord {
      * @returns the output folder, or null when the fields hold none or are malformed
      */
     public static read(fields: ProjectOutputFields | null | undefined): ProjectOutput | null {
-        if (!fields || !ProjectOutputRecord.isFolder(fields.outputRoot)) {
+        const outputRoot = ProjectOutputRecord.isFolder(fields?.outputRoot) ? fields.outputRoot : null;
+        const appRoot = ProjectOutputRecord.isFolder(fields?.appRoot) ? fields.appRoot : null;
+        if (!fields || (outputRoot === null && appRoot === null)) {
             return null;
         }
         return {
-            outputRoot: fields.outputRoot,
-            appRoot: ProjectOutputRecord.isFolder(fields.appRoot) ? fields.appRoot : null,
+            outputRoot,
+            appRoot,
             outputAt: typeof fields.outputAt === "string" ? fields.outputAt : "",
         };
     }

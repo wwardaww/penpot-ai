@@ -60,11 +60,13 @@
     :instruct (get-in output [:output :path])))
 
 (defn get-start-path
-  "Folder the dialog shows first: the picked one while it exists, nil
-  for the drives."
+  "Folder the dialog shows first: the one picked for Instruct while it
+  exists, else the app folder, nil for the drives."
   [output]
-  (when (= "ready" (get-in output [:output :state]))
-    (get-in output [:output :path])))
+  (some (fn [kind]
+          (when (= "ready" (get-in output [kind :state]))
+            (get-in output [kind :path])))
+        [:output :app]))
 
 (defn get-purpose
   "What \"Change folder\" of the project menu changes: where the app
