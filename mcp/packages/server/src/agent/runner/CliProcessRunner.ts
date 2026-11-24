@@ -121,6 +121,9 @@ export class CliProcessRunner implements ClaudeRunner {
             (opts.allowedTools ?? CliProcessRunner.ALLOWED_TOOLS).join(","),
             "--append-system-prompt",
             opts.systemPromptAppend,
+            // the append changes from turn to turn; a recorded prompt would keep the one of the first turn
+            "--system-prompt-snapshot",
+            "off",
         ];
         for (const directory of opts.additionalDirectories ?? []) {
             args.push("--add-dir", directory);

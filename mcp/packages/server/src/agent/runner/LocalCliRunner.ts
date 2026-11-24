@@ -115,7 +115,14 @@ export class LocalCliRunner implements ClaudeRunner {
                     ? { type: "http", url: this.settings.mcpUrl, headers: opts.mcpHeaders }
                     : { type: "http", url: this.settings.mcpUrl },
             },
-            systemPrompt: { type: "preset", preset: "claude_code", append: opts.systemPromptAppend },
+            // the append changes from turn to turn (open page, MCP session, selection, rules); a recorded
+            // prompt would keep the one of the first turn
+            systemPrompt: {
+                type: "preset",
+                preset: "claude_code",
+                append: opts.systemPromptAppend,
+                snapshot: false,
+            },
             canUseTool: async (toolName, toolInput, { signal }) => {
                 const decision = await permissions.decide({ toolName, input: toolInput, signal });
                 return decision.allow
