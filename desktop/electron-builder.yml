@@ -62,5 +62,10 @@ dmg:
   title: Penforge ${version}
 
 linux:
-  target: [AppImage]
+  # deb: its install script adds the AppArmor profile Chromium's sandbox needs
+  # on Ubuntu 23.10+; the AppImage and the unpacked app stop there with "The
+  # SUID sandbox helper binary was found, but is not configured correctly".
+  target: [deb, AppImage]
   category: Graphics
+  maintainer: Penforge contributors
+  artifactName: Penforge-${version}-${arch}.${ext}

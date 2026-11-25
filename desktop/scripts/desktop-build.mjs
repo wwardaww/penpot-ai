@@ -1,13 +1,15 @@
-// One command for the whole Windows desktop build: backend + frontend in the
-// devenv container, the Node parts and the native runtime on Windows, then
-// electron-builder. Prints (and writes) a timing table of every step.
+// One command for the whole Windows or Linux desktop build: backend + frontend
+// in the devenv container, the Node parts and the native runtime on the host,
+// then electron-builder. Prints (and writes) a timing table of every step.
 //
 //   node scripts/desktop-build.mjs [--fast | --release | --baseline] [options]
 //
 // Profiles:
-//   --fast      (default) unpacked app only (release/win-unpacked/Penforge.exe),
-//               no installer; reuses every cache; skips unchanged parts.
-//   --release   NSIS installer with `compression: maximum`; same caches and skips.
+//   --fast      (default) unpacked app only (release/win-unpacked/Penforge.exe,
+//               release/linux-unpacked/penforge-desktop), no installer; reuses
+//               every cache; skips unchanged parts.
+//   --release   NSIS installer (Linux: deb and AppImage) with `compression: maximum`; same
+//               caches and skips.
 //   --baseline  the W23 procedure, for measuring: sequential, no reuse, cold
 //               project caches, upstream frontend steps (example plugins,
 //               templates), downloads deleted afterwards, maximum compression.
@@ -43,6 +45,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO = resolve(ROOT, "..");
 const WIN = process.platform === "win32";
+const LINUX = process.platform === "linux";
 const argv = process.argv.slice(2);
 const flag = (name) => argv.includes(name);
 const option = (name, fallback) => {
@@ -61,6 +64,8 @@ const INSTALLER = PROFILE !== "fast" || flag("--installer");
 const COMPRESSION = option("--compression", PROFILE === "fast" ? "store" : "maximum");
 const XMX = process.env.PENFORGE_SHADOW_XMX ?? "1536m";
 const WORK = "/home/penpot/desktop-build";
+const UNPACKED = LINUX ? "linux-unpacked" : "win-unpacked";
+const APP_EXE = LINUX ? "penforge-desktop" : "Penforge.exe";
 
 function git(...args) {
     const r = spawnSync("git", ["-C", REPO, ...args], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
@@ -389,15 +394,15 @@ function shellKey() {
     for (const p of ["dist", "renderer", "build-resources", "package.json", "electron-builder.yml", join("node_modules", "electron", "package.json")]) {
         add(join(ROOT, p));
     }
-    hash.update(INSTALLER ? "nsis" : "dir");
+    hash.update(INSTALLER ? (LINUX ? "deb+appimage" : "nsis") : "dir");
     return hash.digest("hex").slice(0, 16);
 }
 
 async function packageApp() {
     await step("stage:finish", "node", ["scripts/stage.mjs", "--parts", "none"]);
     const key = shellKey();
-    const unpacked = join(ROOT, "release", "win-unpacked");
-    if (!INSTALLER && !REBUILD && readStamps().shell === key && existsSync(join(unpacked, "Penforge.exe"))) {
+    const unpacked = join(ROOT, "release", UNPACKED);
+    if (WIN && !INSTALLER && !REBUILD && readStamps().shell === key && existsSync(join(unpacked, APP_EXE))) {
         // Same shell and asar: only the runtime changed. Mirror it into the unpacked app
         // (robocopy copies changed files only) instead of packaging everything again.
         const robocopy = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "robocopy.exe");
@@ -414,10 +419,10 @@ async function packageApp() {
         return;
     }
     const builder = join(ROOT, "node_modules", ".bin", WIN ? "electron-builder.cmd" : "electron-builder");
-    const args = ["--win", "--config", "electron-builder.yml", "--publish", "never", `-c.compression=${COMPRESSION}`];
+    const args = [LINUX ? "--linux" : "--win", "--config", "electron-builder.yml", "--publish", "never", `-c.compression=${COMPRESSION}`];
     if (!INSTALLER) args.push("--dir");
     rmSync(join(ROOT, "release"), { recursive: true, force: true });
-    await step(INSTALLER ? `electron-builder:nsis(${COMPRESSION})` : "electron-builder:dir", builder, args);
+    await step(INSTALLER ? `electron-builder:${LINUX ? "deb+appimage" : "nsis"}(${COMPRESSION})` : "electron-builder:dir", builder, args);
     writeStamp("shell", key);
 }
 
@@ -477,8 +482,8 @@ function report(totalS) {
 
 // ---------------------------------------------------------------- main
 
-if (!WIN) {
-    throw new Error("this script builds the Windows app; see .github/workflows/penforge-desktop.yml for macOS");
+if (!WIN && !LINUX) {
+    throw new Error("this script builds the Windows and Linux apps; see .github/workflows/penforge-desktop.yml for macOS");
 }
 if (COLD || flag("--clean")) {
     spawnSync("docker", docker("rm", "-rf", WORK));
@@ -521,8 +526,8 @@ if (failure) {
     process.exit(1);
 }
 const out = INSTALLER
-    ? readdirSync(join(ROOT, "release")).filter((f) => f.endsWith(".exe")).map((f) => join(ROOT, "release", f))
-    : [join(ROOT, "release", "win-unpacked", "Penforge.exe")];
+    ? readdirSync(join(ROOT, "release")).filter((f) => (LINUX ? /\.(deb|AppImage)$/ : /\.exe$/).test(f)).map((f) => join(ROOT, "release", f))
+    : [join(ROOT, "release", UNPACKED, APP_EXE)];
 for (const f of out) {
     log(`output ${f} (${Math.round(statSync(f).size / 1048576)} MB)`);
 }

@@ -19,6 +19,7 @@ import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { withPnpmShim } from "../../mcp/scripts/pnpm-shim.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO = join(ROOT, "..");
@@ -31,9 +32,11 @@ function arg(name, fallback) {
     return i >= 0 ? resolve(process.argv[i + 1]) : fallback;
 }
 
+const ENV = WIN ? process.env : withPnpmShim();
+
 function run(command, args, cwd) {
     console.log(`> ${command} ${args.join(" ")}  (${cwd})`);
-    const result = spawnSync(command, args, { cwd, stdio: "inherit", shell: WIN });
+    const result = spawnSync(command, args, { cwd, env: ENV, stdio: "inherit", shell: WIN });
     if (result.status !== 0) {
         throw new Error(`${command} ${args.join(" ")} failed in ${cwd}`);
     }
@@ -190,7 +193,7 @@ function collectLicenses() {
     ];
     for (const [name, from] of sources) {
         if (existsSync(from)) {
-            cpSync(from, join(out, name), { recursive: true });
+            cpSync(from, join(out, name), { recursive: true, verbatimSymlinks: true });
         }
     }
     const libvips = firstExisting(

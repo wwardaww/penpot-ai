@@ -5,6 +5,7 @@
   "private": true,
   "description": "Penforge desktop app: Penpot + the Penforge AI daemon without Docker",
   "license": "MPL-2.0",
+  "homepage": "https://github.com/wwardaww/penpot-ai",
   "main": "dist/main.js",
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -17,7 +18,9 @@
     "dist:mac": "pnpm run build && electron-builder --mac --config electron-builder.yml",
     "dist:dir": "pnpm run build && electron-builder --dir --config electron-builder.yml",
     "build:win:fast": "node scripts/desktop-build.mjs --fast",
-    "build:win:release": "node scripts/desktop-build.mjs --release"
+    "build:win:release": "node scripts/desktop-build.mjs --release",
+    "build:linux:fast": "node scripts/desktop-build.mjs --fast",
+    "build:linux:release": "node scripts/desktop-build.mjs --release"
   },
   "packageManager": "pnpm@12.21.0+sha512.66fd8278ee28935ce951792d34367ff3af5c432a2756445823029533835b8da529bbe0be5130afd56ed0713fb8789e47bad82d93bd5ae2fe54b15562d6276ef0",
   "devDependencies": {

@@ -17,8 +17,8 @@ if [[ -d "$APP_PATH" && "$APP_PATH" == *.app ]]; then
     EXE="$APP_PATH/Contents/MacOS/Penforge"
     APP_DIR="$(cd "$APP_PATH" && pwd)"
 else
-    EXE="$APP_PATH"
     APP_DIR="$(cd "$(dirname "$APP_PATH")" && pwd)"
+    EXE="$APP_DIR/$(basename "$APP_PATH")"
 fi
 [[ -x "$EXE" ]] || { echo "app not found: $EXE" >&2; exit 1; }
 
@@ -26,8 +26,9 @@ DATA_DIR="$(mktemp -d "${TMPDIR:-/tmp}/penforge-smoke-XXXXXX")"
 OUT="$DATA_DIR/smoke-stdout.txt"
 
 app_pids() {
-    # processes whose command lives inside the app bundle
-    ps -axo pid=,command= | awk -v dir="$APP_DIR" 'index($0, dir) > 0 { print $1 }'
+    # processes whose command lives inside the app bundle (not this script or
+    # awk, which carry the path as an argument)
+    ps -axo pid=,command= | awk -v dir="$APP_DIR/" '{ pid = $1; sub(/^ *[0-9]+ /, "") } index($0, dir) == 1 { print pid }'
 }
 
 START=$(date +%s)

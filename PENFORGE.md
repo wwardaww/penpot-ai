@@ -36,6 +36,17 @@ Windows notes:
 - The repo forces LF line endings (`.gitattributes`). If you cloned before that,
   run `git config core.autocrlf false` and check out again.
 
+Linux notes (tested on Ubuntu 24.04):
+
+- Your user must reach the Docker socket: `sudo usermod -aG docker $USER`, then
+  log out and in (or prefix commands with `sg docker -c "..."` until you do).
+  Members of that group have root rights on the machine.
+- The container mounts the checkout itself; the mirror is for Windows only.
+- `run-devenv` creates the mount points in the checkout, owned by you, and a
+  `frontend/resources/public/js/config.js` with `enable-ai` when there is none.
+- If an older start left folders owned by root (`Permission denied` while the
+  frontend builds): `sudo chown -R $USER frontend/resources/public`.
+
 ## 2. Start the devenv
 
 ```bash
@@ -104,7 +115,22 @@ paste it into the AI tab's pairing box.
 Ports on the host: 4401 (MCP), 4402 (plugin bridge), 4410 (agent WebSocket). The
 devenv container's own MCP server is published on 14401 so it does not clash.
 
-## 5. Known issues
+## 5. Desktop app on Linux
+
+With the devenv running (it compiles the backend and the frontend):
+
+```bash
+cd desktop
+corepack pnpm run build:linux:fast      # release/linux-unpacked/penforge-desktop
+corepack pnpm run build:linux:release   # release/*.deb and *.AppImage
+scripts/smoke.sh release/linux-unpacked/penforge-desktop
+```
+
+Install the deb on Ubuntu 23.10 and later: it adds the AppArmor profile
+Chromium's sandbox needs. The unpacked app and the AppImage stop at start there.
+The build needs `unzip` and `xz`.
+
+## 6. Known issues
 
 - **Blank page with `unexpected Temporal __proto__`**: a browser extension
   (crypto wallets and similar) injects a non-standard `Temporal`. The plugin

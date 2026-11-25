@@ -108,6 +108,10 @@ function extract(archive, dest) {
     rmSync(dest, { recursive: true, force: true });
     mkdirSync(dest, { recursive: true });
     // bsdtar (Windows 10+, macOS) reads zip, tar.gz and txz; GNU tar reads tar.gz and txz.
+    if (process.platform === "linux" && /\.(jar|zip)$/.test(archive)) {
+        run("unzip", ["-q", archive, "-d", dest]);
+        return;
+    }
     // On Windows call the system bsdtar: a GNU tar from Git Bash reads `E:` as a remote host.
     const tar = process.platform === "win32" ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "tar";
     run(tar, ["-xf", archive, "-C", dest]);
@@ -199,7 +203,8 @@ for (const part of parts) {
             }
         }
         rmSync(dest, { recursive: true, force: true });
-        cpSync(cached, dest, { recursive: true, filter: (src) => !src.endsWith(".complete") });
+        // verbatim: the libraries' relative links must not become links into the cache
+        cpSync(cached, dest, { recursive: true, verbatimSymlinks: true, filter: (src) => !src.endsWith(".complete") });
         console.log(`${part.name} from cache ${cached}`);
     }
     stamp[part.name] = part.key;
