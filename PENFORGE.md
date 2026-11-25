@@ -119,6 +119,10 @@ keeps in `<PENFORGE_HOME>/settings.json`:
   bash or zsh, or an absolute path, without arguments. An alias or script need
   not pass on arguments: while it runs, `claude` on its `PATH` is a stand-in
   that adds the daemon's arguments to its own. It must call plain `claude`.
+  With another command than `claude` (or a path to a program of that name), the
+  turns that draw also get a guide to the Penpot API in their system prompt
+  (`mcp/packages/server/src/agent/prompts/model-guide.md`); the daemon's log
+  says so.
 - **Permission mode**: `manual` asks you; `auto` approves what manual would ask
   about. Auto still refuses to publish, push or deploy and to change files
   outside the project; questions such as "Publish?" still wait for you.

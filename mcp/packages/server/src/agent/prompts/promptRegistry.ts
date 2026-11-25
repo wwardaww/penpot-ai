@@ -94,6 +94,11 @@ export class PromptRegistry {
         return rendered.map((part) => part.trim()).join("\n\n") + "\n";
     }
 
+    /** Gets the drawing guide for models other than Claude (see `ModelGuide`). */
+    public modelGuide(): string {
+        return this.required(join(this.promptsDir, "model-guide.md"));
+    }
+
     /**
      * Gets the raw prompt of a workflow.
      *

@@ -1,4 +1,4 @@
-import { posix } from "path";
+import { posix, win32 } from "path";
 
 /**
  * Checker of the Claude command a user may set.
@@ -34,6 +34,26 @@ export class ClaudeCommandName {
             return command;
         }
         return ClaudeCommandName.isPath(command, platform) ? command : null;
+    }
+
+    /**
+     * Whether a command is Claude itself, and not a command of the user that may start another
+     * model: `claude`, or an absolute path to a program of that name (`claude.exe` and `claude.cmd`
+     * count on Windows).
+     *
+     * @param command - the command, as {@link parse} gives it
+     * @param platform - the platform whose path rules apply
+     */
+    public static isClaude(command: string, platform: NodeJS.Platform = process.platform): boolean {
+        if (command === ClaudeCommandName.DEFAULT) {
+            return true;
+        }
+        if (!ClaudeCommandName.isPath(command, platform)) {
+            return false;
+        }
+        return platform === "win32"
+            ? /^claude(?:\.exe|\.cmd)?$/i.test(win32.basename(command))
+            : posix.basename(command) === ClaudeCommandName.DEFAULT;
     }
 
     /**

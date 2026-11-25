@@ -18,6 +18,7 @@ import { SecretStore } from "./publish/SecretStore";
 import { ChromeScreenshotterFactory } from "./qa/ChromeScreenshotter";
 import { DevServerPreviewAccess } from "./qa/PreviewAccess";
 import { VisualQaHost, type VisualQaServices } from "./qa/QaRun";
+import { ModelGuide } from "./prompts/ModelGuide";
 import { PromptRegistry } from "./prompts/promptRegistry";
 import type { ClaudeRunner } from "./runner/ClaudeRunner";
 import { createRunner } from "./runner/createRunner";
@@ -94,7 +95,13 @@ export class PenforgeDaemon {
         this.runner = parts.runner ?? createRunner(config, this.hosting?.turns(), claude);
         this.registry = parts.registry ?? WorkflowRegistry.withShippedWorkflows();
         this.tools = parts.tools === undefined ? new McpToolsClient(config.mcpUrl) : parts.tools;
-        const turns = new TurnRunner(this.runner, parts.prompts ?? PromptRegistry.locate(), this.hosting === null);
+        const prompts = parts.prompts ?? PromptRegistry.locate();
+        // the `api-key` runner does not use the Claude command
+        const guide =
+            claude && config.runner !== "api-key"
+                ? new ModelGuide(prompts.modelGuide(), () => !claude.isClaude)
+                : undefined;
+        const turns = new TurnRunner(this.runner, prompts, this.hosting === null, guide);
         this.chat = new ChatService(turns);
         this.workflows = new WorkflowEngine(this.registry, turns);
         const devServers = parts.devServers ?? new DevServerManager();

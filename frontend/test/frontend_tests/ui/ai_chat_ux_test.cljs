@@ -304,52 +304,12 @@
 
 ;; --- Canvas activity
 
-(t/deftest commits-name-the-shapes-they-touch
-  (let [a (uuid/next) b (uuid/next) c (uuid/next) other (uuid/next)]
-    (t/is (= #{a b c}
-             (overlay/changed-ids [{:type :add-obj :id a :page-id page-id}
-                                   {:type :mod-obj :id b :page-id page-id}
-                                   {:type :mov-objects :parent-id c :shapes [a] :page-id page-id}
-                                   {:type :mod-obj :id other :page-id (uuid/next)}
-                                   {:type :del-obj :id other :page-id page-id}
-                                   {:type :add-color :color {}}]
-                                  page-id)))))
-
-(t/deftest regions-cover-each-top-level-board
-  (let [board  (cts/setup-shape {:type :frame :name "Home" :x 0 :y 0 :width 400 :height 300})
-        child  (cts/setup-shape {:type :rect :x 10 :y 10 :width 50 :height 50
-                                 :parent-id (:id board) :frame-id (:id board)})
-        lone   (cts/setup-shape {:type :rect :x 1000 :y 0 :width 20 :height 20})
-        objects {(:id board) board (:id child) child (:id lone) lone}]
-    (t/is (= (:id board) (overlay/root-id objects (:id child))))
-    (let [regions (overlay/regions objects #{(:id child) (:id lone) (uuid/next)})]
-      (t/is (= 2 (count regions)))
-      (t/is (= #{(:id board) (:id lone)} (set (map :key regions))))
-      (t/is (= [10 10 50 50]
-               (let [{:keys [x y width height]} (:rect (first (filter #(= (:id board) (:key %)) regions)))]
-                 [x y width height]))
-            "only the changed child glows, not the whole board"))))
-
-(t/deftest the-work-starts-from-the-attached-layers
-  (let [id (uuid/next)]
-    (t/is (= #{id}
-             (overlay/attached-ids {:entries [{:kind :user :attachments [{:kind "node" :page-id (str page-id)
-                                                                          :node-id (str id)}
-                                                                         {:kind "node" :page-id "other"
-                                                                          :node-id (str (uuid/next))}]}
-                                              {:kind :assistant}]}
-                                   page-id)))
-    (t/is (= #{} (overlay/attached-ids {:entries []} page-id)))))
-
-(defn- next-immediate
-  []
-  (js/Promise. (fn [resolve] (js/setImmediate resolve))))
-
 (defn- ^:async with-mounted-overlay
-  "Mount `ai-activity*` in a jsdom SVG with the store holding `state`,
-  run `(test-fn container)` and unmount."
+  "Mount `ai-activity*` in a jsdom document with the store holding
+  `state`, run `(test-fn container render)` and unmount. `render` renders
+  the overlay again, as its viewport does, with `show-rulers`."
   [state test-fn]
-  (let [dom          (JSDOM. "<!doctype html><html><body><svg id='root'></svg></body></html>")
+  (let [dom          (JSDOM. "<!doctype html><html><body><div id='root'></div></body></html>")
         window       (.-window dom)
         document     (.-document window)
         old-window   (.-window js/globalThis)
@@ -363,10 +323,12 @@
     (set! (.-IS_REACT_ACT_ENVIRONMENT js/globalThis) true)
     (reset! st/state state)
     (try
-      (let [root (rdc/createRoot container)]
+      (let [root   (rdc/createRoot container)
+            render (fn [show-rulers]
+                     (react/act #(.render root (mf/element overlay/ai-activity* #js {:showRulers show-rulers}))))]
         (try
-          (await (react/act #(.render root (mf/element overlay/ai-activity* #js {:zoom 2 :pageId page-id}))))
-          (await (test-fn container))
+          (await (render true))
+          (await (test-fn container render))
           (finally
             (await (react/act #(.unmount root))))))
       (finally
@@ -377,12 +339,27 @@
         (set! (.-document js/globalThis) old-document)
         (set! (.-IS_REACT_ACT_ENVIRONMENT js/globalThis) old-act)))))
 
-(defn- region-count
-  [container]
-  (.-length (.querySelectorAll container "[data-testid='ai-activity'] > g")))
+(defn- query-count
+  [container selector]
+  (.-length (.querySelectorAll container selector)))
 
-(def ^:private attached (cts/setup-shape {:type :rect :name "Button" :x 0 :y 0 :width 40 :height 20}))
-(def ^:private added (cts/setup-shape {:type :rect :name "Card" :x 500 :y 0 :width 100 :height 80}))
+(defn- glow
+  [container]
+  (.querySelector container "[data-testid='ai-activity']"))
+
+(defn- inset
+  [container]
+  (.. (glow container) -style -inset))
+
+(defn- update-state
+  "Change the store inside `act`."
+  [f & args]
+  (react/act #(apply swap! st/state f args)))
+
+(def ^:private root-shapes
+  "Dozens of shapes directly on the page, as some models draw."
+  (mapv #(cts/setup-shape {:type :rect :name "Card" :x (* 50 %) :y 0 :width 40 :height 20})
+        (range 60)))
 
 (defn- ai-commit
   "A local commit event as the AI's plugin makes it, adding `shape`."
@@ -393,32 +370,67 @@
       {:source :local
        :redo-changes [{:type :add-obj :id (:id shape) :page-id page-id}]})))
 
-(t/deftest ^:async the-glow-follows-ai-commits-and-leaves-with-the-run
+(t/deftest ^:async one-glow-covers-the-canvas-and-leaves-with-the-run
   (await
    (with-mounted-overlay
-     (workspace-state [attached added] #{}
-                      {:status :streaming
-                       :entries [{:kind :user :id "u1"
-                                  :attachments [{:kind "node" :page-id (str page-id)
-                                                 :node-id (str (:id attached))}]}]})
-     (^:async fn [container]
-       (t/is (= 1 (region-count container)) "the attached layer glows as soon as the work starts")
-       (t/is (some? (.querySelector container "[data-testid='ai-activity'] text")) "with its AI badge")
+     (workspace-state root-shapes #{} {:status :streaming})
+     (^:async fn [container _render]
+       (t/is (= 1 (query-count container "[data-testid='ai-activity']")))
+       (t/is (= 1 (query-count container "[data-testid='ai-activity-badge']"))
+             "one badge, however many shapes the page holds")
+       (t/is (= "true" (.getAttribute (glow container) "aria-hidden")))
 
-       (await (react/act #(st/emit! (ai-commit added))))
-       (await (next-immediate))
-       (await (react/act #(js/Promise.resolve nil)))
-       (t/is (= 2 (region-count container)) "a shape the AI adds glows too")
+       (await (update-state assoc-in [:penforge :chat :status] :idle))
+       (t/is (str/includes? (.-className (glow container)) "leaving")
+             "the glow fades out when the run ends")
 
-       (await (react/act #(swap! st/state assoc-in [:penforge :chat :status] :idle)))
-       (t/is (some? (.querySelector container "[data-testid='ai-activity'][class*='leaving']"))
-             "the glow fades out when the run ends")))))
+       (await (update-state assoc-in [:penforge :chat :status] :streaming))
+       (t/is (not (str/includes? (.-className (glow container)) "leaving"))
+             "new work during the fade shows it again")
+
+       (await (update-state assoc-in [:penforge :chat :status] :idle))
+       (await (react/act #(js/Promise. (fn [resolve]
+                                         (js/setTimeout resolve (+ overlay/fade-out-ms 50))))))
+       (t/is (nil? (glow container)) "and is gone afterwards")))))
+
+(t/deftest ^:async the-glow-renders-once-whatever-happens-on-the-canvas
+  (await
+   (with-mounted-overlay
+     (workspace-state root-shapes #{} {:status :streaming})
+     (^:async fn [container render]
+       (let [mutations (atom 0)
+             observer  (new (.-MutationObserver js/window) #(swap! mutations + (alength %)))]
+         (.observe observer container #js {:childList true
+                                           :subtree true
+                                           :attributes true
+                                           :characterData true})
+         (await (react/act #(st/emit! (ai-commit (first root-shapes)))))
+         (await (update-state assoc-in [:files file-id :data :pages-index page-id :objects] {}))
+         (await (update-state assoc-in [:workspace-local :zoom] 4))
+         (await (update-state assoc-in [:workspace-local :vbox] {:x 900 :y 900 :width 10 :height 10}))
+         (await (render true))
+         (swap! mutations + (alength (.takeRecords observer)))
+         (.disconnect observer)
+         (t/is (= 0 @mutations)
+               "commits, page objects, zoom and pan change nothing"))))))
+
+(t/deftest ^:async the-glow-stays-off-the-rulers
+  (await
+   (with-mounted-overlay
+     (workspace-state [] #{} {:status :streaming})
+     (^:async fn [container render]
+       (t/is (= "22px 0px 0px 22px" (inset container)))
+       (await (render false))
+       (t/is (= "0px" (inset container)) "without rulers it reaches the edges")))))
 
 (t/deftest ^:async no-glow-without-ai-work
   (await
    (with-mounted-overlay
-     (workspace-state [attached] #{} {})
-     (^:async fn [container]
-       (await (react/act #(st/emit! (ai-commit attached))))
-       (await (next-immediate))
-       (t/is (= 0 (region-count container)) "the user's own edits outside a run never glow")))))
+     (workspace-state root-shapes #{} {:runs {"run1" {:status :running :read-only true}}})
+     (^:async fn [container _render]
+       (await (react/act #(st/emit! (ai-commit (first root-shapes)))))
+       (t/is (nil? (glow container))
+             "the user's own edits and checks that only read never glow")
+
+       (await (update-state assoc-in [:penforge :chat :runs "run2"] {:status :running :silent true}))
+       (t/is (some? (glow container)) "a workflow run shows it")))))

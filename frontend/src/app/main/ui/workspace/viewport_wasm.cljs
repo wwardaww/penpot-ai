@@ -739,6 +739,8 @@
                         (dm/str "inset(" strip "px 0 0 " strip "px round "
                                 rulers/canvas-border-radius "px)")))}])
 
+     (when (contains? cf/flags :ai)
+       [:> ai-activity* {:show-rulers show-rulers?}])
 
      [:svg.viewport-controls
       {:xmlns "http://www.w3.org/2000/svg"
@@ -965,8 +967,6 @@
        (when show-presence?
          [:& presence/active-cursors
           {:page-id page-id}])
-
-       (when (contains? cf/flags :ai) [:> ai-activity* {:zoom zoom :page-id page-id}])
 
        ;; NOTE: ruler guides are being migrated to the WASM render engine.
        ;; The SVG-overlay rendering is temporarily disabled while we implement

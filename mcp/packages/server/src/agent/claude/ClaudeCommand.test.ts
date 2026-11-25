@@ -234,6 +234,37 @@ describe("the name of a Claude command", () => {
     });
 });
 
+describe("whether a Claude command is Claude itself", () => {
+    test("by its name", () => {
+        assert.equal(ClaudeCommandName.isClaude("claude", "linux"), true);
+        assert.equal(ClaudeCommandName.isClaude("claude", "win32"), true);
+        for (const command of ["claude-local", "claude2", "Claude", "qwen", "claude.exe"]) {
+            assert.equal(ClaudeCommandName.isClaude(command, "linux"), false, command);
+        }
+    });
+
+    test("by the file name of its path", () => {
+        assert.equal(ClaudeCommandName.isClaude("/home/me/my tools/claude", "linux"), true);
+        for (const command of ["/usr/bin/claude-local", "/opt/claude/qwen", "/opt/claude.exe", "bin/claude"]) {
+            assert.equal(ClaudeCommandName.isClaude(command, "linux"), false, command);
+        }
+        for (const command of ["C:\\Tools\\claude.exe", "C:/Tools/Claude.CMD", "D:\\claude"]) {
+            assert.equal(ClaudeCommandName.isClaude(command, "win32"), true, command);
+        }
+        for (const command of ["C:\\Tools\\claude-local.cmd", "C:\\claude\\qwen.exe", "C:\\claude.bat"]) {
+            assert.equal(ClaudeCommandName.isClaude(command, "win32"), false, command);
+        }
+    });
+
+    test("is read anew for every turn", () => {
+        let value = "claude";
+        const source = new ClaudeSource(new ClaudeCommands({ env, home, shell: null }), () => value);
+        assert.equal(source.isClaude, true);
+        value = "claude-local";
+        assert.equal(source.isClaude, false);
+    });
+});
+
 describe("finding a Claude command", { skip: !POSIX }, () => {
     test("prefers a program on PATH over an alias", async () => {
         bashrc("alias claude='echo alias'");
