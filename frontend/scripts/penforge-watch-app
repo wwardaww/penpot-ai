@@ -35,7 +35,8 @@ stale() { # <dist-file> <src-dir>
 if stale ../plugins/libs/plugins-runtime/dist/index.js ../plugins/libs/plugins-runtime/src; then
     (cd ../plugins/libs/plugins-runtime && pnpm install && pnpm run build)
 fi
-if stale packages/ui/dist/menu.js packages/ui/src; then
+# The ui build also copies its styles to public/css; a missing copy needs it too.
+if [ ! -f resources/public/css/ui.css ] || stale packages/ui/dist/menu.js packages/ui/src; then
     (cd packages/ui && pnpm run build)
 fi
 

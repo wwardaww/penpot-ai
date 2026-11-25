@@ -10,6 +10,11 @@
 # They must exist and be owned by the current user before the container
 # starts, otherwise Docker creates them as root and pnpm/shadow-cljs fail.
 #
+# The mount points inside the source tree must exist for the same reason:
+# Docker would create the missing ones, and their parents such as
+# frontend/resources/public/js, as root. The Windows mirror creates its own
+# (scripts/penforge-devenv-mirror).
+#
 # Usage: scripts/penforge-devenv-cache [--print]
 
 set -euo pipefail
@@ -47,3 +52,19 @@ fi
 for name in "${PATHS[@]}"; do
     mkdir -p "$BASE/$name"
 done
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [[ "$REPO" != /mnt/[a-z]/* || "${PENFORGE_MIRROR:-1}" == "0" ]]; then
+    grep -oE ':/home/penpot/penpot/[^":]+' "$REPO/docker/devenv/docker-compose.main.yml" \
+        | sed 's#^:/home/penpot/penpot/##' \
+        | while IFS= read -r p; do mkdir -p "$REPO/$p"; done
+fi
+
+# The frontend shows the AI features only with this flag. The file is
+# git-ignored, so a fresh clone has none; an existing one stays as it is.
+CONFIG="$REPO/frontend/resources/public/js/config.js"
+if [[ ! -f "$CONFIG" ]]; then
+    mkdir -p "$(dirname "$CONFIG")"
+    echo 'var penpotFlags = "enable-ai";' > "$CONFIG"
+fi

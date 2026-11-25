@@ -10,6 +10,11 @@ volumes:
 services:
   main:
     privileged: true
+    # Penforge: without its own profile a privileged container is unconfined,
+    # and the `unix-chkpwd` profile of Ubuntu 24.04 hosts then breaks `sudo` in
+    # it ("account validation failure"). Ignored where AppArmor is missing.
+    security_opt:
+      - "apparmor=docker-default"
     image: "penpotapp/devenv:${DEVENV_TAG:-latest}"
     build:
       context: "."

@@ -92,7 +92,10 @@ as secure. It can only sign certificates for localhost/127.0.0.1/::1.
     Import-Certificate -FilePath "${win_path:-<path-to>\\ca.crt}" -CertStoreLocation Cert:\\CurrentUser\\Root
   macOS:
     security add-trusted-cert -r trustRoot -k ~/Library/Keychains/login.keychain-db "$DIR/ca.crt"
-  Linux (system + Chrome/Firefox via NSS):
+  Linux (Chrome and Electron read NSS, not the system store):
+    sudo apt install libnss3-tools
+    mkdir -p ~/.pki/nssdb && certutil -d "sql:\$HOME/.pki/nssdb" -A -t "C,," -n penforge-local-ca -i "$DIR/ca.crt"
+    Firefox: Settings > Certificates > Authorities > Import. curl and other tools:
     sudo cp "$DIR/ca.crt" /usr/local/share/ca-certificates/penforge-local-ca.crt && sudo update-ca-certificates
 
 Then restart the browser. Plain http://localhost:3450 works without this.
