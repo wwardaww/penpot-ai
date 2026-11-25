@@ -42,11 +42,28 @@
     (get-subscription-type (dm/get-in profile [:props :subscription]))))
 
 (defn show-team-plan?
-  [is-owner team profile]
-  (not (and is-owner
-            (nil? (dm/get-in team [:organization :id]))
-            (contains? #{"enterprise" "nitrate"}
-                       (get-profile-subscription-type profile)))))
+  "The plan of a team outside an organization is the plan of its owner,
+  which the backend puts in the team `:subscription`. It is hidden from
+  every member when the owner has an Enterprise or Nitrate plan."
+  [team]
+  (or (some? (dm/get-in team [:organization :id]))
+      (not (contains? #{"enterprise" "nitrate"}
+                      (get-subscription-type (:subscription team))))))
+
+(defn show-manage-subscription-link?
+  "Only the owner of a plan other than professional manages the subscription
+  from the team settings; a professional plan has its own upgrade path."
+  [is-owner subscription]
+  (and (boolean is-owner)
+       (not= "professional" (get-subscription-type subscription))))
+
+(defn show-main-menu-power-up?
+  "The workspace menu offers the plan upsell on every plan but enterprise;
+  the admin console keeps it as the way into the subscription settings."
+  [flags subscription-type]
+  (or (and (contains? flags :subscriptions)
+           (not= "enterprise" subscription-type))
+      (contains? flags :admin-console)))
 
 (mf/defc cta-power-up*
   [{:keys [top-title top-description bottom-description bottom-button bottom-button-href has-dropdown is-highlighted]}]
@@ -330,7 +347,7 @@
         "enterprise" (tr "subscription.current-plan.enterprise"))]]))
 
 (mf/defc team*
-  [{:keys [is-owner team profile]}]
+  [{:keys [is-owner team]}]
   (let [subscription          (:subscription team)
         subscription-type     (get-subscription-type subscription)
         team-plan-type        (get-team-plan-type team)
@@ -348,7 +365,7 @@
                  href (str "payments/subscriptions/show?returnUrl=" href)]
              (st/emit! (rt/nav-raw :href href)))))]
 
-    (when (show-team-plan? is-owner team profile)
+    (when (show-team-plan? team)
       [:div {:class (stl/css :team)}
        [:div {:class (stl/css :team-label)}
         (tr "subscription.dashboard.team-plan")]
@@ -360,7 +377,7 @@
                         (tr "subscription.settings.unlimited"))
 
           "enterprise" (tr "subscription.settings.enterprise"))]
-       (when (and is-owner (not= subscription-type "professional"))
+       (when (show-manage-subscription-link? is-owner subscription)
          [:button {:class (stl/css :manage-subscription-link)
                    :on-click go-to-manage-subscription
                    :data-testid "manage-subscription-link"}

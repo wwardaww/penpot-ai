@@ -167,6 +167,14 @@ export class PluginBridge implements TaskDispatchHost {
      */
     private setupWebSocketHandlers(): void {
         this.wsServer.on("connection", (ws: WebSocket, request: http.IncomingMessage) => {
+            // reject pages on foreign sites before reading any message
+            const guardResult = this.mcpServer.requestGuard.check(request.headers);
+            if (!guardResult.isAllowed) {
+                this.logger.warn("Rejected WebSocket connection: %s", guardResult.reason);
+                ws.close(1008, "Origin or host not allowed; see PENPOT_MCP_ALLOWED_HOSTS");
+                return;
+            }
+
             // extract userToken from query parameters
             const url = new URL(request.url!, `ws://${request.headers.host}`);
             const authenticator = this.connectionAuthenticator;
@@ -652,12 +660,12 @@ export class PluginBridge implements TaskDispatchHost {
      * Also releases task tracking and dispatch subscriptions.
      */
     public async close(): Promise<void> {
+        for (const taskId of this.pendingTasks.keys()) {
+            this.rejectPendingTask(taskId, new Error("Plugin bridge is shutting down; task outcome may be unknown"));
+        }
         for (const socket of this.wsServer.clients) {
             this.removeConnection(socket);
             socket.terminate();
-        }
-        for (const taskId of this.pendingTasks.keys()) {
-            this.rejectPendingTask(taskId, new Error("MCP server is shutting down."));
         }
         await this.dispatcher.close();
         return new Promise((resolve) => {

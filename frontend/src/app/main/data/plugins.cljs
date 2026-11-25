@@ -63,7 +63,7 @@
   [plugin]
   (when (and (preg/global-requested? plugin)
              (not (preg/global-allowed? plugin)))
-    (log/warn :hint "Global plugins can only be loaded from localhost"
+    (log/warn :hint "Global plugins are not allowed from this host"
               :plugin-id (:plugin-id plugin)
               :host (:host plugin))
     (st/emit! (ntf/warn (tr "workspace.plugins.error.global-not-allowed")))
@@ -125,7 +125,8 @@
           (log/warn :hint "Plugin runtime not initialized yet"
                     :plugin-id plugin-id
                     :action "load-plugin!")
-          (st/emit! (remove-current-plugin plugin-id)))))))
+          (st/emit! (remove-current-plugin plugin-id)
+                    (ntf/warn (tr "plugins.runtime-unavailable"))))))))
 
 (defn open-plugin!
   [{:keys [url] :as manifest} user-can-edit?]

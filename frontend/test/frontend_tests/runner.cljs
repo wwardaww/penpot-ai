@@ -64,12 +64,16 @@
    [frontend-tests.data.uploads-test]
    [frontend-tests.data.viewer-test]
    [frontend-tests.data.workspace-animations-test]
+   [frontend-tests.data.workspace-board-link-test]
    [frontend-tests.data.workspace-colors-test]
    [frontend-tests.data.workspace-comments-test]
    [frontend-tests.data.workspace-context-menu-test]
    [frontend-tests.data.workspace-device-screens-test]
    [frontend-tests.data.workspace-focus-test]
+   [frontend-tests.data.workspace-heal-undo-test]
    [frontend-tests.data.workspace-interactions-test]
+   [frontend-tests.data.workspace-layout-other-page-test]
+   [frontend-tests.data.workspace-libraries-link-test]
    [frontend-tests.data.workspace-libraries-load-test]
    [frontend-tests.data.workspace-libraries-sync-test]
    [frontend-tests.data.workspace-mcp-test]
@@ -78,7 +82,9 @@
    [frontend-tests.data.workspace-pages-test]
    [frontend-tests.data.workspace-path-edition-test]
    [frontend-tests.data.workspace-reflow-test]
+   [frontend-tests.data.workspace-shape-layout-test]
    [frontend-tests.data.workspace-shortcuts-test]
+   [frontend-tests.data.workspace-sync-text-wasm-test]
    [frontend-tests.data.workspace-texts-test]
    [frontend-tests.data.workspace-thumbnails-test]
    [frontend-tests.data.workspace-thumbnails-wasm-test]
@@ -112,6 +118,7 @@
    [frontend-tests.logic.path-helpers-test]
    [frontend-tests.logic.path-lifecycle-test]
    [frontend-tests.logic.path-tools-test]
+   [frontend-tests.logic.scale-selected-test]
    [frontend-tests.logic.sidebar-transform-coalescing-test]
    [frontend-tests.logic.update-position-test]
    [frontend-tests.logic.wasm-modifiers-nil-id-test]
@@ -129,12 +136,14 @@
    [frontend-tests.plugins.interactions-test]
    [frontend-tests.plugins.library-test]
    [frontend-tests.plugins.local-storage-test]
+   [frontend-tests.plugins.location-test]
    [frontend-tests.plugins.management-test]
    [frontend-tests.plugins.page-active-validation-test]
    [frontend-tests.plugins.page-test]
    [frontend-tests.plugins.parser-test]
    [frontend-tests.plugins.read-only-test]
    [frontend-tests.plugins.register-test]
+   [frontend-tests.plugins.runtime-unavailable-test]
    [frontend-tests.plugins.shape-bugfixes-test]
    [frontend-tests.plugins.system-events-test]
    [frontend-tests.plugins.text-test]
@@ -142,11 +151,15 @@
    [frontend-tests.plugins.user-test]
    [frontend-tests.plugins.utils-test]
    [frontend-tests.plugins.value-objects-test]
+   [frontend-tests.plugins.wait-for-save-test]
    [frontend-tests.render-dimensions-test]
    [frontend-tests.render-wasm.call-test]
+   [frontend-tests.render-wasm.fonts-test]
+   [frontend-tests.render-wasm.modifiers-test]
    [frontend-tests.render-wasm.process-objects-test]
    [frontend-tests.render-wasm.serialization-test]
    [frontend-tests.render-wasm.shape-proxy-test]
+   [frontend-tests.render-wasm.stale-text-selrects-test]
    [frontend-tests.render-wasm.text-editor-apply-styles-test]
    [frontend-tests.render-wasm.text-editor-caret-color-test]
    [frontend-tests.render-wasm.text-editor-content-range-test]
@@ -158,21 +171,28 @@
    [frontend-tests.text-editor-paste-guard-test]
    [frontend-tests.tokens.context-menu-test]
    [frontend-tests.tokens.copy-paste-props-test]
+   [frontend-tests.tokens.export-modal-test]
    [frontend-tests.tokens.import-export-test]
    [frontend-tests.tokens.logic.token-actions-test]
    [frontend-tests.tokens.logic.token-data-test]
+   [frontend-tests.tokens.logic.token-dimension-application-test]
    [frontend-tests.tokens.logic.token-remapping-test]
    [frontend-tests.tokens.logic.tokens-source-test]
    [frontend-tests.tokens.logic.tokens-status-test]
    [frontend-tests.tokens.referenced-token-value-test]
    [frontend-tests.tokens.shadow-form-test]
    [frontend-tests.tokens.style-dictionary-test]
+   [frontend-tests.tokens.theme-create-modal-test]
+   [frontend-tests.tokens.token-application-test]
+   [frontend-tests.tokens.token-color-test]
    [frontend-tests.tokens.token-errors-test]
+   [frontend-tests.tokens.token-format-test]
    [frontend-tests.tokens.token-group-test]
    [frontend-tests.tokens.token-parsing-test]
    [frontend-tests.tokens.token-path-test]
    [frontend-tests.tokens.token-pill-test]
    [frontend-tests.tokens.token-tree-test]
+   [frontend-tests.tokens.token-warnings-test]
    [frontend-tests.tokens.tokenscript-test]
    [frontend-tests.tokens.typography-form-test]
    [frontend-tests.tokens.workspace-tokens-remap-test]
@@ -192,6 +212,7 @@
    [frontend-tests.ui.ai-preview-pane-test]
    [frontend-tests.ui.ai-visual-qa-test]
    [frontend-tests.ui.check-updates-test]
+   [frontend-tests.ui.color-selection-test]
    [frontend-tests.ui.color-token-position-test]
    [frontend-tests.ui.colorpicker-token-set-order-test]
    [frontend-tests.ui.comment-input-ime-test]
@@ -223,13 +244,17 @@
    [frontend-tests.ui.sortable-auto-scroll-test]
    [frontend-tests.ui.static-test]
    [frontend-tests.ui.stroke-menu-test]
+   [frontend-tests.ui.subscription-dashboard-test]
    [frontend-tests.ui.subscription-test]
    [frontend-tests.ui.team-container-test]
    [frontend-tests.ui.text-attrs-multiple-test]
+   [frontend-tests.ui.truncated-text-test]
+   [frontend-tests.ui.viewport-texts-html-test]
    [frontend-tests.ui.viewport-top-bar-test]
    [frontend-tests.ui.workspace-libraries-test]
    [frontend-tests.util-clipboard-test]
    [frontend-tests.util-http-test]
+   [frontend-tests.util-i18n-test]
    [frontend-tests.util-object-test]
    [frontend-tests.util-queue-test]
    [frontend-tests.util-range-tree-test]
@@ -326,13 +351,17 @@
    'frontend-tests.data.team-test
    'frontend-tests.data.uploads-test
    'frontend-tests.data.viewer-test
+   'frontend-tests.data.workspace-board-link-test
    'frontend-tests.data.workspace-colors-test
    'frontend-tests.data.workspace-comments-test
    'frontend-tests.data.workspace-context-menu-test
    'frontend-tests.data.workspace-device-screens-test
    'frontend-tests.data.workspace-animations-test
    'frontend-tests.data.workspace-focus-test
+   'frontend-tests.data.workspace-heal-undo-test
    'frontend-tests.data.workspace-interactions-test
+   'frontend-tests.data.workspace-layout-other-page-test
+   'frontend-tests.data.workspace-libraries-link-test
    'frontend-tests.data.workspace-libraries-load-test
    'frontend-tests.data.workspace-libraries-sync-test
    'frontend-tests.data.workspace-mcp-test
@@ -341,7 +370,9 @@
    'frontend-tests.data.workspace-pages-test
    'frontend-tests.data.workspace-path-edition-test
    'frontend-tests.data.workspace-reflow-test
+   'frontend-tests.data.workspace-shape-layout-test
    'frontend-tests.data.workspace-shortcuts-test
+   'frontend-tests.data.workspace-sync-text-wasm-test
    'frontend-tests.data.workspace-texts-test
    'frontend-tests.data.workspace-thumbnails-test
    'frontend-tests.data.workspace-thumbnails-wasm-test
@@ -375,6 +406,7 @@
    'frontend-tests.logic.path-lifecycle-test
    'frontend-tests.logic.path-tools-test
    'frontend-tests.logic.pasting-in-containers-test
+   'frontend-tests.logic.scale-selected-test
    'frontend-tests.main.refs-test
    'frontend-tests.main-errors-test
    'frontend-tests.logic.sidebar-transform-coalescing-test
@@ -393,11 +425,13 @@
    'frontend-tests.plugins.interactions-test
    'frontend-tests.plugins.library-test
    'frontend-tests.plugins.local-storage-test
+   'frontend-tests.plugins.location-test
    'frontend-tests.plugins.page-active-validation-test
    'frontend-tests.plugins.page-test
    'frontend-tests.plugins.parser-test
    'frontend-tests.plugins.read-only-test
    'frontend-tests.plugins.register-test
+   'frontend-tests.plugins.runtime-unavailable-test
    'frontend-tests.plugins.shape-bugfixes-test
    'frontend-tests.plugins.system-events-test
    'frontend-tests.plugins.text-test
@@ -405,10 +439,14 @@
    'frontend-tests.plugins.user-test
    'frontend-tests.plugins.utils-test
    'frontend-tests.plugins.value-objects-test
+   'frontend-tests.plugins.wait-for-save-test
    'frontend-tests.render-wasm.call-test
+   'frontend-tests.render-wasm.modifiers-test
+   'frontend-tests.render-wasm.fonts-test
    'frontend-tests.render-wasm.process-objects-test
    'frontend-tests.render-wasm.serialization-test
    'frontend-tests.render-wasm.shape-proxy-test
+   'frontend-tests.render-wasm.stale-text-selrects-test
    'frontend-tests.render-wasm.text-editor-apply-styles-test
    'frontend-tests.render-wasm.text-editor-caret-color-test
    'frontend-tests.render-wasm.text-editor-content-range-test
@@ -420,19 +458,26 @@
    'frontend-tests.svg-filters-test
    'frontend-tests.tokens.copy-paste-props-test
    'frontend-tests.tokens.context-menu-test
+   'frontend-tests.tokens.export-modal-test
    'frontend-tests.tokens.import-export-test
    'frontend-tests.tokens.logic.token-actions-test
    'frontend-tests.tokens.logic.token-data-test
+   'frontend-tests.tokens.logic.token-dimension-application-test
    'frontend-tests.tokens.logic.token-remapping-test
    'frontend-tests.tokens.referenced-token-value-test
    'frontend-tests.tokens.shadow-form-test
    'frontend-tests.tokens.style-dictionary-test
+   'frontend-tests.tokens.theme-create-modal-test
+   'frontend-tests.tokens.token-application-test
+   'frontend-tests.tokens.token-color-test
    'frontend-tests.tokens.token-errors-test
+   'frontend-tests.tokens.token-format-test
    'frontend-tests.tokens.token-group-test
    'frontend-tests.tokens.token-parsing-test
    'frontend-tests.tokens.token-path-test
    'frontend-tests.tokens.token-pill-test
    'frontend-tests.tokens.token-tree-test
+   'frontend-tests.tokens.token-warnings-test
    'frontend-tests.tokens.tokenscript-test
    'frontend-tests.tokens.typography-form-test
    'frontend-tests.tokens.logic.tokens-source-test
@@ -454,6 +499,7 @@
    'frontend-tests.ui.ai-pair-test
    'frontend-tests.ui.ai-visual-qa-test
    'frontend-tests.ui.check-updates-test
+   'frontend-tests.ui.color-selection-test
    'frontend-tests.ui.color-token-position-test
    'frontend-tests.ui.colorpicker-token-set-order-test
    'frontend-tests.ui.comment-input-ime-test
@@ -487,13 +533,17 @@
    'frontend-tests.ui.sortable-auto-scroll-test
    'frontend-tests.ui.static-test
    'frontend-tests.ui.stroke-menu-test
+   'frontend-tests.ui.subscription-dashboard-test
    'frontend-tests.ui.subscription-test
    'frontend-tests.ui.team-container-test
    'frontend-tests.ui.text-attrs-multiple-test
+   'frontend-tests.ui.truncated-text-test
+   'frontend-tests.ui.viewport-texts-html-test
    'frontend-tests.ui.viewport-top-bar-test
    'frontend-tests.ui.workspace-libraries-test
    'frontend-tests.util-clipboard-test
    'frontend-tests.util-http-test
+   'frontend-tests.util-i18n-test
    'frontend-tests.util-object-test
    'frontend-tests.util-queue-test
    'frontend-tests.util-range-tree-test

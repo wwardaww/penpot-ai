@@ -2,22 +2,22 @@
 import { defineConfig, esmExternalRequirePlugin } from "vite";
 import react from "@vitejs/plugin-react";
 import dts from "vite-plugin-dts";
-import * as path from "path";
+import * as path from "node:path";
 import { copyFileSync, mkdirSync } from "node:fs";
 
 const externalDeps = ["react", "react-dom", "react/jsx-runtime"];
 
-const copyCssPlugin = () => ({
+export const copyCssPlugin = (packageDir = import.meta.dirname) => ({
   name: "copy-css",
   closeBundle: () => {
-    try {
-      // On a fresh checkout the target folder does not exist yet; without it
-      // the copy failed silently and the app loaded without ui.css.
-      mkdirSync("../../resources/public/css", { recursive: true });
-      copyFileSync("dist/ui.css", "../../resources/public/css/ui.css");
-    } catch (e) {
-      console.log("Error copying css file", e);
-    }
+    const cssPath = path.resolve(packageDir, "dist/ui.css");
+    const destinationPath = path.resolve(
+      packageDir,
+      "../../resources/public/css/ui.css",
+    );
+
+    mkdirSync(path.dirname(destinationPath), { recursive: true });
+    copyFileSync(cssPath, destinationPath);
   },
 });
 

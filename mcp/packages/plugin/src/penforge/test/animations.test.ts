@@ -42,7 +42,12 @@ const cardEntrance: AnimationSpec = {
 test("a full spec validates", () => {
     const spec: AnimationSpec = {
         v: 1,
-        entrance: { effects: [{ type: "scale", from: 0.9 }], duration: 250, delay: 100, easing: { type: "spring", stiffness: 200, damping: 20 } },
+        entrance: {
+            effects: [{ type: "scale", from: 0.9 }],
+            duration: 250,
+            delay: 100,
+            easing: { type: "spring", stiffness: 200, damping: 20 },
+        },
         exit: { effects: [{ type: "blur", amount: 6 }], duration: 200 },
         states: {
             hover: { scale: 1.05, offsetY: -2, fill: "#112233", shadow: { offsetY: 8, blur: 24, opacity: 0.2 } },
@@ -60,8 +65,20 @@ test("keyframe tracks validate (later keyframe editor)", () => {
         entrance: {
             duration: 400,
             tracks: [
-                { prop: "opacity", keyframes: [{ at: 0, value: 0 }, { at: 1, value: 1, easing: "ease" }] },
-                { prop: "fill", keyframes: [{ at: 0, value: "#000000" }, { at: 1, value: "#ffffff" }] },
+                {
+                    prop: "opacity",
+                    keyframes: [
+                        { at: 0, value: 0 },
+                        { at: 1, value: 1, easing: "ease" },
+                    ],
+                },
+                {
+                    prop: "fill",
+                    keyframes: [
+                        { at: 0, value: "#000000" },
+                        { at: 1, value: "#ffffff" },
+                    ],
+                },
             ],
         },
     };
@@ -120,7 +137,7 @@ test("collect lists animated layers with name paths", () => {
         [
             ["id-Card", "Card", "id-Home"],
             ["id-Title", "Card/Title", "id-Card"],
-        ],
+        ]
     );
     assert.deepEqual(layers[0].animations, cardEntrance);
     assert.equal(AnimationReader.raw(broken), "{oops");

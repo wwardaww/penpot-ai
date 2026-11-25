@@ -936,7 +936,7 @@
          page-ids #{}
          component-ids #{}]
     (if-let [change (first changes)]
-      (let [{:keys [type page-id component-id id]} change
+      (let [{:keys [type page-id component-id id page]} change
             page-ids
             (case type
               ;; Shape-level ops are scoped to either a page or a component
@@ -944,13 +944,17 @@
               (cond-> page-ids
                 page-id (conj page-id))
 
-              ;; A new or modified page needs a full page sweep
-              (:add-page :mod-page)
+              ;; A new or modified page needs a full page sweep. An
+              ;; `:add-page` that carries the page whole stores it under
+              ;; the id inside `:page`, whatever the top level says.
+              :add-page
+              (conj page-ids (or (:id page) id))
+
+              :mod-page
               (conj page-ids id)
 
-              ;; restore-component resurrects a deleted component (touches the
-              ;; component definition) and places its main instance on a page
-              ;; (touches that page's shape tree)
+              ;; Conservatively validate the referenced page as well as the
+              ;; restored component. Separate add-obj changes restore shapes.
               :restore-component
               (conj page-ids page-id)
 
@@ -978,9 +982,8 @@
 (defn validate-file-affected
   "Validate only the pages and components touched by `changes`.
 
-  Semantics are identical to `validate-file` but the work is bounded
-  to the entities that were actually mutated, making it safe and cheap
-  to call on every incremental file update.
+  Unlike `validate-file`, this does not check for a missing tokens-status.
+  Both validations run only for files with the components/v2 feature.
 
   Returns a list of errors or `nil`."
   [{:keys [data features] :as file} libraries changes]
@@ -1052,7 +1055,7 @@
               (cond-> page-ids (some? page-id) (conj page-id))
 
               :add-page
-              (conj page-ids (or id (:id page)))
+              (conj page-ids (or (:id page) id))
 
               :mod-page
               (conj page-ids id)

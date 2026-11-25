@@ -224,6 +224,11 @@
 
 ;; --- lists
 
+(defn llen
+  [store key]
+  (with-lock store
+    (count (typed-value store key :list))))
+
 (defn rpush
   [store key elements]
   (with-lock store
@@ -450,6 +455,9 @@
 
   (-rpush [_ key elements]
     (long (rpush store key elements)))
+
+  (-llen [_ key]
+    (long (llen store key)))
 
   (-blpop [_ keys timeout]
     (blpop store keys timeout))

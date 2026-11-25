@@ -147,7 +147,7 @@
     (t/is (= [[:folder-count "many" 300]]
              (mapv (juxt :code :name :limit)
                    (:problems (files/check-folder [] {:name "many"
-                                                       :files (vec (repeat 301 {:path "a" :size 1}))})))))
+                                                      :files (vec (repeat 301 {:path "a" :size 1}))})))))
     (t/is (= [[:folder-size "video.mp4" 10]]
              (mapv (juxt :code :name :limit)
                    (:problems (files/check-folder [] {:name "v" :files [{:path "video.mp4" :size (* 11 mb)}]})))))

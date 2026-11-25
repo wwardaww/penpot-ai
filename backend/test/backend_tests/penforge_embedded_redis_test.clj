@@ -111,6 +111,16 @@
     (t/is (= ["q" "b"] (vec (rds/blpop conn ["q"] 1000))))
     (t/is (= ["q" "c"] (vec (rds/blpop conn ["q"] 1000))))))
 
+(t/deftest llen-counts-the-waiting-elements
+  (let [conn (connection)]
+    (t/is (= 0 (rds/llen conn "q")))
+    (rds/rpush conn "q" ["a" "b"])
+    (t/is (= 2 (rds/llen conn "q")))
+    (rds/blpop conn ["q"] 1000)
+    (t/is (= 1 (rds/llen conn "q")))
+    (rds/set conn "s" "v")
+    (t/is (thrown? clojure.lang.ExceptionInfo (rds/llen conn "s")))))
+
 (t/deftest blpop-takes-the-first-non-empty-key
   (let [conn (connection)]
     (rds/rpush conn "second" ["x"])

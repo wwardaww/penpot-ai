@@ -4,6 +4,7 @@ import { afterEach, beforeEach, test } from "node:test";
 import { WebSocket } from "ws";
 import { PluginBridge } from "./PluginBridge";
 import type { PenpotMcpServer } from "./PenpotMcpServer";
+import { RequestGuard } from "./RequestGuard";
 
 // Penforge server mode (W24): plugin connections authenticated from the upgrade request
 
@@ -19,6 +20,7 @@ beforeEach(() => {
             host: "127.0.0.1",
             isMultiUserMode: () => true,
             getSessionContext: () => ({}),
+            requestGuard: RequestGuard.allowingAny(),
         } as unknown as PenpotMcpServer,
         port,
         1

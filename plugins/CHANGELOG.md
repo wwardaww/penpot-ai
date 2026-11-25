@@ -2,12 +2,17 @@
 
 ### 🚀 Features
 
+- **plugin-types, plugins-runtime:** Added `penpot.waitForSave(timeout?)` to wait until pending file changes are saved (or there is nothing to save). Rejects on save failure, rollback during the wait, timeout (default 60000 ms), or an invalid timeout. The Error `code` property is `save-timeout`, `rolled-back`, `save-retrying` (an earlier failed save Penpot keeps retrying) or the save failure code.
 - **plugin-types, plugins-runtime:** `penpotMgmt` returns `Team`, `Project` and `ProjectFile` objects. Assigning `name` renames teams, projects and files, `project.pinned` pins a project and `file.shared` shares a file as a team library; `createProject`, `createFile`, `moveTo`, `duplicate`, `remove` and `restore` live on the objects. Added `penpotMgmt.listTeams`, `penpotMgmt.createTeam`, `penpotMgmt.getFile`, `listDeletedProjects` and `listDeletedFiles`, and the `manage:projects`, `manage:teams` and `manage:delete` permissions. Restoration uses the dashboard's Trash operation; projects need recoverable files and empty projects cannot be restored; the API exposes no permanent deletion method. Team deletion is not exposed.
 - **plugins-runtime, plugin-types**: Added global plugins (`scope: "global"`) that remain active across dashboard and workspace navigation until closed or logged out, with `penpotMgmt` for project and file discovery, file navigation and workspace events. Global scope adds the `allow:global` permission, which users must accept when installing the plugin.
+- **plugin-types, plugins-runtime:** Added `penpot.location` with the instance base URL (`baseUrl`), the URL of the current screen (`href`) and its query params (`params`), in the dashboard and the workspace. Params that carry secrets are left out. Requires `content:read`. Closes #13013.
+- **plugin-types:** Added `file.features`, the sorted features of the open file, including the features active in the session, such as `render-wasm/v1` when the new render engine (WebGL) draws the file. It is `null` for any other file. Closes #13167.
 - **plugin-types:** Added the `contentrollback` event and the `ContentRollback` type. The event fires after the backend rejected some changes and the workspace undid them, with the ids of the files, pages and shapes affected. It fires once the undone data is in the workspace, also when the workspace has to reload the file to undo the changes.
 
 ### 🩹 Fixes
 
+- **plugin-types:** Clarified that `waitForSave` rejects while a terminal save error remains and recovery may discard unsaved changes.
+- **plugins-runtime:** Methods that rejected an invalid value with a plain string (`connectLibrary`, file `restore`, `remove`, `pin`, `export`, `findVersions`, `saveVersion`) now reject with an `Error` carrying the same message.
 - **plugin-runtime:** `LibraryComponent.instance()`, `createShapeFromSvg()` and `createShapeFromSvgWithImages()` now create shapes at the page root instead of inside a board at the page origin. Closes #12086.
 - **plugin-types, plugin-runtime:** Dashboard property setters now update values after backend success and log failures without interrupting the workspace. File moves reject projects in other teams, backend rejections include their type and code, and `project.fileCount` stays at its listing snapshot. Duplicated projects include their file count and pinned state.
 - **plugin-runtime:** Cancel plugin loads before they execute after unloading or logout, and allow reopening plugins that close during startup.
@@ -18,6 +23,8 @@
 - **plugins-runtime:** `Shape.componentRoot()` returns the root of the shape's own component tree. It used to return a shape that pointed at nothing when the copy was on another page or file than its main, and threw when the copy's library was not available.
 - **plugins-runtime:** `LibraryComponent.mainInstance()` returns `null` for a deleted component, instead of a shape with an empty `id` whose `parent` throws.
 - **plugins-runtime**: `TokenFontFamilies.resolvedValue` and the `fontFamilies` member of `TokenTypographyValue` now keep a family whose name has several words (`Hanken Grotesk`) as one entry, instead of splitting it into an array of its words, and keep names with words the resolver would otherwise read as colors or numbers (`Red Hat Display`, `Press Start 2P`) unchanged.
+- **plugins-runtime:** A SES `repairIntrinsics` failure at startup (for example, when a browser extension wraps the native `Temporal` global) no longer leaves the whole app blank. Plugins are skipped for that session, the error is logged, and a telemetry event reports the unavailable runtime; the editor, login and sign-up pages load as usual. Plugins work as before in every other environment. When startup fails, SES has already replaced `Function.prototype.toString` in the host realm before throwing, but no intrinsics are hardened and no sandbox is created. Closes #12924.
+- **plugins-runtime:** `Variants.removeProperty()` no longer leaves two variants with the same values. When several variants clash, the top one in the layers panel keeps its values and each lower one gets a numbered value (`Big (1)`, or `(1)` when all its remaining values are empty). Closes #12959.
 
 ## 1.6.0 (2026-11-10)
 

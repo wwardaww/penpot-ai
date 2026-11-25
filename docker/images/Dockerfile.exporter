@@ -1,4 +1,4 @@
-FROM dhi.io/node:24.22.3-debian13-dev@sha256:dee4bb11f4cb32ad31000287af8795f772ac801338a166a0e9fbbadd9674a2f8
+FROM dhi.io/node:24.22.3-debian13-dev@sha256:96e25a7d16cd1dff155387709b78bf6fc3d97fe229bd0ee776c569b7908a9b3f
 LABEL maintainer="Penpot <docker@penpot.app>"
 
 ENV LANG=en_US.UTF-8 \
@@ -17,6 +17,7 @@ RUN set -ex; \
       locales \
       ca-certificates \
       gzip \
+      tini \
     ; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*; \
@@ -126,4 +127,5 @@ RUN ./setup && chown -R penpot:penpot /opt/penpot/exporter
 
 USER penpot:penpot
 
+ENTRYPOINT ["/usr/bin/tini", "-s", "--"]
 CMD ["node", "app.js"]

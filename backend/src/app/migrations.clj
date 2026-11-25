@@ -531,9 +531,6 @@
    {:name "0156-reset-pg-storage-defaults"
     :fn (mg/resource "app/migrations/sql/0156-reset-pg-storage-defaults.sql")}
 
-   {:name "0157-add-audit-log-pending-table"
-    :fn (mg/resource "app/migrations/sql/0157-add-audit-log-pending-table.sql")}
-
    {:name "0157-migrate-legacy-file-data"
     :fn (mg/resource "app/migrations/sql/0157-migrate-legacy-file-data.sql")}
 
@@ -545,6 +542,9 @@
 
    {:name "0159-add-file-data-storage-object-id"
     :fn (mg/resource "app/migrations/sql/0159-add-file-data-storage-object-id.sql")}
+
+   {:name "0159-consumer-generalization"
+    :fn (mg/resource "app/migrations/sql/0159-consumer-generalization.sql")}
 
    {:name "penforge-0001-project-settings"
     :fn (mg/resource "app/migrations/sql/penforge-0001-project-settings.sql")}
