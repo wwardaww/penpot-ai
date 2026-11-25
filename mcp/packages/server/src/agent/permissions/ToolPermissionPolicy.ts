@@ -186,11 +186,24 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
         }
         const expanded = path.startsWith("~") ? resolve(homedir(), path.slice(1).replace(/^[\\/]+/, "")) : path;
         const absolute = resolve(this.area.projectRoot, expanded);
-        // a link inside a linked folder (W38) may point into the Penforge home: check its target too
-        return [absolute, ToolPermissionPolicy.realPath(absolute)].some((candidate) => {
-            const rel = relative(this.area!.penforgeHome, candidate);
-            return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
-        });
+        // a link inside a linked folder (W38) may point into the Penforge home: check its target too;
+        // the home may itself be reached through a link, so its real path counts as well
+        const homes = this.homePaths();
+        return [absolute, ToolPermissionPolicy.realPath(absolute)].some((candidate) =>
+            homes.some((home) => {
+                const rel = relative(home, candidate);
+                return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+            })
+        );
+    }
+
+    /** The Penforge home as configured and, when it differs, its real path. */
+    private homePaths(): string[] {
+        if (!this.area) {
+            return [];
+        }
+        const real = ToolPermissionPolicy.realPath(this.area.penforgeHome);
+        return real === this.area.penforgeHome ? [real] : [this.area.penforgeHome, real];
     }
 
     private static realPath(path: string): string {
@@ -210,7 +223,7 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
             return false;
         }
         const normalize = (text: string) => text.replace(/\\/g, "/").toLowerCase();
-        return normalize(command).includes(normalize(this.area.penforgeHome));
+        return this.homePaths().some((home) => normalize(command).includes(normalize(home)));
     }
 
     private withSessionId(input: Record<string, unknown>): Record<string, unknown> {

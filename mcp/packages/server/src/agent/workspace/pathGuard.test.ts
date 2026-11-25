@@ -81,6 +81,17 @@ test("accepts a path through a directory link that stays inside the root", () =>
     assert.equal(guard.contains("alias/file.txt"), true);
 });
 
+test("accepts the real path of a root reached through a link", () => {
+    // the projects folder of the user is a link to another disk
+    const linkedRoot = join(base, "linked-project");
+    symlinkSync(root, linkedRoot, isWindows ? "junction" : "dir");
+    const guard = new PathGuard(linkedRoot);
+    assert.equal(guard.contains(join(root, "app-src", "guide.md")), true);
+    assert.equal(guard.contains(join(linkedRoot, "app-src", "guide.md")), true);
+    assert.equal(guard.contains(join(outside, "secret.txt")), false);
+    assert.equal(guard.contains(join(root, "..", "outside", "secret.txt")), false);
+});
+
 test("rejects a dangling file link", (t) => {
     const link = join(root, "dangling.txt");
     try {

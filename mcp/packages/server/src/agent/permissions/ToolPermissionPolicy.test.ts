@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -119,6 +119,40 @@ test("refuses the Penforge home outside the project without asking", async () =>
     const inside = await policy.decide({ toolName: "Read", input: { file_path: join(project, "a.txt") }, signal });
     assert.equal(inside.allow, true);
 });
+
+test(
+    "refuses the real path of a Penforge home reached through a link",
+    { skip: process.platform === "win32" },
+    async () => {
+        const realHome = join(base, "disk", "penforge-real");
+        const project = join(realHome, "projects", "p1");
+        mkdirSync(project, { recursive: true });
+        mkdirSync(join(realHome, "projects", "other"), { recursive: true });
+        const home = join(base, "penforge-link");
+        symlinkSync(realHome, home, "dir");
+        const linkedProject = join(home, "projects", "p1");
+        const asker = new RecordingAsker({ allow: true, remember: true });
+        const policy = new ToolPermissionPolicy(new PathGuard(linkedProject), asker, () => undefined, {
+            projectRoot: linkedProject,
+            penforgeHome: home,
+        });
+        for (const use of [
+            { toolName: "Read", input: { file_path: join(realHome, "config.json") } },
+            { toolName: "Read", input: { file_path: join(realHome, "projects", "other", "a.txt") } },
+            { toolName: "Bash", input: { command: `cat ${join(realHome, "config.json")}` } },
+        ]) {
+            const decision = await policy.decide({ ...use, signal });
+            assert.equal(decision.allow, false, JSON.stringify(use));
+        }
+        assert.equal(asker.prompts.length, 0, "the user is not even asked");
+        // the project's own files are allowed by either path
+        for (const file of [join(project, "guide.md"), join(linkedProject, "guide.md")]) {
+            const decision = await policy.decide({ toolName: "Write", input: { file_path: file }, signal });
+            assert.equal(decision.allow, true, file);
+        }
+        assert.equal(asker.prompts.length, 0);
+    }
+);
 
 test("commands that only mention a secret are asked, not refused", async () => {
     const asker = new RecordingAsker({ allow: true, remember: false });

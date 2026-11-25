@@ -56,7 +56,7 @@ export class PathGuard {
             throw new PathOutsideRootError(candidate, this.root);
         }
         const lexical = this.platformPath.resolve(this.root, candidate);
-        if (!this.isInside(this.root, lexical)) {
+        if (!this.isInside(this.root, lexical) && !this.isInsideRealRoot(lexical)) {
             throw new PathOutsideRootError(candidate, this.root);
         }
         const realRoot = this.realPath(this.root);
@@ -118,6 +118,18 @@ export class PathGuard {
         }
         const firstSegment = relative.split(this.platformPath.sep)[0];
         return firstSegment !== ".." && !this.platformPath.isAbsolute(relative);
+    }
+
+    /**
+     * Checks a path against the real path of the root: a root reached through a link (a projects
+     * folder linked to another disk) is also named by its real path. False when the root is missing.
+     */
+    private isInsideRealRoot(lexical: string): boolean {
+        try {
+            return this.isInside(this.realPath(this.root), lexical);
+        } catch {
+            return false;
+        }
     }
 
     private realPath(target: string): string {
