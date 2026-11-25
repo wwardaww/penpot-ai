@@ -1,12 +1,24 @@
 import { type ChildProcess, spawn } from "child_process";
 import { randomUUID } from "crypto";
 import { createInterface } from "readline";
+import type { Readable, Writable } from "stream";
 import { createLogger } from "../../logger";
+import type { ClaudeTurnCommand } from "../claude/ClaudeSource";
 import type { ClaudeRunner, RunnerConversation, RunnerEvent, RunnerInput, RunnerOptions } from "./ClaudeRunner";
 import { RunnerInputContent } from "./ClaudeRunner";
 import { type LocalRunnerSettings, PENPOT_MCP_SERVER_NAME } from "./LocalCliRunner";
 import { ClaudeEnvironment } from "./ClaudeEnvironment";
 import { SdkMessageMapper } from "./SdkMessageMapper";
+
+/** Claude Code process of a turn. */
+interface ClaudeProcess {
+    stdin: Writable;
+    stdout: Readable;
+    /** ends the process and its descendants */
+    kill(): void;
+    /** why it did not start, if so */
+    failure(): string | undefined;
+}
 
 /**
  * Fallback runner spawning `claude -p` with `stream-json` input and output.
@@ -28,7 +40,7 @@ export class CliProcessRunner implements ClaudeRunner {
 
     public readonly kind = "local-cli-spawn";
     private readonly logger = createLogger("CliProcessRunner");
-    private readonly running = new Map<string, ChildProcess>();
+    private readonly running = new Map<string, ClaudeProcess>();
 
     constructor(private readonly settings: LocalRunnerSettings) {}
 
@@ -38,23 +50,25 @@ export class CliProcessRunner implements ClaudeRunner {
         opts: RunnerOptions
     ): AsyncIterable<RunnerEvent> {
         const mapper = new SdkMessageMapper(randomUUID(), true);
-        const child = spawn(this.settings.claudePath ?? "claude", this.args(conversation, opts), {
-            cwd: opts.cwd,
-            env: ClaudeEnvironment.forChild() as NodeJS.ProcessEnv,
-            stdio: ["pipe", "pipe", "pipe"],
-            windowsHide: true,
-        });
+        let child: ClaudeProcess;
+        try {
+            const claude = await this.settings.claude?.forTurn();
+            child = this.start(claude, this.args(conversation, opts, claude), opts);
+        } catch (error) {
+            yield mapper.interrupted(error instanceof Error ? error.message : String(error));
+            return;
+        }
         this.running.set(conversation.id, child);
-        const onAbort = () => CliProcessRunner.killTree(child);
+        const onAbort = () => child.kill();
         opts.signal?.addEventListener("abort", onAbort, { once: true });
-        let spawnError: Error | undefined;
-        child.on("error", (error) => (spawnError = error));
-        child.stderr!.on("data", (data) => this.logger.debug("claude stderr: %s", String(data).trimEnd()));
-        child.stdin!.on("error", () => {});
-        child.stdin!.write(JSON.stringify(CliProcessRunner.userMessage(input)) + "\n");
+        if (opts.signal?.aborted) {
+            child.kill();
+        }
+        child.stdin.on("error", () => {});
+        child.stdin.write(JSON.stringify(CliProcessRunner.userMessage(input)) + "\n");
 
         try {
-            for await (const line of createInterface({ input: child.stdout! })) {
+            for await (const line of createInterface({ input: child.stdout })) {
                 if (line.trim().length === 0) {
                     continue;
                 }
@@ -74,20 +88,14 @@ export class CliProcessRunner implements ClaudeRunner {
             }
         } finally {
             opts.signal?.removeEventListener("abort", onAbort);
-            child.stdin!.end();
+            child.stdin.end();
             if (this.running.get(conversation.id) === child) {
                 this.running.delete(conversation.id);
             }
-            if (child.exitCode === null) {
-                CliProcessRunner.killTree(child);
-            }
+            child.kill();
         }
         if (!mapper.isFinished) {
-            const reason = opts.signal?.aborted
-                ? "cancelled"
-                : spawnError
-                  ? `Could not start claude: ${spawnError.message}`
-                  : "Claude stopped without a result";
+            const reason = opts.signal?.aborted ? "cancelled" : (child.failure() ?? "Claude stopped without a result");
             yield mapper.interrupted(reason);
         }
     }
@@ -95,12 +103,44 @@ export class CliProcessRunner implements ClaudeRunner {
     public cancel(conversationId?: string): void {
         for (const [id, child] of this.running) {
             if (conversationId === undefined || id === conversationId) {
-                CliProcessRunner.killTree(child);
+                child.kill();
             }
         }
     }
 
-    private args(conversation: RunnerConversation, opts: RunnerOptions): string[] {
+    private start(claude: ClaudeTurnCommand | undefined, args: string[], opts: RunnerOptions): ClaudeProcess {
+        const env = (opts.env ?? ClaudeEnvironment.forChild()) as NodeJS.ProcessEnv;
+        const cwd = opts.cwd;
+        const file = (claude ? claude.path : this.settings.claudePath) ?? "claude";
+        const onStderr = (text: string) => this.logger.debug("claude stderr: %s", text.trimEnd());
+        if (claude?.wrapper) {
+            const wrapped = claude.start({ file, args, cwd, env }, onStderr);
+            let startError: Error | undefined;
+            wrapped.on("error", (error: Error) => (startError = error));
+            return {
+                stdin: wrapped.stdin,
+                stdout: wrapped.stdout,
+                kill: () => wrapped.kill(),
+                failure: () => claude.startFailure(wrapped) ?? CliProcessRunner.startText(startError),
+            };
+        }
+        const child = spawn(file, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+        let spawnError: Error | undefined;
+        child.on("error", (error) => (spawnError = error));
+        child.stderr.on("data", (data) => onStderr(String(data)));
+        return {
+            stdin: child.stdin,
+            stdout: child.stdout,
+            kill: () => CliProcessRunner.killTree(child),
+            failure: () => CliProcessRunner.startText(spawnError),
+        };
+    }
+
+    private static startText(error: Error | undefined): string | undefined {
+        return error && `Could not start claude: ${error.message}`;
+    }
+
+    private args(conversation: RunnerConversation, opts: RunnerOptions, claude?: ClaudeTurnCommand): string[] {
         const mcpConfig = { mcpServers: { [PENPOT_MCP_SERVER_NAME]: { type: "http", url: this.settings.mcpUrl } } };
         const args = [
             "-p",
@@ -131,7 +171,8 @@ export class CliProcessRunner implements ClaudeRunner {
         if (conversation.resumeSessionId) {
             args.push("--resume", conversation.resumeSessionId);
         }
-        if (this.settings.model) {
+        // a wrapper chooses its model itself
+        if (this.settings.model && !claude?.wrapper) {
             args.push("--model", this.settings.model);
         }
         return args;

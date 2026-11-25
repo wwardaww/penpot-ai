@@ -10,6 +10,8 @@ import type {
     ToolPermissionHandler,
 } from "./ClaudeRunner";
 import { RunnerInputContent } from "./ClaudeRunner";
+import type { WrappedClaude } from "../claude/ClaudeLauncher";
+import type { ClaudeSource, ClaudeTurnCommand } from "../claude/ClaudeSource";
 import { ClaudeEnvironment } from "./ClaudeEnvironment";
 import { SdkMessageMapper } from "./SdkMessageMapper";
 
@@ -19,6 +21,8 @@ export interface LocalRunnerSettings {
     mcpUrl: string;
     /** path of the `claude` executable; the SDK's bundled one when omitted */
     claudePath?: string;
+    /** the user's Claude command, read at the start of every turn; replaces {@link claudePath} */
+    claude?: ClaudeSource;
     /** Claude model override */
     model?: string;
 }
@@ -54,10 +58,29 @@ export class LocalCliRunner implements ClaudeRunner {
         const resultReceived = new Promise<void>((resolve) => (resultSeen = resolve));
         abort.signal.addEventListener("abort", () => resultSeen(), { once: true });
 
-        const stream = query({
-            prompt: LocalCliRunner.userMessages(input, resultReceived),
-            options: this.options(conversation, opts, abort),
-        });
+        let claude: ClaudeTurnCommand | undefined;
+        try {
+            claude = await this.settings.claude?.forTurn();
+        } catch (error) {
+            this.unregister(conversation.id, abort);
+            yield mapper.interrupted(LocalCliRunner.describe(error));
+            return;
+        }
+        if (abort.signal.aborted) {
+            this.unregister(conversation.id, abort);
+            yield mapper.interrupted("cancelled");
+            return;
+        }
+        const started: { process?: WrappedClaude } = {};
+        const options = this.options(conversation, opts, abort, claude);
+        if (claude?.wrapper) {
+            const turn = claude;
+            options.spawnClaudeCodeProcess = ({ command, args, cwd, env }) => {
+                started.process = turn.start({ file: command, args, cwd: cwd ?? opts.cwd, env }, options.stderr);
+                return started.process;
+            };
+        }
+        const stream = query({ prompt: LocalCliRunner.userMessages(input, resultReceived), options });
         try {
             for await (const message of stream) {
                 if (message.type === "system" && message.subtype === "init") {
@@ -76,7 +99,8 @@ export class LocalCliRunner implements ClaudeRunner {
             }
         } catch (error) {
             if (!mapper.isFinished) {
-                yield mapper.interrupted(abort.signal.aborted ? "cancelled" : LocalCliRunner.describe(error));
+                const reason = claude?.startFailure(started.process) ?? LocalCliRunner.describe(error);
+                yield mapper.interrupted(abort.signal.aborted ? "cancelled" : reason);
             }
         } finally {
             resultSeen();
@@ -84,7 +108,8 @@ export class LocalCliRunner implements ClaudeRunner {
             stream.close();
         }
         if (!mapper.isFinished) {
-            yield mapper.interrupted(abort.signal.aborted ? "cancelled" : "Claude stopped without a result");
+            const reason = claude?.startFailure(started.process) ?? "Claude stopped without a result";
+            yield mapper.interrupted(abort.signal.aborted ? "cancelled" : reason);
         }
     }
 
@@ -96,13 +121,19 @@ export class LocalCliRunner implements ClaudeRunner {
         }
     }
 
-    private options(conversation: RunnerConversation, opts: RunnerOptions, abort: AbortController): Options {
+    private options(
+        conversation: RunnerConversation,
+        opts: RunnerOptions,
+        abort: AbortController,
+        claude?: ClaudeTurnCommand
+    ): Options {
         const permissions = opts.permissions;
         return {
             cwd: opts.cwd,
             env: opts.env ?? ClaudeEnvironment.forChild(),
-            model: opts.model ?? this.settings.model,
-            pathToClaudeCodeExecutable: this.settings.claudePath,
+            // a wrapper chooses its model itself
+            model: claude?.wrapper ? undefined : (opts.model ?? this.settings.model),
+            pathToClaudeCodeExecutable: claude ? claude.path : this.settings.claudePath,
             abortController: abort,
             includePartialMessages: true,
             resume: conversation.resumeSessionId,
