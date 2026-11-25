@@ -544,6 +544,7 @@ describe("fix-comments workflow", () => {
                 { id: "thread-5", label: "Red" },
                 { id: "skip", label: "Skip these" },
             ],
+            recommended: "skip",
         });
         assert.deepEqual(
             ctx.callsOf("resolve_canvas_comment").map((args) => args.threadId),

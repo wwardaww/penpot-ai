@@ -527,6 +527,7 @@ export class AppBuilder {
                 { id: "design", label: this.text.keepDesign() },
                 { id: "instruction", label: this.text.followInstruction() },
             ],
+            recommended: "design",
         });
         if (answer !== "instruction") {
             return;

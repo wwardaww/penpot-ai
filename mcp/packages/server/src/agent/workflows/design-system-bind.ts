@@ -197,6 +197,7 @@ async function link(
                     ? `Re-design with the new system? This restyles the whole file with "${name}" (a checkpoint is saved first).`
                     : `Apply "${name}" to the existing design now? (A checkpoint is saved first.)`,
                 options: REDESIGN_OPTIONS,
+                recommended: "later",
             });
         }
         if (answer === "apply") {

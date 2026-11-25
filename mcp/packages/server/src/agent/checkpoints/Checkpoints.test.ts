@@ -300,6 +300,7 @@ test("restore asks first and changes nothing when the user says no", async () =>
 
     assert.equal(questions.length, 1);
     assert.match(questions[0].text, /undone/);
+    assert.equal(questions[0].recommended, undefined, "the permission mode auto never decides this");
     assert.deepEqual(
         questions[0].options.map((option) => option.id),
         [Checkpoints.CONFIRM_OPTION, Checkpoints.CANCEL_OPTION]

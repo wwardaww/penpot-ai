@@ -1,6 +1,7 @@
 import type { AgentContext, Attachment, RunnerEvent, WorkflowToolsApi } from "@penpot/mcp-common";
 import type { ClaudeRunner, RunnerConversation, ToolPermissionHandler } from "../runner/ClaudeRunner";
 import { LinkedProjectPrompt } from "../linked/LinkedProjectPrompt";
+import type { PermissionModeState } from "../permissions/PermissionModeState";
 import type { PromptRegistry } from "../prompts/promptRegistry";
 import { AppFolderPrompt } from "../workspace/AppFolderPrompt";
 import type { ProjectWorkspace } from "../workspace/ProjectWorkspace";
@@ -14,6 +15,8 @@ export interface TurnSetup {
     permissions: ToolPermissionHandler;
     tools: WorkflowToolsApi | null;
     signal?: AbortSignal;
+    /** permission mode in force; `manual` when unset */
+    permissionMode?: PermissionModeState;
 }
 
 /** What to ask Claude. */
@@ -39,6 +42,14 @@ export interface TurnRequest {
  * attachments), and runs the turn in the project folder.
  */
 export class TurnRunner {
+    /** Last in the prompt: it holds over the parts that tell Claude to ask first. */
+    private static readonly AWAY =
+        "## The user is away\n" +
+        "The user is away and answers no questions now. Do not stop to ask, and do not end your reply with a " +
+        "question. Where you would ask, take the option you would recommend, or else the most sensible one, and " +
+        "go on until the request is done. Say in your reply what you assumed, so the user can change it. If a " +
+        "tool use is refused, do not look for a way around it: go on without it and say what is left to do.";
+
     /**
      * @param runner - runs the turns
      * @param prompts - the prompt templates
@@ -77,6 +88,7 @@ export class TurnRunner {
                 TurnRunner.selectionNote(request),
                 animationNote,
                 request.systemPromptAppend,
+                setup.permissionMode?.unattended ? TurnRunner.AWAY : undefined,
             ]
                 .filter(Boolean)
                 .join("\n\n"),

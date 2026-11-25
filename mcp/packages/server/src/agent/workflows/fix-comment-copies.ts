@@ -316,6 +316,7 @@ export class CommentFixCopies {
                 { id: CommentFixCopies.APPLY, label: "Change them too" },
                 { id: CommentFixCopies.SKIP, label: "Leave them" },
             ],
+            recommended: CommentFixCopies.SKIP,
         };
     }
 

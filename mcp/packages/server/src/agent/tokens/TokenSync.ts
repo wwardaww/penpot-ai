@@ -299,6 +299,7 @@ export class TokenSync {
                 { id: "replace", label: "Replace it" },
                 { id: "keep", label: "Keep my edits" },
             ],
+            recommended: "keep",
         });
         return answer === "replace";
     }

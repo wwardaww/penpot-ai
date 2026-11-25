@@ -227,6 +227,7 @@ export class VisualQaFlow {
                 { id: "fix", label: "Fix anyway" },
                 { id: "check", label: "Only check" },
             ],
+            recommended: "fix",
         });
         return answer === "fix";
     }

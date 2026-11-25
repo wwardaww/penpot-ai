@@ -37,7 +37,8 @@ interface WorkflowRun {
  *
  * Gives each run a {@link WorkflowContext}, reports `workflow.started` / `workflow.event` /
  * `workflow.done`, and implements questions: `ctx.ask()` sends a `question` event and waits for the
- * built-in `answer` workflow. Runs are aborted when cancelled or when their client disconnects.
+ * built-in `answer` workflow; in the permission mode `auto` a question's recommended option is taken
+ * at once. Runs are aborted when cancelled or when their client disconnects.
  */
 export class WorkflowEngine {
     private readonly logger = createLogger("WorkflowEngine");
@@ -212,24 +213,46 @@ export class WorkflowEngine {
             return Promise.reject(new Error("A question needs at least one option"));
         }
         const questionId = randomUUID();
+        const mode = client.permissionMode;
         return new Promise<string>((resolve, reject) => {
-            run.questions.set(questionId, {
+            const unfollow = mode?.onChange(() => answerUnattended());
+            const close = () => {
+                unfollow?.();
+                run.questions.delete(questionId);
+            };
+            const pending: PendingQuestion = {
                 optionIds: new Set(question.options.map((option) => option.id)),
                 resolve: (optionId) => {
-                    run.questions.delete(questionId);
+                    close();
                     resolve(optionId);
                 },
                 reject: (error) => {
-                    run.questions.delete(questionId);
+                    close();
                     reject(error);
                 },
-            });
+            };
+            // the question and its answer are sent all the same, so that both stay visible
+            const answerUnattended = () => {
+                const optionId = question.recommended;
+                if (!mode?.unattended || optionId === undefined || !run.questions.has(questionId)) {
+                    return;
+                }
+                client.send({
+                    type: "workflow.event",
+                    runId: run.runId,
+                    kind: "answered",
+                    payload: { questionId, optionId, auto: true },
+                });
+                pending.resolve(optionId);
+            };
+            run.questions.set(questionId, pending);
             client.send({
                 type: "workflow.event",
                 runId: run.runId,
                 kind: "question",
                 payload: { questionId, text: question.text, options: question.options },
             });
+            answerUnattended();
         });
     }
 

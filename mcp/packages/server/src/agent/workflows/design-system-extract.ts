@@ -473,6 +473,7 @@ async function askPublish(
             { id: EXTRACT_PUBLISH_OPTIONS.publish, label: "Publish" },
             { id: EXTRACT_PUBLISH_OPTIONS.later, label: "Not now" },
         ],
+        recommended: EXTRACT_PUBLISH_OPTIONS.later,
     });
     return choice === EXTRACT_PUBLISH_OPTIONS.publish;
 }

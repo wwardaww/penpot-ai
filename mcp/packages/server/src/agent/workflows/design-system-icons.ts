@@ -117,6 +117,8 @@ export const workflow: Workflow<DesignSystemIconsParams> = {
                             { id: ICON_OPTIONS.import, label: `Import ${set.icons.length} icons` },
                             { id: ICON_OPTIONS.cancel, label: "Cancel" },
                         ],
+                        // without a license nobody but the user can decide to use the icons
+                        recommended: set.license?.spdx ? ICON_OPTIONS.import : ICON_OPTIONS.cancel,
                     });
                     if (choice !== ICON_OPTIONS.import) {
                         const cancelled: DesignSystemIconsResult = {

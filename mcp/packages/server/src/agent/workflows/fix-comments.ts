@@ -395,6 +395,7 @@ class FixCommentsRun {
                     })),
                     { id: "skip", label: "Skip these" },
                 ],
+                recommended: "skip",
             });
             const picked = conflicting.some((thread) => thread.threadId === choice);
             for (const thread of conflicting) {
@@ -425,6 +426,7 @@ class FixCommentsRun {
                     { id: "apply", label: "Do it" },
                     { id: "leave", label: "Leave it to me" },
                 ],
+                recommended: "apply",
             });
             if (choice === "apply") {
                 structural.add(thread.threadId);

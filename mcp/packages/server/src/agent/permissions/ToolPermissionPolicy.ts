@@ -4,6 +4,7 @@ import { isAbsolute, relative, resolve } from "path";
 import { PENPOT_MCP_SERVER_NAME } from "../runner/LocalCliRunner";
 import type { ToolPermissionHandler, ToolUseDecision, ToolUseRequest } from "../runner/ClaudeRunner";
 import type { PathGuard } from "../workspace/pathGuard";
+import { AutoApprovalLimits } from "./AutoApprovalLimits";
 import { DestructiveDesign } from "./DestructiveDesign";
 import type { PermissionAsker, PermissionPrompt } from "./PermissionBroker";
 
@@ -23,6 +24,10 @@ import type { PermissionAsker, PermissionPrompt } from "./PermissionBroker";
  *   approved interpreter (`node`, `python`) can still reach those files through a script, and
  *   so can any program that runs as the user. DPAPI encryption of the tokens does not stop a
  *   program of the same user either.
+ *
+ * In the permission mode `auto` the asker approves what this policy would ask about, except for
+ * what {@link AutoApprovalLimits} refuses (changes outside the project, publishing); what the
+ * policy refuses without asking stays refused in every mode.
  */
 export class ToolPermissionPolicy implements ToolPermissionHandler {
     private static readonly PENPOT_TOOL_PREFIX = `mcp__${PENPOT_MCP_SERVER_NAME}__`;
@@ -42,13 +47,13 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
     private static readonly PROTECTED_DENIED =
         "Penforge's own files (account tokens, settings, other projects) are not available to Claude.";
 
-    private readonly remembered = new Set<string>();
+    private static readonly AWAY =
+        "The user is away and cannot answer. Take the option you would recommend, or else the most sensible one, " +
+        "go on, and say in your reply what you assumed.";
 
-    /**
-     * @param guard - guard of the project folder
-     * @param asker - asks the user
-     * @param mcpSessionId - gets the Penpot MCP session of the client's tab
-     */
+    private readonly remembered = new Set<string>();
+    private readonly limits: AutoApprovalLimits;
+
     /**
      * @param guard - guard of the project folder
      * @param asker - asks the user
@@ -60,7 +65,12 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
         private readonly asker: PermissionAsker,
         private readonly mcpSessionId: () => string | undefined,
         private readonly area?: { projectRoot: string; penforgeHome: string }
-    ) {}
+    ) {
+        this.limits = new AutoApprovalLimits({
+            cwd: area?.projectRoot ?? guard.root,
+            contains: (path) => this.isInProject(path),
+        });
+    }
 
     public async decide(request: ToolUseRequest): Promise<ToolUseDecision> {
         const { toolName, input } = request;
@@ -81,7 +91,12 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
             return decision.allow ? { allow: true, updatedInput } : decision;
         }
         if (toolName === "AskUserQuestion") {
-            return { allow: false, message: "Ask the user in your reply instead; this tool is not available." };
+            return {
+                allow: false,
+                message: this.asker.unattended
+                    ? ToolPermissionPolicy.AWAY
+                    : "Ask the user in your reply instead; this tool is not available.",
+            };
         }
         if (ToolPermissionPolicy.SAFE_TOOLS.has(toolName)) {
             return { allow: true };
@@ -101,6 +116,7 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
                     : "Allow changing a file outside the project?",
                 description: `Claude wants to ${isRead ? "read" : "change"} ${outside.join(", ")}`,
                 risk: isRead ? "medium" : "high",
+                autoRefusal: this.limits.files(outside, isRead),
             });
         }
         if (ToolPermissionPolicy.SHELL_TOOLS.has(toolName)) {
@@ -115,6 +131,7 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
                 title: "Allow running a command?",
                 description: `Claude wants to run: ${command}`,
                 risk: "medium",
+                autoRefusal: this.limits.command(command),
             });
         }
         if (toolName === "WebFetch" || toolName === "WebSearch") {
@@ -132,6 +149,7 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
             title: `Allow ${toolName}?`,
             description: `Claude wants to use the tool ${toolName}.`,
             risk: "medium",
+            autoRefusal: this.limits.tool(toolName, input),
         });
     }
 
@@ -143,12 +161,14 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
         request: ToolUseRequest,
         prompt: PermissionPrompt
     ): Promise<ToolUseDecision> {
-        if (key !== null && this.remembered.has(key)) {
+        // a remembered answer is no reason to publish while the user is away
+        const refusedAway = this.asker.unattended && (prompt.autoRefusal ?? null) !== null;
+        if (key !== null && this.remembered.has(key) && !refusedAway) {
             return { allow: true };
         }
         const answer = await this.asker.ask(prompt, request.signal);
         if (!answer.allow) {
-            return { allow: false, message: "The user did not allow this." };
+            return { allow: false, message: answer.reason ?? "The user did not allow this." };
         }
         if (answer.remember && key !== null) {
             this.remembered.add(key);
@@ -205,6 +225,15 @@ export class ToolPermissionPolicy implements ToolPermissionHandler {
         return ToolPermissionPolicy.PATH_FIELDS.map((field) => input[field])
             .filter((value): value is string => typeof value === "string" && value.length > 0)
             .filter((value) => !this.guard.contains(value));
+    }
+
+    /** Whether a path is inside the project; a path that cannot be checked is not. */
+    private isInProject(path: string): boolean {
+        try {
+            return this.guard.contains(path);
+        } catch {
+            return false;
+        }
     }
 
     private static hostOf(url: unknown): string {

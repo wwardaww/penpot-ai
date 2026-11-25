@@ -129,6 +129,7 @@ async function saveCheckpoint(ctx: WorkflowContext, run: DesignMdRun, scripts: P
                 { id: DesignMdRun.APPLY_WITHOUT_CHECKPOINT, label: "Apply anyway" },
                 { id: DesignMdRun.STOP, label: "Stop" },
             ],
+            recommended: DesignMdRun.STOP,
         });
         if (choice !== DesignMdRun.APPLY_WITHOUT_CHECKPOINT) {
             throw new DesignMdFailure("stopped", "Stopped before changing the file");

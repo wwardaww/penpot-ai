@@ -126,7 +126,11 @@ export class BuildPlanner {
         }
         for (;;) {
             const payload = this.payload(plan);
-            const answer = await this.ctx.ask({ text: this.questionText(plan, payload), options: payload.options });
+            const answer = await this.ctx.ask({
+                text: this.questionText(plan, payload),
+                options: payload.options,
+                recommended: plan.mode === "none" ? "cancel" : "build",
+            });
             if (answer === "rebuild") {
                 plan = await this.fullPlan(design, plan.stack);
                 await this.publish(plan);

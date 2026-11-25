@@ -185,6 +185,7 @@ export const workflow: Workflow<DesignSystemGenerateParams> = {
                             { id: PUBLISH_OPTIONS.publish, label: "Publish" },
                             { id: PUBLISH_OPTIONS.later, label: "Not now" },
                         ],
+                        recommended: PUBLISH_OPTIONS.later,
                     });
                     publish = choice === PUBLISH_OPTIONS.publish;
                 }

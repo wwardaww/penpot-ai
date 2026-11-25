@@ -346,6 +346,7 @@ export class ImportCleaner {
                 { id: "keep", label: "Keep them" },
                 { id: "delete", label: "Delete them" },
             ],
+            recommended: "keep",
         });
         return { remove: answer === "delete" };
     }

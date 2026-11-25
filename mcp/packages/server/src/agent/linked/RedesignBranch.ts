@@ -112,6 +112,7 @@ export class RedesignBranch {
                               { id: "init", label: "Create a git repository" },
                               { id: "cancel", label: "Cancel" },
                           ],
+                recommended: "init",
             });
             if (answer === "skip" && this.kind === "game") {
                 return { state: "no-git" };
@@ -133,6 +134,8 @@ export class RedesignBranch {
                     { id: "commit", label: "Keep them on the new branch" },
                     { id: "cancel", label: "Cancel" },
                 ],
+                // the files stay as they are and nothing is lost
+                recommended: "commit",
             });
             if (answer === "stash") {
                 await git.stash();

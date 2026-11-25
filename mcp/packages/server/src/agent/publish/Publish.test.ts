@@ -261,6 +261,7 @@ function workflowContext(
         signal: controller.signal,
         emit: (kind: WorkflowEventKind, payload: unknown) => events.push({ kind, payload }),
         ask: async (question: WorkflowQuestion) => {
+            assert.equal(question.recommended, undefined, "the permission mode auto never publishes");
             questions.push(question);
             return answers.shift() ?? "cancel";
         },

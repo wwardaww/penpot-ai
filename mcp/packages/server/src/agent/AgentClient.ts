@@ -1,5 +1,6 @@
 import type { AgentErrorCode, DaemonMessage } from "@penpot/mcp-common";
 import type { TurnSetup } from "./chat/TurnRunner";
+import type { PermissionModeState } from "./permissions/PermissionModeState";
 
 /**
  * Error reported to the client as an `error` message with the given code (and, optionally, a finer
@@ -25,6 +26,8 @@ export interface AgentClient {
     readonly id: string;
     /** aborted when the client disconnects */
     readonly closed: AbortSignal;
+    /** permission mode in force; `manual` when unset */
+    readonly permissionMode?: PermissionModeState;
 
     /** Sends a message to the client (dropped once disconnected). */
     send(message: DaemonMessage): void;

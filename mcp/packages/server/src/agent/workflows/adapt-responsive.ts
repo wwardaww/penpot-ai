@@ -595,6 +595,7 @@ export class AdaptResponsive {
                     { id: "create", label: "Make another" },
                     { id: "cancel", label: "Cancel" },
                 ],
+                recommended: "create",
             });
             if (answer !== "create") {
                 const kept: AdaptKeptPayload = { status: "kept", target, existing };
