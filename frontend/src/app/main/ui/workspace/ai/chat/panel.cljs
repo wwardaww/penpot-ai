@@ -32,6 +32,7 @@
    [app.main.ui.workspace.ai.design-system.start :refer [design-system-start*]]
    [app.main.ui.workspace.ai.detached.placeholder :refer [ref:detached? detach-button* detached-placeholder*]]
    [app.main.ui.workspace.ai.linked.panel :refer [linked-project-panel*]]
+   [app.main.ui.workspace.ai.permission-mode :refer [permission-mode-switch*]]
    [app.util.dom :as dom]
    [app.util.i18n :refer [tr]]
    [app.util.keyboard :as kbd]
@@ -907,6 +908,7 @@
                        (tr "penforge.chat.status.disconnected"))}]
       [:> text* {:as "h2" :typography t/headline-small :class (stl/css :panel-title)}
        (tr "penforge.chat.title")]
+      [:> permission-mode-switch* {}]
       [:> icon-button* {:variant "ghost"
                         :icon i/add
                         :disabled (empty? entries)
