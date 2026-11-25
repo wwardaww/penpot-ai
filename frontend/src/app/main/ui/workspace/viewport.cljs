@@ -441,6 +441,9 @@
                                ;; disable thumbnails when previewing a version
                                :disable-thumbnails (some? preview-id)}]]]]
 
+     (when (contains? cf/flags :ai)
+       [:> ai-activity* {:show-rulers show-rulers?}])
+
      [:svg.viewport-controls
       {:xmlns "http://www.w3.org/2000/svg"
        :xmlnsXlink "http://www.w3.org/1999/xlink"
@@ -675,8 +678,6 @@
        (when show-presence?
          [:& presence/active-cursors
           {:page-id page-id}])
-
-       (when (contains? cf/flags :ai) [:> ai-activity* {:zoom zoom :page-id page-id}])
 
        (when-not hide-ui?
          [:> rulers/rulers*

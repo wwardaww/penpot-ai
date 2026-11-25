@@ -4,10 +4,22 @@
 //
 // Copyright (c) KALEIDOS SUBSIDIARY SL
 
+@use "ds/_borders.scss" as *;
+@use "ds/_utils.scss" as *;
 @use "ds/typography.scss" as t;
 
+// The glow is four strips along the edges of the canvas. Each is painted
+// once, as two gradients of which the second one fades in and out: only
+// opacity changes, on layers of their own. No layer covers the canvas
+// between the strips, and the corners are rounded in the strips, because
+// a rounded clip around them would be drawn again in every frame.
 .activity {
-  opacity: 1;
+  --activity-violet: #7c5cff;
+  --activity-blue: #22c3ff;
+  --activity-pink: #ff5fb0;
+
+  position: absolute;
+  pointer-events: none;
   transition: opacity 0.6s ease-out;
 }
 
@@ -15,33 +27,125 @@
   opacity: 0;
 }
 
-.glow {
-  opacity: 0.7;
+.edge {
+  --edge-direction: to bottom;
+  --edge-color: var(--activity-violet);
+  --edge-color-2: var(--activity-blue);
+  --edge-radius: #{$br-12} #{$br-12} 0 0;
+
+  position: absolute;
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: var(--edge-radius);
+  }
+
+  &::before {
+    background: linear-gradient(
+      var(--edge-direction),
+      var(--edge-color) #{px2rem(2)},
+      color-mix(in srgb, var(--edge-color) 35%, transparent) #{px2rem(2)},
+      transparent
+    );
+  }
+
+  &::after {
+    background: linear-gradient(
+      var(--edge-direction),
+      var(--edge-color-2) #{px2rem(2)},
+      color-mix(in srgb, var(--edge-color-2) 55%, transparent) #{px2rem(2)},
+      transparent
+    );
+    opacity: 0.35;
+    animation: ai-activity-pulse 2.4s ease-in-out infinite;
+    will-change: opacity;
+  }
 }
 
-.shimmer {
-  opacity: 0.25;
+.edge-top,
+.edge-bottom {
+  inset-inline: 0;
+  block-size: px2rem(28);
 }
 
-.animated .glow {
-  animation: ai-activity-pulse 1.6s ease-in-out infinite;
+.edge-left,
+.edge-right {
+  inset-block: 0;
+  inline-size: px2rem(28);
+}
+
+.edge-top {
+  inset-block-start: 0;
+}
+
+.edge-right {
+  --edge-direction: to left;
+  --edge-color: var(--activity-blue);
+  --edge-color-2: var(--activity-pink);
+  --edge-radius: 0 #{$br-12} #{$br-12} 0;
+
+  inset-inline-end: 0;
+
+  &::after {
+    animation-delay: -0.6s;
+  }
+}
+
+.edge-bottom {
+  --edge-direction: to top;
+  --edge-color: var(--activity-pink);
+  --edge-color-2: var(--activity-violet);
+  --edge-radius: 0 0 #{$br-12} #{$br-12};
+
+  inset-block-end: 0;
+
+  &::after {
+    animation-delay: -1.2s;
+  }
+}
+
+.edge-left {
+  --edge-direction: to right;
+  --edge-color: var(--activity-violet);
+  --edge-color-2: var(--activity-pink);
+  --edge-radius: #{$br-12} 0 0 #{$br-12};
+
+  inset-inline-start: 0;
+
+  &::after {
+    animation-delay: -1.8s;
+  }
+}
+
+.badge {
+  @include t.use-typography("body-small");
+
+  position: absolute;
+  inset-block-start: var(--sp-s);
+  inset-inline-end: var(--sp-s);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs);
+  padding: var(--sp-xxs) var(--sp-s);
+  border-radius: $br-12;
+  background: linear-gradient(135deg, var(--activity-violet), var(--activity-blue), var(--activity-pink));
+  color: var(--color-static-white);
+  font-weight: 600;
 }
 
 .sparkle {
+  inline-size: px2rem(14);
+  block-size: px2rem(14);
   fill: var(--color-static-white);
-}
-
-.badge-text {
-  @include t.use-typography("body-small");
-
-  fill: var(--color-static-white);
-  font-weight: 600;
 }
 
 @keyframes ai-activity-pulse {
   0%,
   100% {
-    opacity: 0.35;
+    opacity: 0.2;
   }
 
   50% {
@@ -54,7 +158,7 @@
     transition: none;
   }
 
-  .animated .glow {
+  .edge::after {
     animation: none;
   }
 }
