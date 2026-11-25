@@ -132,6 +132,7 @@
         :settings-subscription
         :settings-integrations
         :settings-notifications
+        :settings-ai
         :settings-shortcuts)
        (let [params (get params :query)
              error-report-id (some-> params :error-report-id uuid/parse*)]

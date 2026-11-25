@@ -34,6 +34,7 @@
    [frontend-tests.data.ai-publish-test]
    [frontend-tests.data.ai-redesign-checklist-test]
    [frontend-tests.data.ai-redesigned-apps-test]
+   [frontend-tests.data.ai-settings-test]
    [frontend-tests.data.ai-token-sync-test]
    [frontend-tests.data.auth-test]
    [frontend-tests.data.comments-batches-test]
@@ -295,6 +296,7 @@
    'frontend-tests.data.ai-actions-test
    'frontend-tests.data.ai-apps-test
    'frontend-tests.data.ai-redesigned-apps-test
+   'frontend-tests.data.ai-settings-test
    'frontend-tests.data.ai-design-system-binding-test
    'frontend-tests.data.ai-design-system-extract-test
    'frontend-tests.data.ai-design-system-test

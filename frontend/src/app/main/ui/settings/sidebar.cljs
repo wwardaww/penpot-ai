@@ -43,6 +43,9 @@
 (def ^:private go-settings-notifications
   #(st/emit! (rt/nav :settings-notifications)))
 
+(def ^:private go-settings-ai
+  #(st/emit! (rt/nav :settings-ai)))
+
 (def ^:private go-settings-shortcuts
   #(st/emit! (rt/nav :settings-shortcuts)))
 
@@ -64,6 +67,7 @@
         subscription?  (= section :settings-subscription)
         integrations?  (= section :settings-integrations)
         notifications? (= section :settings-notifications)
+        ai?            (= section :settings-ai)
         shortcuts?     (= section :settings-shortcuts)
         team-id        (or (dtm/get-last-team-id)
                            (:default-team-id profile))
@@ -100,6 +104,13 @@
                                   :settings-item true)
              :on-click go-settings-notifications}
         [:span {:class (stl/css :element-title)} (tr "labels.notifications")]]
+
+       (when (contains? cf/flags :ai)
+         [:li {:class (stl/css-case :current ai?
+                                    :settings-item true)
+               :on-click go-settings-ai
+               :data-testid "settings-ai"}
+          [:span {:class (stl/css :element-title)} (tr "penforge.settings.title")]])
 
        (when (contains? cf/flags :custom-shortcuts)
          [:li {:class (stl/css-case :current shortcuts?

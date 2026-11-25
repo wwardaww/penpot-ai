@@ -29,6 +29,8 @@
    [app.main.data.ai.actions.redesign]
    [app.main.data.ai.actions.redesign-code]
    [app.main.data.ai.actions.token-sync]
+   ;; permission mode; records the daemon's own answers in the chat
+   [app.main.data.ai.settings]
    ;; W36: name dialog of "Create design system from this file"
    [app.main.ui.dashboard.penforge.design-systems.from-file]
    ;; W15: registers the audit results modal

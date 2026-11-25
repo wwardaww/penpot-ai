@@ -255,7 +255,21 @@
 
    ["project.output.preview" schema:output-pick]
 
-   ["project.output.set" schema:output-pick]])
+   ["project.output.set" schema:output-pick]
+
+   ;; Claude command and permission mode
+   ["settings.get"
+    [:map [:type :string] [:rid :string]]]
+
+   ["settings.set"
+    [:map
+     [:type :string]
+     [:rid :string]
+     [:claude-command {:optional true} :string]
+     [:permission-mode {:optional true} [:enum "manual" "auto"]]]]
+
+   ["settings.test"
+    [:map [:type :string] [:rid :string] [:claude-command :string]]]])
 
 ;; --- Daemon -> client
 
@@ -317,6 +331,14 @@
 
    ["permission.closed"
     [:map [:type :string] [:request-id :string]]]
+
+   ;; the daemon answered a permission.request itself (mode `auto`)
+   ["permission.answered"
+    [:map
+     [:type :string]
+     [:request-id :string]
+     [:allow :boolean]
+     [:auto [:= true]]]]
 
    ["workflow.started"
     [:map [:type :string] [:rid :string] [:run-id :string] [:name :string]]]
@@ -448,6 +470,26 @@
        [:path :string]
        [:sub-folder :boolean]
        [:existing :boolean]]]]]
+
+   ;; Claude command and permission mode
+   ["settings"
+    [:map
+     [:type :string]
+     [:rid {:optional true} :string]
+     [:scope [:enum "machine" "session"]]
+     [:permission-mode [:enum "manual" "auto"]]
+     [:claude-command {:optional true} :string]]]
+
+   ["settings.tested"
+    [:map
+     [:type :string]
+     [:rid :string]
+     [:claude-command :string]
+     [:found :boolean]
+     [:kind {:optional true} :string]
+     [:path {:optional true} :string]
+     [:version {:optional true} :string]
+     [:problem {:optional true} :string]]]
 
    ;; a design tool found no MCP plugin session for this tab: restart
    ;; the hidden plugin
@@ -657,6 +699,25 @@
   {:type "fonts.files"
    :rid (or rid (next-rid))
    :project-id (str project-id)})
+
+;; Claude command and permission mode
+
+(defn settings-get
+  []
+  {:type "settings.get" :rid (next-dialog-rid)})
+
+(defn settings-set
+  [{:keys [claude-command permission-mode]}]
+  (cond-> {:type "settings.set" :rid (next-dialog-rid)}
+    (some? claude-command)
+    (assoc :claude-command claude-command)
+
+    (some? permission-mode)
+    (assoc :permission-mode (name permission-mode))))
+
+(defn settings-test
+  [claude-command]
+  {:type "settings.test" :rid (next-dialog-rid) :claude-command claude-command})
 
 (defn workflow-run
   [{:keys [rid name params]}]

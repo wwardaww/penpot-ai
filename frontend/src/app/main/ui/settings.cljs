@@ -7,6 +7,7 @@
 (ns app.main.ui.settings
   (:require-macros [app.main.style :as stl])
   (:require
+   [app.main.data.ai.client :as ai-client]
    [app.main.data.dashboard.shortcuts :as sc]
    [app.main.refs :as refs]
    [app.main.router :as rt]
@@ -15,6 +16,7 @@
    [app.main.ui.ds.foundations.typography.heading :refer [heading*]]
    [app.main.ui.hooks :as hooks]
    [app.main.ui.modal :refer [modal-container*]]
+   [app.main.ui.settings.ai :refer [ai-page*]]
    [app.main.ui.settings.change-email]
    [app.main.ui.settings.delete-account]
    [app.main.ui.settings.feedback :refer [feedback-page*]]
@@ -86,6 +88,10 @@
 
           :settings-notifications
           [:> notifications-page* {:profile profile}]
+
+          :settings-ai
+          (when (ai-client/enabled?)
+            [:> ai-page*])
 
           :settings-shortcuts
           [:> shortcuts-page* {:profile profile}])]]]]))

@@ -73,6 +73,10 @@
       (= kind "question")
       (assoc qa :question payload)
 
+      ;; the daemon answered it (permission mode auto)
+      (= kind "answered")
+      (dissoc qa :question)
+
       (and (= kind "result") (:skipped payload))
       (assoc qa :skipped true :settings (:settings payload))
 

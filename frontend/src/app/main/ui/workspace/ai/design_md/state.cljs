@@ -139,6 +139,10 @@
       :else
       state)))
 
+(defn clear-question
+  [state]
+  (update state :op #(some-> % (dissoc :question))))
+
 (defn apply-message
   "Apply a daemon message of the run of workflow `name` to the state."
   [state name {:keys [type kind payload ok error message run-id code]}]
@@ -154,6 +158,10 @@
 
     (and (= type "workflow.event") (= kind "question"))
     (assoc-in state [:op :question] payload)
+
+    ;; the daemon answered it (permission mode auto)
+    (and (= type "workflow.event") (= kind "answered"))
+    (clear-question state)
 
     (and (= type "workflow.event") (= kind "failure"))
     (assoc-in state [:op :failure] payload)
@@ -181,10 +189,6 @@
   (if (busy? state)
     (assoc state :op nil :error {:code "connection-lost"})
     state))
-
-(defn clear-question
-  [state]
-  (update state :op #(some-> % (dissoc :question))))
 
 (defn accept-proposal
   "Put the proposed file (already saved on disk) in the editor."

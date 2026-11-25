@@ -119,6 +119,10 @@
     "question"
     (assoc build :question (select-keys payload [:question-id :text :options]))
 
+    ;; the daemon answered it (permission mode auto)
+    "answered"
+    (dissoc build :question)
+
     build))
 
 (defn- finish-stage

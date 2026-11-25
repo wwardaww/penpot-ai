@@ -6263,6 +6263,10 @@ msgstr "Shared Libraries - %s - Penpot"
 msgid "title.default"
 msgstr "Penpot | Full-stack design"
 
+#: src/app/main/ui/settings/ai.cljs
+msgid "title.settings.ai"
+msgstr "AI - Penpot"
+
 #: src/app/main/ui/settings/feedback.cljs:164
 msgid "title.settings.feedback"
 msgstr "Give feedback - Penpot"
@@ -15040,3 +15044,115 @@ msgstr "The animation of \"%s\" on \"%s\" is missing."
 #: src/app/main/ui/workspace/ai/build/conformance.cljs
 msgid "penforge.build.conformance.motion-not-loaded"
 msgstr "The animations of the design do not run in the app."
+
+#: src/app/main/ui/settings/ai.cljs, src/app/main/ui/settings/sidebar.cljs
+msgid "penforge.settings.title"
+msgstr "AI"
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.not-connected"
+msgstr "The AI service of this computer is not running. Start it to change these settings."
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.failed"
+msgstr "The change did not work. Try again."
+
+#: src/app/main/ui/settings/ai.cljs, src/app/main/ui/workspace/ai/permission_mode.cljs
+msgid "penforge.settings.mode.title"
+msgstr "Permission mode"
+
+#: src/app/main/ui/workspace/ai/permission_mode.cljs
+msgid "penforge.settings.mode.manual"
+msgstr "Manual"
+
+#: src/app/main/ui/workspace/ai/permission_mode.cljs
+msgid "penforge.settings.mode.auto"
+msgstr "Auto"
+
+#: src/app/main/ui/workspace/ai/permission_mode.cljs
+msgid "penforge.settings.mode.manual-hint"
+msgstr "Manual: the AI asks you before it runs commands, opens websites or touches files outside the project."
+
+#: src/app/main/ui/workspace/ai/permission_mode.cljs
+msgid "penforge.settings.mode.auto-hint"
+msgstr "Auto: the AI does not wait for you. It approves its own requests and picks the option it recommends."
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.mode.limits"
+msgstr "In both modes the chat shows every request. Auto never publishes, pushes or deploys, and never changes files outside the project."
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.mode.session"
+msgstr "This choice holds for this tab only."
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.title"
+msgstr "Claude command"
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.label"
+msgstr "Command that starts Claude"
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.hint"
+msgstr "A command name, also an alias of your shell, or the full path of a program. No arguments. The next message uses it."
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.save"
+msgstr "Save"
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.saved"
+msgstr "Saved"
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.test"
+msgstr "Test"
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.testing"
+msgstr "Testing…"
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.invalid"
+msgstr "Use a command name or a full path, without arguments."
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.forbidden"
+msgstr "The command can only be changed on the computer the AI service runs on."
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.version"
+msgstr "Claude Code %s works."
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.found-program"
+msgstr "Found at %s."
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.found-alias"
+msgstr "Found as an alias of your shell."
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.found-function"
+msgstr "Found as a function of your shell."
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.found-bundled"
+msgstr "Not installed here; Penforge uses the copy that comes with it."
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.not-found"
+msgstr "“%s” was not found on this computer."
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.not-started"
+msgstr "The command ended without starting Claude. Run it in a terminal to see why."
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.timeout"
+msgstr "The command took too long. Run it in a terminal to see why."
+
+#: src/app/main/ui/settings/ai.cljs
+msgid "penforge.settings.command.not-claude"
+msgstr "The command ran, but it did not answer like Claude Code."

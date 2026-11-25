@@ -48,6 +48,7 @@
           :settings-subscription
           :settings-integrations
           :settings-notifications
+          :settings-ai
           :settings-shortcuts
           :frame-preview
           :viewer
@@ -102,6 +103,7 @@
     ["/subscriptions" :settings-subscription]
     ["/integrations"  :settings-integrations]
     ["/notifications" :settings-notifications]
+    ["/ai"            :settings-ai]
     ["/shortcuts"     :settings-shortcuts]]
 
    ["/frame-preview" :frame-preview]
