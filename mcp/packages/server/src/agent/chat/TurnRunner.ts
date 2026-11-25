@@ -1,7 +1,8 @@
-import type { AgentContext, Attachment, RunnerEvent, WorkflowToolsApi } from "@penpot/mcp-common";
+import type { AgentContext, Attachment, RunnerEvent, WorkflowToolFilter, WorkflowToolsApi } from "@penpot/mcp-common";
 import type { ClaudeRunner, RunnerConversation, ToolPermissionHandler } from "../runner/ClaudeRunner";
 import { LinkedProjectPrompt } from "../linked/LinkedProjectPrompt";
 import type { PermissionModeState } from "../permissions/PermissionModeState";
+import type { ModelGuide } from "../prompts/ModelGuide";
 import type { PromptRegistry } from "../prompts/promptRegistry";
 import { AppFolderPrompt } from "../workspace/AppFolderPrompt";
 import type { ProjectWorkspace } from "../workspace/ProjectWorkspace";
@@ -33,13 +34,15 @@ export interface TurnRequest {
     selectionDismissed?: boolean;
     /** tools runners without a permission channel may approve (see `RunnerOptions.allowedTools`) */
     allowedTools?: readonly string[];
+    /** what the turn's tools may do; `setup.permissions` applies it */
+    toolFilter?: WorkflowToolFilter;
 }
 
 /**
  * Runner of single Claude turns with the daemon's system prompt.
  *
- * Builds the system prompt (base, persona, workflow, tab context) and the input (text plus
- * attachments), and runs the turn in the project folder.
+ * Builds the system prompt (base, persona, workflow, tab context, the drawing guide for models other
+ * than Claude) and the input (text plus attachments), and runs the turn in the project folder.
  */
 export class TurnRunner {
     /** Last in the prompt: it holds over the parts that tell Claude to ask first. */
@@ -54,11 +57,13 @@ export class TurnRunner {
      * @param runner - runs the turns
      * @param prompts - the prompt templates
      * @param askForFolder - whether Build asks the user for a folder (W41; not in server mode)
+     * @param guide - the drawing guide for models other than Claude (not in server mode)
      */
     constructor(
         public readonly runner: ClaudeRunner,
         private readonly prompts: PromptRegistry,
-        private readonly askForFolder = false
+        private readonly askForFolder = false,
+        private readonly guide?: ModelGuide
     ) {}
 
     /**
@@ -100,7 +105,10 @@ export class TurnRunner {
         const isChat = !request.workflow || request.workflow === "chat";
         const noApp = isChat && this.askForFolder ? app.noAppSection(context) : "";
         const section = [linked, app.section(context), noApp].filter(Boolean).join("\n\n");
-        const systemPrompt = section ? `${app.text(built)}\n${section}\n` : built;
+        const prompt = section ? `${app.text(built)}\n${section}\n` : built;
+        // last, where small models follow it best
+        const guide = this.guide?.section(request);
+        const systemPrompt = guide ? `${prompt}\n${guide}\n` : prompt;
         // a chat message is the user's text; a workflow's prompt is the daemon's
         const text = isChat ? request.text : app.text(request.text);
         const input = await new AttachmentPrompt(setup.tools).build(text, request.attachments);
