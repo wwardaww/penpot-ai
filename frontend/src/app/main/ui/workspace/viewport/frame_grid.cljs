@@ -164,12 +164,19 @@
   (and (some? grids)
        (d/not-empty? (->> grids (filter :display)))))
 
+(defn get-grid-frames
+  "Frames of `objects` that display a grid."
+  [objects]
+  (into [] (filter has-grid?) (ctst/get-frames objects)))
+
 (mf/defc frame-grid*
   {::mf/wrap [mf/memo]}
   [{:keys [zoom transform selected focus vbox clip-rulers] :or {clip-rulers false}}]
-  (let [frames        (mf/deref refs/workspace-frames)
-        frames        (mf/with-memo [frames]
-                        (into [] (filter has-grid?) frames))
+  ;; Listing the frames walks every shape of the page: do it once per render,
+  ;; not in a store watcher, which runs on every change of a script.
+  (let [objects       (mf/deref refs/workspace-page-objects)
+        frames        (mf/with-memo [objects]
+                        (get-grid-frames objects))
         transforming  (when (some? transform) selected)]
 
     [:g.grid-display {:style {:pointer-events "none"}

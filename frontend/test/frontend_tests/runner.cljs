@@ -225,6 +225,7 @@
    [frontend-tests.ui.error-boundary-test]
    [frontend-tests.ui.export-preview-test]
    [frontend-tests.ui.file-restored-modal-test]
+   [frontend-tests.ui.frame-grid-test]
    [frontend-tests.ui.gradient-handlers-test]
    [frontend-tests.ui.history-test]
    [frontend-tests.ui.inspect-geometry-test]
@@ -513,6 +514,7 @@
    'frontend-tests.ui.error-boundary-test
    'frontend-tests.ui.export-preview-test
    'frontend-tests.ui.file-restored-modal-test
+   'frontend-tests.ui.frame-grid-test
    'frontend-tests.ui.gradient-handlers-test
    'frontend-tests.ui.history-test
    'frontend-tests.ui.inspect-geometry-test
