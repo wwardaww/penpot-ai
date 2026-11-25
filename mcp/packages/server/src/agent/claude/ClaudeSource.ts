@@ -3,6 +3,7 @@ import { finished } from "stream/promises";
 import type { ClaudeCommandProblem } from "@penpot/mcp-common";
 import { CommandLauncher } from "../process/CommandLauncher";
 import { ProcessTree } from "../process/ProcessTree";
+import { ClaudeCommandName } from "./ClaudeCommandName";
 import type { ClaudeCommand, ClaudeCommands } from "./ClaudeCommands";
 import { ClaudeLauncher, type ClaudeStart, type WrappedClaude } from "./ClaudeLauncher";
 
@@ -88,6 +89,11 @@ export class ClaudeSource {
         launcher?: ClaudeLauncher
     ) {
         this.launcher = launcher ?? new ClaudeLauncher(commands.shell);
+    }
+
+    /** Whether the next turn runs Claude itself (see `ClaudeCommandName.isClaude`). */
+    public get isClaude(): boolean {
+        return ClaudeCommandName.isClaude(this.current());
     }
 
     /**
