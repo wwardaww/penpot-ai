@@ -6,14 +6,6 @@
 # Remove a file from a list in the same PR that fixes it, and the whole rule
 # entry once its list is empty.
 rules:
-  # Accepted: wrangler is added with `pnpm add wrangler@latest` before each
-  # deploy instead of being a dependency of the plugins workspace. Only used
-  # to publish to Cloudflare; not worth adding to the workspace.
-  adhoc-packages:
-    ignore:
-      - plugins-deploy-api-doc.yml
-      - plugins-deploy-package.yml
-      - plugins-deploy-styles-doc.yml
   # Accepted: auto-label.yml needs pull_request_target so the GitHub App
   # secrets are available for PRs from forks. It never checks out or runs
   # PR code, it only reads ids from the event payload.
@@ -30,7 +22,6 @@ rules:
   # build-docker-devenv.yml, so the floating tag is intentional.
   unpinned-images:
     ignore:
-      - plugins-deploy-package.yml
       - tests-backend.yml
       - tests-common.yml
       - tests-e2e.yml

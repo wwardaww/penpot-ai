@@ -13,7 +13,7 @@ You are working on the GitHub project `penpot/penpot`, a monorepo.
 # Development workflow
 
 - Before a repo-wide pnpm version update → `mem:workflow/updating-pnpm` (workspace layout, `scripts/sync-pnpm-version` flow, the stamp-missing-field and ignored-builds gotchas, verification steps)
-- Before a Node version update → `mem:workflow/updating-node` (the six pin sites in `.nvmrc`, the devenv and image Dockerfiles and the plugins-deploy workflows, the DHI tag and digest rules, what to verify)
+- Before a Node version update → `mem:workflow/updating-node` (the pin sites in `.nvmrc` and the devenv and image Dockerfiles, the DHI tag and digest rules, what to verify)
 - Before bumping a non-JS dependency pinned in `docker/images/` (JDK, ImageMagick) → `mem:workflow/docker-images`
 
 # Project modules
