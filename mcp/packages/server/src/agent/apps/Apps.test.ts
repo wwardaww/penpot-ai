@@ -4,7 +4,6 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
-import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 import type { AppsStatusMessage, WorkflowContext, WorkflowToolResult } from "@penpot/mcp-common";
 import { AgentConfig } from "../AgentConfig";
@@ -12,6 +11,7 @@ import { PenforgeDaemon } from "../PenforgeDaemon";
 import { CommandPolicy } from "../process/CommandPolicy";
 import { DevServerManager } from "../process/DevServerManager";
 import { PortPool } from "../process/PortPool";
+import { FAKE_SERVER } from "../process/testing/fakeServer";
 import { PhonePreview, type PhoneSession } from "../publish/PhonePreview";
 import { PublishServices } from "../publish/PublishServices";
 import { SecretStore } from "../publish/SecretStore";
@@ -23,13 +23,6 @@ import { AppCatalog } from "./AppCatalog";
 import { AppsService } from "./AppsService";
 import { AppThumbnail } from "./AppThumbnail";
 
-const FAKE_SERVER = join(
-    dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "process",
-    "testing",
-    "fakeDevServer.mjs"
-).replace(/\\/g, "/");
 const ORIGIN = "https://localhost:3449";
 const WEB_APP = "0a1f0e2c-7d33-4f0b-9c55-0e1d2b3c4d01";
 const MOBILE_APP = "0a1f0e2c-7d33-4f0b-9c55-0e1d2b3c4d02";

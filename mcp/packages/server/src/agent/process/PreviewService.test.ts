@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
-import { fileURLToPath } from "node:url";
 import type { ContextSetMessage, DaemonMessage } from "@penpot/mcp-common";
 import type { AgentClient } from "../AgentClient";
 import { AgentConfig } from "../AgentConfig";
@@ -14,8 +13,8 @@ import { CommandPolicy } from "./CommandPolicy";
 import { DevServerManager } from "./DevServerManager";
 import { PortPool } from "./PortPool";
 import { PreviewService } from "./PreviewService";
+import { FAKE_SERVER } from "./testing/fakeServer";
 
-const FAKE_SERVER = join(dirname(fileURLToPath(import.meta.url)), "testing", "fakeDevServer.mjs").replace(/\\/g, "/");
 const ORIGIN = "https://localhost:3449";
 const PROJECT_ID = "6a1f0e2c-7d33-4f0b-9c55-0e1d2b3c4d01";
 const FIRST_PORT = 47360;

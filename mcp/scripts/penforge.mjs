@@ -8,35 +8,14 @@
 // pnpm is taken from corepack. No environment variables required.
 
 import { spawnSync, spawn } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { withPnpmShim } from "./pnpm-shim.mjs";
 
 const mcpDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-// Package scripts call a bare `pnpm`. When pnpm is only available through
-// corepack, put a small `pnpm` shim that forwards to `corepack pnpm` on PATH.
-function pnpmShimDir() {
-    const probe = spawnSync("pnpm --version", { shell: true, stdio: "ignore" });
-    if (probe.status === 0) {
-        return null;
-    }
-    const dir = join(tmpdir(), "penforge-pnpm-shim");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "pnpm.cmd"), "@corepack pnpm %*\r\n");
-    writeFileSync(join(dir, "pnpm"), '#!/bin/sh\nexec corepack pnpm "$@"\n');
-    chmodSync(join(dir, "pnpm"), 0o755);
-    return dir;
-}
-
-const shimDir = pnpmShimDir();
-const pathKey = Object.keys(process.env).find((key) => key.toUpperCase() === "PATH") ?? "PATH";
-const env = {
-    ...process.env,
-    COREPACK_ENABLE_DOWNLOAD_PROMPT: "0",
-    ...(shimDir ? { [pathKey]: `${shimDir}${delimiter}${process.env[pathKey] ?? ""}` } : {}),
-};
+const env = withPnpmShim();
 
 function pnpm(args, label) {
     console.log(`[penforge] ${label}...`);

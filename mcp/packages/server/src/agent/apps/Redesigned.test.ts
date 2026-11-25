@@ -5,7 +5,6 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
-import { fileURLToPath } from "node:url";
 import type { AgentContext, AppInfo } from "@penpot/mcp-common";
 import { AgentConfig } from "../AgentConfig";
 import { PenforgeDaemon } from "../PenforgeDaemon";
@@ -13,6 +12,7 @@ import { RedesignBranch } from "../linked/RedesignBranch";
 import { CommandPolicy } from "../process/CommandPolicy";
 import { DevServerManager } from "../process/DevServerManager";
 import { PortPool } from "../process/PortPool";
+import { FAKE_SERVER } from "../process/testing/fakeServer";
 import { FakeRunner } from "../runner/FakeRunner";
 import { AgentTestClient } from "../testing/AgentTestClient";
 import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
@@ -22,13 +22,6 @@ import { AppFolders } from "./AppFolders";
 import { LinkedAppStack } from "./LinkedAppStack";
 import { RedesignedApps } from "./RedesignedApps";
 
-const FAKE_SERVER = join(
-    dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "process",
-    "testing",
-    "fakeDevServer.mjs"
-).replace(/\\/g, "/");
 const ORIGIN = "https://localhost:3449";
 const PROJECT = "a3de49e3-507f-8040-8008-fb2d0ea52a89";
 const FILE = "a3de49e3-507f-8040-8008-fb2d12ed0541";

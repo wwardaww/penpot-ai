@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { BrowserLocator, ChromeScreenshotter } from "./ChromeScreenshotter";
 import { PixelCompare, type RgbaImage } from "./PixelCompare";
@@ -16,6 +15,7 @@ import { FakeBrowser, FakePenpot, FakePreviews, renderScreen, SCREENS, screenCss
 import { CommandPolicy } from "../process/CommandPolicy";
 import { DevServerManager } from "../process/DevServerManager";
 import { PortPool } from "../process/PortPool";
+import { FAKE_SERVER } from "../process/testing/fakeServer";
 import { DesignToolFilter } from "../tools/DesignToolFilter";
 import { BridgeSessionDirectory } from "../tools/PluginSessions";
 import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
@@ -426,9 +426,6 @@ describe("ChromeScreenshotter", () => {
 
 describe("dev server and browser together", () => {
     const browserPath = BrowserLocator.find();
-    const fakeServer = join(dirname(fileURLToPath(import.meta.url)), "..", "process", "testing", "fakeDevServer.mjs")
-        .split("\\")
-        .join("/");
 
     test(
         "starts the project's dev server and screenshots it at the board size",
@@ -437,7 +434,7 @@ describe("dev server and browser together", () => {
             const projectsDir = mkdtempSync(join(tmpdir(), "penforge-qa-dev-"));
             const workspace = new ProjectWorkspace(projectsDir, "project-dev");
             await workspace.ensure();
-            await workspace.writeJson("stack.json", { commands: { dev: ["node", fakeServer, "serve"] } });
+            await workspace.writeJson("stack.json", { commands: { dev: ["node", FAKE_SERVER, "serve"] } });
             const manager = new DevServerManager({
                 ports: new PortPool(47380, 47389),
                 probeIntervalMs: 50,

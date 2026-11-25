@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createConnection, createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import { delimiter, join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
-import { fileURLToPath } from "node:url";
 import { AgentError } from "../AgentClient";
 import { ProjectWorkspace } from "../workspace/ProjectWorkspace";
 import { CommandPolicy } from "./CommandPolicy";
@@ -12,9 +11,9 @@ import type { DevServerObserver, LogLine, PreviewStatus } from "./DevServer";
 import { DevServerManager, type DevServerManagerOptions } from "./DevServerManager";
 import { ExposureCheck } from "./ExposureCheck";
 import { PortPool } from "./PortPool";
+import { FAKE_SERVER } from "./testing/fakeServer";
 
 /** Fixture path with forward slashes: command arguments may not hold backslashes. */
-const FAKE_SERVER = join(dirname(fileURLToPath(import.meta.url)), "testing", "fakeDevServer.mjs").replace(/\\/g, "/");
 const FIRST_PORT = 47310;
 const NODE_POLICY = new CommandPolicy(["node"]);
 const NO_ADDRESSES = new ExposureCheck({ externalAddresses: () => [] });

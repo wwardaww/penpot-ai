@@ -1,4 +1,4 @@
-import { join } from "path";
+import { isAbsolute, join } from "path";
 import { AgentError } from "../AgentClient";
 import { PathGuard } from "../workspace/pathGuard";
 import type { ProjectWorkspace } from "../workspace/ProjectWorkspace";
@@ -122,6 +122,10 @@ export class StackConfig {
         const relativeCwd = file.cwd ?? ".";
         if (typeof relativeCwd !== "string") {
             throw new AgentError("bad-request", `${StackConfig.FILE}: invalid cwd`);
+        }
+        if (isAbsolute(relativeCwd)) {
+            // `join` would turn an absolute POSIX path into a folder below app-src
+            throw new AgentError("bad-request", `${StackConfig.FILE}: cwd must stay inside app-src`);
         }
         let cwd: string;
         try {
