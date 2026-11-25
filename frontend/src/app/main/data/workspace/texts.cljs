@@ -89,9 +89,28 @@
          (page-finalize? event)))
    stream))
 
+(defn- remeasure-wasm-texts
+  "Resizes `ids` from their content when the WASM renderer is active. A shape
+  update signals `:text/reflow` for the auto-sized texts whose content
+  changed, but not every caller resizes them afterwards (a token fill does
+  not), and the WASM renderer measures nothing by itself, so their bridges
+  would stay open. A resize that changes nothing commits nothing. The request
+  records no undo step and skips the component sync, so batched with a
+  caller's own resize it keeps that caller's options."
+  [ids]
+  (ptk/reify ::remeasure-wasm-texts
+    ptk/WatchEvent
+    (watch [_ state _]
+      (if (features/active-feature? state "render-wasm/v1")
+        (->> (rx/from ids)
+             (rx/map #(dwwt/resize-wasm-text-debounce
+                       % {:save-undo? false :skip-component-sync? true})))
+        (rx/empty)))))
+
 (defn initialize-text-reflow
-  "Tracks the texts the DOM pipeline still has to re-measure, so a reflow wait
-  covers the measurement that resizes them."
+  "Tracks the texts the renderer still has to re-measure, so a reflow wait
+  covers the measurement that resizes them. With the WASM renderer it also
+  starts that measurement."
   []
   (ptk/reify ::initialize-text-reflow
     ptk/WatchEvent
@@ -106,7 +125,12 @@
              (rx/map deref)
              (rx/merge-map
               (fn [{:keys [ids]}]
-                (->> (bridge-to-measurement ids)
+                (->> (rx/merge
+                      (bridge-to-measurement ids)
+                      ;; The signal goes before the commit it announces:
+                      ;; measure once that commit is in the state.
+                      (->> (rx/of (remeasure-wasm-texts ids))
+                           (rx/observe-on :async)))
                      (rx/take-until page-stopper))))
              (rx/take-until stopper))))))
 

@@ -41,9 +41,11 @@
   (ptk/emit! store (dwsl/finalize-shape-layout)))
 
 (defn- start-text-pipeline!
-  []
-  (doto (ptk/store {:state {} :on-error #(js/console.error %)})
-    (ptk/emit! (dwtxt/initialize-text-reflow))))
+  ([]
+   (start-text-pipeline! {}))
+  ([state]
+   (doto (ptk/store {:state state :on-error #(js/console.error %)})
+     (ptk/emit! (dwtxt/initialize-text-reflow)))))
 
 (defn- stop-text-pipeline!
   [store]
@@ -235,6 +237,33 @@
                    (pwrf/wait-for-layout-update [id-b] 100)))
           (.then #(t/is true "the later bridge drained after its own work"))
           (.catch #(t/is false "the cancelled bridge blocked the pipeline"))
+          (.then (fn []
+                   (stop-text-pipeline! store)
+                   (done)))))))
+
+(t/deftest wasm-text-reflow-drains-without-a-caller-resize
+  ;; A token fill signals the change and resizes nothing itself: the pipeline
+  ;; has to measure the text, or every later wait times out.
+  (t/async done
+    (let [store (start-text-pipeline! {:features #{"render-wasm/v1"}})
+          id    (uuid/next)]
+      (ptk/emit! store (ptk/data-event :text/reflow {:ids [id]}))
+      (-> (pwrf/wait-for-layout-update [id] 1000)
+          (.then #(t/is true "the text was measured and drained"))
+          (.catch #(t/is false "the text bridge stayed open without a caller resize"))
+          (.then (fn []
+                   (stop-text-pipeline! store)
+                   (done)))))))
+
+(t/deftest dom-text-reflow-waits-for-the-measurement
+  ;; The DOM renderer measures by itself: the pipeline only bridges to it.
+  (t/async done
+    (let [store (start-text-pipeline!)
+          id    (uuid/next)]
+      (ptk/emit! store (ptk/data-event :text/reflow {:ids [id]}))
+      (-> (pwrf/wait-for-layout-update [id] 200)
+          (.then #(t/is false "the bridge drained before any measurement"))
+          (.catch #(t/is true "the bridge waited for the renderer"))
           (.then (fn []
                    (stop-text-pipeline! store)
                    (done)))))))

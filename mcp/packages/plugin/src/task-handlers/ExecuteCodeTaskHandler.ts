@@ -16,6 +16,12 @@ export class ExecuteCodeTaskHandler extends TaskHandler<ExecuteCodeTaskParams> {
     readonly taskType = "executeCode";
 
     /**
+     * Longest wait (ms) for pending layout work around the code. A text whose measurement never
+     * starts keeps the default wait (30 s) failing on every later call; the code runs anyway.
+     */
+    private static readonly LAYOUT_WAIT_MS = 5000;
+
+    /**
      * Persistent context object that maintains state between code executions.
      * Contains the penpot API, storage object, and custom console implementation.
      */
@@ -81,7 +87,7 @@ export class ExecuteCodeTaskHandler extends TaskHandler<ExecuteCodeTaskParams> {
                 // @ts-ignore - TODO Penpot.waitForLayoutUpdate is not yet in the released types
                 if (workspaceReady() && penpot.waitForLayoutUpdate) {
                     // @ts-ignore
-                    await penpot.waitForLayoutUpdate();
+                    await penpot.waitForLayoutUpdate(ExecuteCodeTaskHandler.LAYOUT_WAIT_MS);
                 }
             } catch (e) {
                 console.error("Error waiting for layout update:", e);
@@ -177,7 +183,10 @@ export class ExecuteCodeTaskHandler extends TaskHandler<ExecuteCodeTaskParams> {
      */
     private async checkLayout(before: CanvasSnapshot): Promise<string[]> {
         try {
-            await penpot.waitForLayoutUpdate();
+            await penpot.waitForLayoutUpdate(ExecuteCodeTaskHandler.LAYOUT_WAIT_MS).catch((e: unknown) => {
+                // a text that never settles must not hide the problems of the others
+                console.error("Error waiting for layout update:", e);
+            });
             const added = before.added(penpot);
             const tops = new Map<string, any>((penpot.root as any).children.map((shape: any) => [shape.id, shape]));
             for (const shape of added) {

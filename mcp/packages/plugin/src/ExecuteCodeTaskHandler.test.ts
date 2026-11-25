@@ -258,6 +258,26 @@ test("the layout is checked only when asked, also for later scripts on the same 
     assert.deepEqual([...(await call("penpot.root.children = [];", true)).layoutProblems], []);
 });
 
+test("layout work that never settles delays a call by a short wait only", async () => {
+    const { messages, penpot } = installPage();
+    const timeouts: unknown[] = [];
+    penpot.waitForLayoutUpdate = async (timeout?: number) => {
+        timeouts.push(timeout);
+        throw new Error("waitForLayoutUpdate timeout");
+    };
+    const { ExecuteCodeTaskHandler, Task } = loadHandler();
+    const handler = new ExecuteCodeTaskHandler();
+    await handler.handle(
+        new Task("req", "executeCode", { code: `penpot.add(${BOARD});`, trackShapes: true, checkLayout: true })
+    );
+    assert.deepEqual(timeouts, [5000, 5000], "both waits pass a short timeout");
+    const data = lastResponse(messages).data as any;
+    assert.deepEqual(
+        [...data.layoutProblems],
+        ['board "Landing" b1 is empty; remove it by id if a failed script left it']
+    );
+});
+
 test("calls without effect come back as warnings, once", async () => {
     const { messages } = installPage();
     const code = `
