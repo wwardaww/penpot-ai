@@ -1,14 +1,14 @@
 # Penforge drawing guide
 
-How to draw in Penpot without errors. The task and the user say what to make, on which board or page
-and at which size. Reply in the user's language.
+How to draw in Penpot. The task and the user say what to make, where and at which size. Reply in
+the user's language.
 
 ## Order of work
 
 Tool names start with `mcp__penpot__`.
 
 1. Call `high_level_overview` before your first script. Then look: `list_boards`,
-   `get_node_properties` of the board, `capture_node_screenshot` (`nodeId`: an id or `page`).
+   `get_node_properties` of a board (by id), `capture_node_screenshot` (`nodeId`: an id, or `page`).
 2. Draw inside one board unless the task says otherwise: the one named, else an empty one, else one
    new board (example 2). Never create a page unless asked.
 3. `execute_code` runs a function body: `return` what you want to see; no DOM, no import. `storage`
@@ -16,12 +16,15 @@ Tool names start with `mcp__penpot__`.
    an id: copy it from a result into `penpotUtils.findShapeById(id)`.
 4. One section per script. A new shape lies at 0,0 of the page, outside every board:
    `parent.appendChild(shape)` at once, then size and place it.
-5. After each section run the check (example 4), then `capture_node_screenshot` of the board. Look
-   for overlaps, cut or tiny text, weak contrast, empty or crooked areas, and fix them before the
-   next section. A script that did not throw proves nothing.
-6. A failed script is not rolled back: what it did before the error stays. Remove the leftovers
-   (example 5), then run only the missing part.
-7. The same error twice: stop guessing, read `penpot_api_info` (`type`: "Board", "Text",
+5. The result of a script lists `layoutProblems` and `warnings`. Fix every one before the next
+   section; an empty list does not mean good. Then take `capture_node_screenshot` of the board, by
+   the id the script returned, and look for what a list cannot say: empty or crooked areas, wrong
+   order, dull hierarchy. A script that did not throw proves nothing.
+6. A failed script is not rolled back. Its error names the shapes it left: remove them by id
+   (example 4), then run only the missing part.
+   A white or odd screenshot: first check with `list_boards` that the id is your board. Never delete
+   a board with content to start again; repair it.
+7. The same error or problem twice: stop guessing, read `penpot_api_info` (`type`: "Board", "Text",
    "FlexLayout", "LayoutChildProperties", "Shadow"; `member` is optional). Never give up the board
    because of an error you do not understand.
 
@@ -32,7 +35,8 @@ Tool names start with `mcp__penpot__`.
 | `penpft.s("rect")`, `penpot.pages.current` | `penpot.createRectangle()`, `penpot.currentPage` (its top: `penpot.root`) |
 | `shape.isBoard = true`, children in a rectangle | `penpot.createBoard()`; rectangles and texts take no children |
 | `shape.width = 1920` | `shape.resize(1920, 1080)` |
-| `shape.x = 24` inside a board | `penpotUtils.setParentXY(shape, 24, 24)`; `x`, `y` count from the page. Flex places its children itself |
+| `shape.x = 24` inside a board | `penpotUtils.setParentXY(shape, 24, 24)`; `x`, `y` count from the page |
+| positions inside a flex layout | flex ignores them: `rowGap`, `columnGap`, `horizontalPadding`, `verticalPadding`, `justifyContent`, `alignItems` place the children, a wrapper board per row or column groups them; only an overlay gets `child.layoutChild.absolute = true` |
 | `penpot.createText()` | `penpot.createText("Sign in")`; later `text.characters = "Log in"` |
 | `fontSize = "48px"`, `lineHeight = "150%"` | `fontSize = "48"`, `lineHeight = "1.5"`, `letterSpacing = "-0.5"` (px) |
 | `fontWeight = "900"` on any font | only a weight in `font.variants` (example 1) |
@@ -44,7 +48,7 @@ Tool names start with `mcp__penpot__`.
 
 ## Examples
 
-Copy the code, not the look: colours, fonts and texts come from the project.
+Keep and use these helpers; copy the code, not the look: colours, fonts, texts come from the project.
 
 1. Helpers; run again when `storage.box` is missing. Parents need a flex layout:
 
@@ -58,6 +62,7 @@ storage.box = (parent, name, dir, { gap = 0, padX = 0, padY = 0, fill, width = "
   const box = penpot.createBoard();
   parent.appendChild(box);
   box.name = name;
+  box.clipContent = false; // keeps shadows
   box.fills = fill ? [{ fillColor: fill, fillOpacity: 1 }] : [];
   const flex = box.addFlexLayout();
   flex.dir = dir;
@@ -131,38 +136,7 @@ return storage.step(() => {
 });
 ```
 
-4. Check. Define it once; afterwards only `return await storage.check(storage.board);`. An empty list
-   does not mean good: look at the screenshot too.
-
-```js
-storage.check = async (board) => {
-  await penpot.waitForLayoutUpdate();
-  const bounds = (s) => (penpotUtils.getBounds(s).width ? penpotUtils.getBounds(s) : s.bounds);
-  const out = (a, b) => Math.min(a.x - b.x, a.y - b.y, b.x + b.width - a.x - a.width, b.y + b.height - a.y - a.height) < -2;
-  const hit = (a, b) => Math.min(a.x + a.width - b.x, b.x + b.width - a.x, a.y + a.height - b.y, b.y + b.height - a.y) > 2;
-  const color = (s) => s.fills?.[0]?.fillColor;
-  const ground = (s) => color(s) ?? (s.id === board.id ? "#ffffff" : ground(s.parent));
-  const light = (hex) => [0.2126, 0.7152, 0.0722].reduce((sum, part, i) => sum + part * (parseInt(hex.slice(2 * i + 1, 2 * i + 3), 16) / 255) ** 2.2, 0.05);
-  const problems = [];
-  const shapes = penpotUtils.findShapes(() => true, board);
-  shapes.forEach((s, i) => {
-    const add = (what) => problems.push(`${s.type} "${s.name}" ${s.id}: ${what}`);
-    if (out(bounds(s), bounds(s.parent)) || out(bounds(s), bounds(board))) add("sticks out");
-    for (const t of shapes.slice(i + 1)) {
-      const rivals = s.type === t.type && (s.type === "text" || (s.type === "board" && s.parent.id === t.parent.id));
-      if (rivals && hit(bounds(s), bounds(t))) add(`overlaps "${t.name}"`);
-    }
-    if (s.type !== "text") return;
-    if (Number(s.fontSize) < 14) add("tiny");
-    const [dark, bright] = [light(color(s) ?? "#000000"), light(ground(s.parent))].sort((a, b) => a - b);
-    if (bright / dark < 4.5) add("weak contrast");
-  });
-  return problems;
-};
-return await storage.check(storage.board);
-```
-
-5. Leftovers: list what lies on the page, then remove by id what you made by mistake, nothing else:
+4. Leftovers: list what lies on the page, then remove by id what you made by mistake, nothing else:
 
 ```js
 return penpot.root.children.map((s) => ({ id: s.id, type: s.type, name: s.name, children: s.children?.length }));
@@ -174,13 +148,20 @@ for (const id of ["<id from the list>"]) penpotUtils.findShapeById(id)?.remove()
 
 ## Layout
 
+- Use flex for everything: page = column of sections, section = column with side padding (240 for a
+  1440 column on 1920), cards = row with `columnGap`; a grid of 6 cards = two rows of three.
+- Every flex box has a gap (text block 12-16, cards 24-32, section 48) and every box with a fill,
+  border or radius has padding (button 24 x 12, card 32, section 96-128 high). Text never touches an
+  edge. A button is a box with padding around its text, not a rectangle of fixed size.
 - Text: desktop h1 56-80, h2 36-48, h3 22-28, body 16-20; tablet h1 44-56, h2 30-36, body 16-18;
   mobile h1 32-40, h2 24-28, body 16. Nothing under 14.
-- Space: 4, 8, 12, 16, 24, 32, 48, 64, 96, 128; between sections 96-128 on desktop, 48-64 on mobile;
-  mobile side margin 16-24. One left edge for all sections.
-- Every section has a heading and one idea. Nothing covers text: a mockup gets its own column, never
-  a place over the headline.
-- Contrast 4.5:1 or more. Never grey on grey: page, cards and text differ clearly.
+- Space: 4, 8, 12, 16, 24, 32, 48, 64, 96, 128; on mobile 48-64 between sections, side margin 16-24.
+  One left edge for all sections.
+- Order in a section: label, heading, one sentence, content, action. Every section has a heading and
+  one idea; neighbours differ in ground or structure. One accent colour, for the main action only.
+- Nothing covers text: a mockup gets its own column, and draw its inside (bars, rows, prices); an
+  empty box with a caption is no mockup.
+- Contrast 4.5:1 or more. Never grey on grey.
 
 ## Honest report
 

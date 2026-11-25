@@ -1,5 +1,6 @@
 import type { AgentContext, Attachment, RunnerEvent, WorkflowToolFilter, WorkflowToolsApi } from "@penpot/mcp-common";
 import type { ClaudeRunner, RunnerConversation, ToolPermissionHandler } from "../runner/ClaudeRunner";
+import { LayoutCheckHeader } from "../../LayoutCheckHeader";
 import { LinkedProjectPrompt } from "../linked/LinkedProjectPrompt";
 import type { PermissionModeState } from "../permissions/PermissionModeState";
 import type { ModelGuide } from "../prompts/ModelGuide";
@@ -118,6 +119,8 @@ export class TurnRunner {
             allowedTools: request.allowedTools,
             permissions: app.permissions(setup.permissions),
             additionalDirectories: app.directories,
+            // who needs the guide also needs to be told what it drew wrong
+            ...(guide ? { mcpHeaders: { ...LayoutCheckHeader.HEADERS } } : {}),
             signal: setup.signal,
         });
     }

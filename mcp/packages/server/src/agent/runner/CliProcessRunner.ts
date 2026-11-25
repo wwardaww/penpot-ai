@@ -141,7 +141,12 @@ export class CliProcessRunner implements ClaudeRunner {
     }
 
     private args(conversation: RunnerConversation, opts: RunnerOptions, claude?: ClaudeTurnCommand): string[] {
-        const mcpConfig = { mcpServers: { [PENPOT_MCP_SERVER_NAME]: { type: "http", url: this.settings.mcpUrl } } };
+        const server = {
+            type: "http",
+            url: this.settings.mcpUrl,
+            ...(opts.mcpHeaders ? { headers: opts.mcpHeaders } : {}),
+        };
+        const mcpConfig = { mcpServers: { [PENPOT_MCP_SERVER_NAME]: server } };
         const args = [
             "-p",
             "--output-format",

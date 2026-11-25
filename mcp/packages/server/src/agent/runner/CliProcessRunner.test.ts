@@ -50,3 +50,19 @@ test("a workflow's tool list replaces the default approvals", () => {
         "Read,Edit(app-src/**),mcp__penpot__list_boards"
     );
 });
+
+test("the headers of a turn go to the Penpot MCP endpoint", () => {
+    const runner = new CliProcessRunner({ mcpUrl: "http://127.0.0.1:4401/mcp" });
+    const config = (mcpHeaders?: Record<string, string>) => {
+        const opts = {
+            cwd: ".",
+            systemPromptAppend: "",
+            permissions: { decide: async () => ({ allow: true }) },
+            mcpHeaders,
+        };
+        const args: string[] = (runner as any).args({ id: "c1" }, opts);
+        return JSON.parse(args[args.indexOf("--mcp-config") + 1]).mcpServers.penpot;
+    };
+    assert.deepEqual(config(), { type: "http", url: "http://127.0.0.1:4401/mcp" });
+    assert.deepEqual(config({ "x-test": "1" }).headers, { "x-test": "1" });
+});

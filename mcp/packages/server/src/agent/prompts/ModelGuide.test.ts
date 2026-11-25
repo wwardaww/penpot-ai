@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import type { Workflow, WorkflowClaudeRequest } from "@penpot/mcp-common";
+import { LayoutCheckHeader } from "../../LayoutCheckHeader";
 import { AgentConfig } from "../AgentConfig";
 import { NoCommandsFilter } from "../build/NoCommandsFilter";
 import { ClaudeCommands } from "../claude/ClaudeCommands";
@@ -121,9 +122,11 @@ describe("the drawing guide in the system prompt", () => {
         await useCommand("claude-local");
         const other = await chatPrompt();
         assert.equal(other, `${claude}\n${GUIDE}\n`, "the guide comes last and changes nothing before it");
+        assert.deepEqual(runner.received.at(-1)!.opts.mcpHeaders, LayoutCheckHeader.HEADERS);
 
         await useCommand("/opt/tools/claude");
         assert.equal(await chatPrompt(), claude);
+        assert.equal(runner.received.at(-1)!.opts.mcpHeaders, undefined);
         await useCommand("/opt/tools/claude-local");
         assert.equal(await chatPrompt(), other);
         await useCommand("claude");

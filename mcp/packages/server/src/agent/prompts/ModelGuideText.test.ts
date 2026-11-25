@@ -45,7 +45,6 @@ export interface Scope {
         text(parent: Board, characters: string, size: number, options?: {
             weight?: number; color?: string; wrap?: boolean;
         }): Text;
-        check(board: Board): Promise<string[]>;
     };
     shape: Rectangle;
     text: Text;
@@ -137,6 +136,9 @@ function statement(code: string): string | null {
     if (/^(?:rowGap|columnGap|verticalPadding|horizontalPadding)$/.test(code)) {
         return `flex.${code} = 8;`;
     }
+    if (/^(?:justifyContent|alignItems)$/.test(code)) {
+        return `flex.${code} = "center";`;
+    }
     if (/^"(?:start|center|end|space-between)"$/.test(code)) {
         return `flex.justifyContent = ${code};`;
     }
@@ -149,67 +151,17 @@ function statement(code: string): string | null {
     return code === "appendChild" ? "parent.appendChild;" : null;
 }
 
-function rect(x: number, y: number, width: number, height: number) {
-    return { x, y, width, height };
-}
-
 describe("the drawing guide", () => {
     test("stays small enough for a model with a small context", () => {
         // about 3.6 characters a token
         assert.ok(guide.length < 9500, `the guide has ${guide.length} characters`);
-        assert.ok(examples.length >= 5);
+        assert.ok(examples.length >= 4);
         assert.ok(rows.length >= 10);
     });
 
     test("has examples that follow the types of the plugin API", () => {
         const found = problems(examples);
         examples.forEach((code, i) => assert.deepEqual(found[i], [], code));
-    });
-
-    test("has a check that finds what is wrong with a design", async () => {
-        const board = {
-            id: "b",
-            type: "board",
-            name: "Home",
-            fills: [{ fillColor: "#ffffff" }],
-            bounds: rect(0, 0, 400, 300),
-        };
-        const layer = (name: string, type: string, bounds: object, more: object) => ({
-            id: name,
-            type,
-            name,
-            bounds,
-            parent: board,
-            fills: [],
-            ...more,
-        });
-        const dark = [{ fillColor: "#1a1a1a" }];
-        const text = (name: string, bounds: object, more: object = {}) =>
-            layer(name, "text", bounds, { fontSize: "16", fills: dark, ...more });
-        const card = layer("Card", "board", rect(20, 200, 100, 50), { fills: [{ fillColor: "#e0e5ec" }] });
-        const shapes = [
-            text("Title", rect(20, 20, 200, 40)),
-            text("Over", rect(100, 40, 200, 40)),
-            text("Wide", rect(300, 100, 200, 20)),
-            text("Tiny", rect(20, 130, 50, 10), { fontSize: "9" }),
-            card,
-            text("Grey", rect(30, 210, 50, 20), { parent: card, fills: [{ fillColor: "#c0c5cc" }] }),
-            layer("Panel", "board", rect(100, 220, 100, 50), {}),
-        ];
-        const code = examples.find((example) => example.startsWith("storage.check ="))!;
-        const script = new Function("penpot", "penpotUtils", "storage", `return (async () => { ${code} })();`);
-        const found = await script(
-            { waitForLayoutUpdate: async () => {} },
-            { findShapes: () => shapes, getBounds: (shape: { bounds: object }) => shape.bounds },
-            { board }
-        );
-        assert.deepEqual(found, [
-            'text "Title" Title: overlaps "Over"',
-            'text "Wide" Wide: sticks out',
-            'text "Tiny" Tiny: tiny',
-            'board "Card" Card: overlaps "Panel"',
-            'text "Grey" Grey: weak contrast',
-        ]);
     });
 
     test("has examples that run without asking the user", () => {
@@ -228,14 +180,19 @@ describe("the drawing guide", () => {
     });
 
     test("leaves no code unchecked", () => {
-        const other = ["return", "storage", "page", "nodeId", "type", "member", "mcp__penpot__", "[]"];
-        const unchecked = right.filter(
-            (code) =>
-                statement(code) === null &&
-                !other.includes(code) &&
-                !TOOL.test(code) &&
-                !/^return await storage\.check\(storage\.board\);$/.test(code)
-        );
+        const other = [
+            "return",
+            "storage",
+            "page",
+            "nodeId",
+            "type",
+            "member",
+            "mcp__penpot__",
+            "[]",
+            "layoutProblems",
+            "warnings",
+        ];
+        const unchecked = right.filter((code) => statement(code) === null && !other.includes(code) && !TOOL.test(code));
         assert.deepEqual(unchecked, []);
     });
 

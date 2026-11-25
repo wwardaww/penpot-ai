@@ -99,7 +99,10 @@ export interface RunnerOptions {
      * environment, without nested-session variables, when omitted.
      */
     env?: Record<string, string>;
-    /** headers Claude sends to the Penpot MCP endpoint (server mode: the user's bridge token) */
+    /**
+     * Headers Claude sends to the Penpot MCP endpoint (server mode: the user's bridge token; other
+     * models than Claude: a request to check their layout).
+     */
     mcpHeaders?: Record<string, string>;
     /** model of this turn, over the runner's configured one */
     model?: string;
