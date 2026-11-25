@@ -1,5 +1,5 @@
 import { z } from "zod";
-import sharp from "sharp";
+import sharp, { type OverlayOptions } from "sharp";
 import { Tool } from "../../Tool";
 import { ImageContent, TextContent, ToolResponse } from "../../ToolResponse";
 import type { PenpotMcpServer } from "../../PenpotMcpServer";
@@ -58,6 +58,17 @@ interface PluginCapture {
 }
 
 /**
+ * Result of the plugin-side capture of a page: its top-level shapes, the topmost last.
+ */
+export interface PluginPageCapture {
+    node: PluginCapture["node"];
+    scale: number;
+    width: number;
+    height: number;
+    parts: { x: number; y: number; width: number; height: number; image: object }[];
+}
+
+/**
  * Captures a raster image of a node, the selection or the whole page.
  */
 export class CaptureNodeScreenshotTool extends PenforgePluginTool<CaptureNodeScreenshotArgs> {
@@ -99,23 +110,23 @@ export class CaptureNodeScreenshotTool extends PenforgePluginTool<CaptureNodeScr
             }
             FileUtils.checkPathIsAbsolute(args.savePath);
         }
-        const capture = await this.callPlugin<PluginCapture>(
+        const capture = await this.callPlugin<PluginCapture | PluginPageCapture>(
             "captureNodeScreenshot",
             { target: args.nodeId, scale, format },
             args.sessionId
         );
-        const image = await CaptureNodeScreenshotTool.finish(
-            ImageContent.byteData(capture.image),
-            format,
-            args.padding ?? 0
-        );
+        const bytes =
+            "parts" in capture
+                ? await CaptureNodeScreenshotTool.composePage(capture)
+                : ImageContent.byteData(capture.image);
+        const image = await CaptureNodeScreenshotTool.finish(bytes, format, args.padding ?? 0);
         if (args.savePath) {
             FileUtils.writeBinaryFile(args.savePath, image.bytes);
         }
         const meta = {
             node: capture.node,
             format,
-            scale,
+            scale: "parts" in capture ? capture.scale : scale,
             width: image.width,
             height: image.height,
             savedPath: args.savePath ?? null,
@@ -124,6 +135,41 @@ export class CaptureNodeScreenshotTool extends PenforgePluginTool<CaptureNodeScr
             new ImageContent(Buffer.from(image.bytes).toString("base64"), CaptureNodeScreenshotTool.MIME_TYPES[format]),
             new TextContent(JSON.stringify(meta)),
         ]);
+    }
+
+    /** Colour of the canvas around the shapes of a page. */
+    private static readonly CANVAS = "#e8e9ea";
+
+    /**
+     * Puts the shapes of a page together.
+     *
+     * @param page - the captured page
+     * @returns the PNG
+     */
+    public static async composePage(page: PluginPageCapture): Promise<Uint8Array> {
+        const { width, height } = page;
+        const layers: OverlayOptions[] = [];
+        for (const part of page.parts) {
+            const image = sharp(ImageContent.byteData(part.image));
+            const { width: w = 0, height: h = 0 } = await image.metadata();
+            // strokes and shadows reach over the shape, about the same on every side
+            const left = Math.round(part.x - (w - part.width) / 2);
+            const top = Math.round(part.y - (h - part.height) / 2);
+            // what reaches over the page is cut: sharp refuses layers larger than the image
+            const x = Math.max(0, left);
+            const y = Math.max(0, top);
+            const cropW = Math.min(w - (x - left), width - x);
+            const cropH = Math.min(h - (y - top), height - y);
+            if (cropW > 0 && cropH > 0) {
+                const input = await image
+                    .extract({ left: x - left, top: y - top, width: cropW, height: cropH })
+                    .png()
+                    .toBuffer();
+                layers.push({ input, left: x, top: y });
+            }
+        }
+        const canvas = sharp({ create: { width, height, channels: 4, background: CaptureNodeScreenshotTool.CANVAS } });
+        return new Uint8Array(await canvas.composite(layers).png().toBuffer());
     }
 
     /**

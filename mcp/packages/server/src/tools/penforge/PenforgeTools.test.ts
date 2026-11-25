@@ -251,6 +251,36 @@ test("capture_node_screenshot converts to the requested format", async () => {
     assert.equal(same.width, 2);
 });
 
+test("capture_node_screenshot puts the shapes of a page together", async () => {
+    const square = async (size: number, background: string) => ({
+        __type: "base64",
+        data: (
+            await sharp({ create: { width: size, height: size, channels: 4, background } })
+                .png()
+                .toBuffer()
+        ).toString("base64"),
+    });
+    const page = {
+        node: { id: "root", name: "Page 1", type: "page" },
+        scale: 0.5,
+        width: 40,
+        height: 20,
+        parts: [
+            { x: 0, y: 0, width: 10, height: 10, image: await square(20, "#ff0000") },
+            { x: 30, y: 10, width: 10, height: 10, image: await square(10, "#0000ff") },
+            { x: 500, y: 0, width: 10, height: 10, image: await square(10, "#00ff00") },
+        ],
+    };
+    const bytes = await CaptureNodeScreenshotTool.composePage(page);
+    const { data, info } = await sharp(bytes).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    assert.deepEqual([info.width, info.height], [40, 20]);
+    const pixel = (x: number, y: number) => [...data.subarray(3 * (y * 40 + x), 3 * (y * 40 + x) + 3)];
+    assert.deepEqual(pixel(0, 0), [255, 0, 0]);
+    assert.deepEqual(pixel(14, 14), [255, 0, 0]);
+    assert.deepEqual(pixel(20, 5), [232, 233, 234]);
+    assert.deepEqual(pixel(39, 19), [0, 0, 255]);
+});
+
 test("capture_node_screenshot hides savePath when file system access is disabled", () => {
     const remote = { isFileSystemAccessEnabled: () => false } as unknown as PenpotMcpServer;
     const tool = new CaptureNodeScreenshotTool(remote);

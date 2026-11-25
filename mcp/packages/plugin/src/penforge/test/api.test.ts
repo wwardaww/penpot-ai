@@ -244,19 +244,49 @@ test("captureNodeScreenshot waits for layout, exports with scale and returns a b
     assert.deepEqual(result.node, { id: rect.id, name: "Rect", type: "rectangle" });
 });
 
-test("captureNodeScreenshot supports selection and page targets", async () => {
-    const exportOf = (label: string) => async () => new TextEncoder().encode(label);
-    const selected = fakeShape({ export: exportOf("sel") });
-    const page = fakePage("One", [selected]);
-    page.root.export = exportOf("page");
-    const api = install(fakePenpot([page]));
+test("captureNodeScreenshot supports the selection", async () => {
+    const selected = fakeShape({ export: async () => new TextEncoder().encode("sel") });
+    const api = install(fakePenpot([fakePage("One", [selected])]));
 
     await assert.rejects(PenforgeApi.captureNodeScreenshot({ target: "selection" }), /Nothing is selected/);
     api.selection = [selected];
     const sel: any = await PenforgeApi.captureNodeScreenshot({ target: "selection" });
     assert.equal(Buffer.from(sel.image.data, "base64").toString(), "sel");
-    const whole: any = await PenforgeApi.captureNodeScreenshot({ target: "page" });
-    assert.equal(Buffer.from(whole.image.data, "base64").toString(), "page");
+});
+
+test("captureNodeScreenshot of a page returns its visible top-level shapes with their places", async () => {
+    const scales: number[] = [];
+    const shape = (label: string, bounds: object, more: object = {}) =>
+        fakeShape({
+            bounds,
+            hidden: false,
+            async export(config: any) {
+                assert.equal(config.type, "png");
+                scales.push(config.scale);
+                return new TextEncoder().encode(label);
+            },
+            ...more,
+        });
+    const page = fakePage("One", [
+        shape("a", { x: 100, y: 50, width: 1920, height: 1080 }),
+        shape("b", { x: 2100, y: 50, width: 92, height: 8142 }),
+        shape("c", { x: -9999, y: 0, width: 1, height: 1 }, { hidden: true }),
+    ]);
+    install(fakePenpot([page]));
+    const whole: any = await PenforgeApi.captureNodeScreenshot({ target: "page", format: "jpeg" });
+    const scale = 4096 / 8142;
+    assert.deepEqual(scales, [scale, scale], "a page that is too large is scaled down");
+    assert.equal(whole.node.name, "One");
+    assert.deepEqual([whole.width, whole.height], [Math.round(2092 * scale), 4096]);
+    assert.deepEqual(
+        whole.parts.map((part: any) => [Buffer.from(part.image.data, "base64").toString(), part.x, part.y]),
+        [
+            ["a", 0, 0],
+            ["b", 2000 * scale, 0],
+        ]
+    );
+    install(fakePenpot([fakePage("Empty", [])]));
+    await assert.rejects(PenforgeApi.captureNodeScreenshot({ target: "page" }), /The page is empty/);
 });
 
 test("generateCodeHints returns markup, style and font faces", async () => {

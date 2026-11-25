@@ -20,6 +20,12 @@ export class ScreenshotCapturer {
      */
     private static readonly FALLBACK_WAIT_MS = 200;
 
+    /** Longest side of the image of a page. */
+    private static readonly MAX_PAGE_PX = 4096;
+
+    /** Most top-level shapes put into the image of a page. */
+    private static readonly MAX_PAGE_SHAPES = 60;
+
     private readonly penpot: any;
     private readonly locator: NodeLocator;
 
@@ -37,9 +43,12 @@ export class ScreenshotCapturer {
      *
      * @param target - a node id, `"selection"` (first selected node) or `"page"` (whole current page)
      * @param scale - export scale
-     * @param format - raster format
+     * @param format - raster format; the parts of a page are always PNG
      */
     public async capture(target: string, scale: number, format: ScreenshotFormat): Promise<JsonObject> {
+        if (target === "page") {
+            return this.capturePage(scale);
+        }
         const shape = await this.resolve(target);
         await this.waitForRender(shape);
         const bytes: Uint8Array = await shape.export({ type: format, scale });
@@ -52,6 +61,56 @@ export class ScreenshotCapturer {
         };
     }
 
+    /**
+     * Captures every top-level shape of the open page for the server to put together: the root itself
+     * has no size, so its export is empty.
+     *
+     * @param scale - export scale; lowered when the page would become a huge image
+     */
+    private async capturePage(scale: number): Promise<JsonObject> {
+        const root = this.penpot.root;
+        if (!root) {
+            throw new Error("No page is open");
+        }
+        const shapes: any[] = [...(root.children ?? [])].filter((shape) => !shape.hidden);
+        if (shapes.length === 0) {
+            throw new Error("The page is empty: there is nothing to capture");
+        }
+        if (shapes.length > ScreenshotCapturer.MAX_PAGE_SHAPES) {
+            throw new Error(
+                `The page has ${shapes.length} top-level shapes, too many for one image; capture its boards by id`
+            );
+        }
+        await this.waitForRender(root);
+        const boxes = shapes.map((shape) => shape.bounds);
+        const x = Math.min(...boxes.map((box) => box.x));
+        const y = Math.min(...boxes.map((box) => box.y));
+        const width = Math.max(...boxes.map((box) => box.x + box.width)) - x;
+        const height = Math.max(...boxes.map((box) => box.y + box.height)) - y;
+        const pageScale = Math.min(scale, ScreenshotCapturer.MAX_PAGE_PX / Math.max(width, height, 1));
+        const parts = [];
+        for (const [index, shape] of shapes.entries()) {
+            const bytes: Uint8Array = await shape.export({ type: "png", scale: pageScale });
+            const box = boxes[index];
+            parts.push({
+                x: (box.x - x) * pageScale,
+                y: (box.y - y) * pageScale,
+                width: box.width * pageScale,
+                height: box.height * pageScale,
+                image: ScreenshotCapturer.base64Envelope(bytes),
+            });
+        }
+        return {
+            node: { id: root.id, name: this.penpot.currentPage?.name ?? root.name, type: "page" },
+            target: "page",
+            scale: pageScale,
+            width: Math.max(1, Math.round(width * pageScale)),
+            height: Math.max(1, Math.round(height * pageScale)),
+            // a later child lies above an earlier one
+            parts,
+        };
+    }
+
     private async resolve(target: string): Promise<Shape> {
         if (target === "selection") {
             const selection: Shape[] = this.penpot.selection ?? [];
@@ -59,13 +118,6 @@ export class ScreenshotCapturer {
                 throw new Error("Nothing is selected");
             }
             return selection[0];
-        }
-        if (target === "page") {
-            const root = this.penpot.root;
-            if (!root) {
-                throw new Error("No page is open");
-            }
-            return root;
         }
         // exports render through the active page, so open the node's page first
         return (await this.locator.requireOnActivePage(target)).shape;
