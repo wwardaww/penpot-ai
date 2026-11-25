@@ -78,7 +78,12 @@ jobs:
           else
             RANGE="${{ github.event.pull_request.base.sha }}..pr-head"
           fi
-          COMMITS="$(git rev-list --reverse "$RANGE")"
+          # Penforge: a merge of Penpot brings commits already checked there.
+          git fetch --no-tags https://github.com/penpot/penpot.git \
+            "+refs/heads/develop:refs/penpot/develop" \
+            "+refs/heads/staging:refs/penpot/staging" \
+            "+refs/heads/main:refs/penpot/main"
+          COMMITS="$(git rev-list --reverse "$RANGE" --not --glob='refs/penpot/*')"
           if [ -z "$COMMITS" ]; then
             echo "No new commits to check."
             exit 0
