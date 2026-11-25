@@ -208,13 +208,37 @@ describe("instruct", () => {
         assert.equal(captures.length, 4);
     });
 
-    test("many screens are written in several turns", async () => {
+    test("many screens are written in several turns, each turn's guides reach the folder at once", async () => {
         const many = Array.from({ length: 14 }, (_, n) => ({ ...BOARDS[0], id: `b-${n}`, name: `Screen ${n}` }));
         const tool = (name: string, args: any) => (name === "list_boards" ? okJson(many) : tools()(name, args));
-        const started = await run({ projectType: "web", tool, turn: guideTurn() });
+        const inFolder: number[] = [];
+        const write = guideTurn();
+        const turn = (request: WorkflowClaudeRequest) => {
+            const guides = join(output, "PenforgeUI", "guides");
+            inFolder.push(existsSync(guides) ? readdirSync(guides).length : 0);
+            return write(request);
+        };
+        const started = await run({ projectType: "web", tool, turn });
         await instruct.run(started.ctx, { action: "run" });
         assert.equal(started.turns.length, 3);
+        assert.deepEqual(inFolder, [0, 6, 12]);
+        assert.ok(existsSync(join(output, "PenforgeUI", "screens", "screen-0.png")));
         assert.equal(readdirSync(join(output, "PenforgeUI", "guides")).length, 14);
+    });
+
+    test("a turn that writes no guide stops the turns; every screen still gets a guide", async () => {
+        const many = Array.from({ length: 14 }, (_, n) => ({ ...BOARDS[0], id: `b-${n}`, name: `Screen ${n}` }));
+        const tool = (name: string, args: any) => (name === "list_boards" ? okJson(many) : tools()(name, args));
+        const started = await run({ projectType: "web", tool, turn: () => ({ text: "the writes were refused" }) });
+        await instruct.run(started.ctx, { action: "run" });
+        assert.equal(started.turns.length, 1);
+        const guides = readdirSync(join(output, "PenforgeUI", "guides"));
+        assert.equal(guides.length, 14);
+        assert.match(
+            readFileSync(join(output, "PenforgeUI", "guides", "screen-13.md"), "utf8"),
+            /could not be written automatically/
+        );
+        assert.ok(started.events.some((event) => (event.payload as any)?.code === "guides-stopped"));
     });
 
     test("a new run keeps what the user added or changed", async () => {
@@ -240,7 +264,35 @@ describe("instruct", () => {
         assert.equal(existsSync(join(folder, "guides", "home-desktop.md")), true);
     });
 
-    test("a stopped run leaves the folder as it was", async () => {
+    test("a stopped run keeps what was done and removes nothing of the last run", async () => {
+        const first = await run({ projectType: "web", tool: tools(), turn: guideTurn() });
+        await instruct.run(first.ctx, { action: "run" });
+        const folder = join(output, "PenforgeUI");
+        // Cart leaves the design, then the next run is stopped during the guides
+        const tool = (name: string, args: any) => (name === "list_boards" ? okJson([BOARDS[0]]) : tools()(name, args));
+        const started = await run({
+            projectType: "web",
+            tool,
+            turn: () => {
+                (started.ctx.signal as { aborted: boolean }).aborted = true;
+                throw new Error("cancelled");
+            },
+        });
+        await assert.rejects(Promise.resolve(instruct.run(started.ctx, { action: "run" })));
+        assert.ok(existsSync(join(folder, "screens", "home-desktop.png")));
+        assert.ok(existsSync(join(folder, "tokens.json")));
+        // the last run's files stay until a run ends
+        assert.ok(existsSync(join(folder, "guides", "cart.md")));
+        assert.ok(existsSync(join(folder, "README.md")));
+        assert.equal(existsSync(join(folder, "kept")), false);
+        // the next complete run cleans up as usual
+        const third = await run({ projectType: "web", tool, turn: guideTurn() });
+        await instruct.run(third.ctx, { action: "run" });
+        assert.equal(existsSync(join(folder, "guides", "cart.md")), false);
+        assert.equal(existsSync(join(folder, "kept")), false);
+    });
+
+    test("a first run that is stopped before any guide keeps its screens", async () => {
         const started = await run({
             projectType: "web",
             tool: tools(),
@@ -250,7 +302,9 @@ describe("instruct", () => {
             },
         });
         await assert.rejects(Promise.resolve(instruct.run(started.ctx, { action: "run" })));
-        assert.deepEqual(readdirSync(output), []);
+        assert.deepEqual(readdirSync(output), ["PenforgeUI"]);
+        assert.ok(existsSync(join(output, "PenforgeUI", "screens", "cart@2x.png")));
+        assert.equal(SpecFolder.isOwn(join(output, "PenforgeUI"), started.ctx.workspace.projectId), true);
     });
 
     test("no git command touches a repository around the folder", async () => {

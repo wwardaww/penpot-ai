@@ -64,8 +64,10 @@ interface FlowEdge {
  * `guides/<screen>.md` per screen.
  *
  * Everything is prepared in the project's own `.penforge/instruct/` first; Claude works only
- * there. The daemon then copies the finished files ({@link SpecFolder}), so a stopped run leaves
- * the user's folder as it was. No git command runs.
+ * there. The daemon copies the files into the user's folder ({@link SpecFolder}) as they are
+ * ready: the screens, assets and tokens first, then the guides after each Claude turn, so the
+ * folder fills while the run goes on and a stopped run keeps what was done. Files of the last run
+ * are removed only when the run ends. No git command runs.
  */
 export class InstructExport {
     private static readonly GENERATOR = "penforge-instruct";
@@ -111,6 +113,7 @@ export class InstructExport {
         for (const dir of ["screens", "assets", "guides"]) {
             await mkdir(join(out, dir), { recursive: true });
         }
+        const target = new SpecFolder(folder, this.ctx.workspace.projectId);
         const screens = await this.spec.screens(out, boards);
         this.progress("assets", "Exporting icons and images");
         const facts = await this.spec.facts(boards);
@@ -125,12 +128,15 @@ export class InstructExport {
             }),
             "utf8"
         );
+        this.checkCancelled();
+        // the screens are in the folder before Claude starts on the guides
+        await target.publish(out, true);
         const edges = await this.flows();
-        await this.writeGuides(staging, out, boards, screens, edges);
+        await this.writeGuides(staging, out, boards, screens, edges, () => target.publish(out, true));
         await writeFile(join(out, "README.md"), this.readme(boards, screens, assets, edges), "utf8");
         this.checkCancelled();
         this.progress("write", "Writing the folder");
-        const published = await new SpecFolder(folder, this.ctx.workspace.projectId).publish(out);
+        const published = await target.publish(out);
         return {
             action: "run",
             folder,
@@ -207,7 +213,8 @@ export class InstructExport {
         out: string,
         boards: ScreenBoard[],
         screens: ScreenFiles[],
-        edges: FlowEdge[]
+        edges: FlowEdge[],
+        publish: () => Promise<unknown>
     ): Promise<void> {
         const guidesDir = join(out, "guides");
         const factsDir = join(staging, "facts");
@@ -221,6 +228,7 @@ export class InstructExport {
             toName: names.get(edge.to) ?? null,
         }));
         await writeFile(join(factsDir, "flows.json"), `${JSON.stringify(named, null, 1)}\n`, "utf8");
+        const expected = new Set(screens.map((screen) => `${screen.slug}.md`));
         for (let start = 0; start < screens.length; start += InstructExport.BATCH) {
             this.checkCancelled();
             this.ctx.emit("progress", {
@@ -238,6 +246,7 @@ export class InstructExport {
             const all = screens
                 .map((screen, index) => `"${screen.name}" ${boards[index].width}×${boards[index].height}`)
                 .join(", ");
+            const before = await InstructExport.guideCount(guidesDir, expected);
             try {
                 await this.ctx.runner.run({
                     prompt: [
@@ -267,6 +276,18 @@ export class InstructExport {
                     text: `Some guides could not be written: ${String(error)}`,
                 });
             }
+            await InstructExport.dropStrayFiles(guidesDir, expected);
+            this.checkCancelled();
+            await publish();
+            if ((await InstructExport.guideCount(guidesDir, expected)) === before) {
+                // the same would happen to the next screens: they get the short guide at once
+                this.ctx.emit("log", {
+                    code: "guides-stopped",
+                    params: {},
+                    text: "Claude wrote no guide in the last turn; the remaining screens get a short guide.",
+                });
+                break;
+            }
         }
         const written = new Set(await readdir(guidesDir).catch(() => [] as string[]));
         for (const [index, screen] of screens.entries()) {
@@ -275,8 +296,17 @@ export class InstructExport {
                 await writeFile(join(guidesDir, `${screen.slug}.md`), guide, "utf8");
             }
         }
-        // anything but the guides does not belong in the folder
-        const expected = new Set(screens.map((screen) => `${screen.slug}.md`));
+        await InstructExport.dropStrayFiles(guidesDir, expected);
+    }
+
+    /** How many of the expected guides exist. */
+    private static async guideCount(guidesDir: string, expected: Set<string>): Promise<number> {
+        const names = await readdir(guidesDir).catch(() => [] as string[]);
+        return names.filter((name) => expected.has(name)).length;
+    }
+
+    /** Removes anything but the guides, which does not belong in the folder. */
+    private static async dropStrayFiles(guidesDir: string, expected: Set<string>): Promise<void> {
         for (const name of await readdir(guidesDir)) {
             if (!expected.has(name)) {
                 await rm(join(guidesDir, name), { recursive: true, force: true });

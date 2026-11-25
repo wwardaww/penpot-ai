@@ -79,9 +79,11 @@ export class SpecFolder {
      * Replaces the folder's files with the files of a staging folder.
      *
      * @param staging - folder holding the new content
+     * @param partial - true while a run is still writing the staging folder: its files are copied,
+     *   but files of the last run that it lacks yet stay, and the manifest keeps listing them
      * @throws Error when the folder exists and is not the project's spec folder
      */
-    public async publish(staging: string): Promise<SpecPublishResult> {
+    public async publish(staging: string, partial = false): Promise<SpecPublishResult> {
         if (!SpecFolder.isFreeOrOwn(this.dir, this.projectId)) {
             throw new Error(`${this.dir} exists and was not written by Penforge for this project`);
         }
@@ -92,20 +94,22 @@ export class SpecFolder {
         const next = await SpecFolder.hashes(staging);
         // names the project's manifest from the start, so an interrupted run can be repeated
         await this.writeManifest({ ...previous });
-        const kept = await this.removePrevious(previous, next);
+        const kept = partial ? [] : await this.removePrevious(previous, next);
         for (const [file, hash] of Object.entries(next)) {
             const target = this.path(file);
             await this.makeFolders(dirname(target));
             const present = await SpecFolder.hash(target);
-            // a link or folder in the file's place is moved away too, never written through
-            if (present !== hash && (await SpecFolder.exists(target))) {
+            // a file the user changed, or a link or folder in its place, is moved away, never
+            // written through; a file as Penforge last wrote it is replaced
+            const asWritten = present !== null && present === previous[file];
+            if (present !== hash && !asWritten && (await SpecFolder.exists(target))) {
                 kept.push(await this.keep(file));
             }
             if (present !== hash) {
                 await copyFile(join(staging, ...file.split("/")), target);
             }
         }
-        await this.writeManifest(next);
+        await this.writeManifest(partial ? { ...previous, ...next } : next);
         return { files: Object.keys(next).length, kept };
     }
 
