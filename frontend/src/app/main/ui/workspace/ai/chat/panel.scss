@@ -18,6 +18,11 @@
   flex-direction: column;
   block-size: 100%;
   min-block-size: 0;
+
+  // The sidebar's grid columns grow to their content: without this, one long
+  // line (a running step, a path, code) makes the chat wider than the sidebar,
+  // which cuts it off.
+  contain: inline-size;
   gap: var(--sp-s);
   padding: var(--sp-s);
 }
@@ -59,12 +64,27 @@
   color: var(--color-foreground-secondary);
 }
 
+// The cards above the chat scroll among themselves when the window is too
+// short for them, so they never push the composer out of it.
+.notices {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  gap: var(--sp-s);
+  min-block-size: 0;
+  overflow-y: auto;
+
+  &:empty {
+    display: none;
+  }
+}
+
 .timeline {
   display: flex;
   flex: 1;
   flex-direction: column;
   gap: var(--sp-m);
-  min-block-size: 0;
+  min-block-size: $sz-64;
   margin: 0;
   padding: 0;
   overflow-y: auto;
@@ -232,11 +252,18 @@
 }
 
 .tool-done {
+  flex-shrink: 0;
   color: var(--color-accent-success);
 }
 
 .tool-error {
+  flex-shrink: 0;
   color: var(--color-accent-error);
+}
+
+.tool-answer {
+  flex-shrink: 0;
+  margin-inline-start: auto;
 }
 
 .tool-detail {
@@ -297,6 +324,7 @@
   border: $b-1 solid var(--color-background-quaternary);
   border-radius: $br-8;
   background-color: var(--color-background-tertiary);
+  overflow-wrap: anywhere;
 }
 
 .card-header {
@@ -307,8 +335,15 @@
 }
 
 .card-title {
+  min-inline-size: 0;
   margin: 0;
   color: var(--color-foreground-primary);
+}
+
+// A long command or file stays inside the card, so its buttons stay in view.
+.card-description {
+  max-block-size: $sz-200;
+  overflow-y: auto;
 }
 
 .card-actions {
@@ -320,11 +355,6 @@
 .card-options {
   flex-direction: column;
   align-items: stretch;
-}
-
-.answer {
-  margin: 0;
-  color: var(--color-foreground-secondary);
 }
 
 .risk {
@@ -369,6 +399,11 @@
   border-radius: $br-6;
   background-color: var(--color-background-quaternary);
   color: var(--color-foreground-primary);
+}
+
+.composer-chips {
+  max-block-size: $sz-96;
+  overflow-y: auto;
 }
 
 .chip-name {
@@ -464,6 +499,7 @@
 
 .composer {
   display: flex;
+  flex-shrink: 0;
   flex-direction: column;
   gap: var(--sp-s);
   padding-block-start: var(--sp-s);

@@ -366,3 +366,18 @@
     (t/is (= :done (chat/steps-status (:entries (second items)))))
     (t/is (= :running (chat/steps-status (:entries (last items)))))
     (t/is (= [] (chat/timeline-items [])))))
+
+(t/deftest answered-permissions-move-above-the-answer-written-after-them
+  (let [entries   [{:kind :user :id "u1"}
+                   {:kind :assistant :id "a1" :text "I build it. Done: here is the result."}
+                   {:kind :permission :id "p1" :answer :allowed}
+                   {:kind :tool :id "t1" :status :done}
+                   {:kind :permission :id "p2" :answer :denied}
+                   {:kind :permission :id "p3"}]
+        items     (chat/timeline-items entries)
+        [_ steps] items]
+    (t/is (= [[:user "u1"] [:steps "p1"] [:assistant "a1"] [:permission "p3"]]
+             (mapv (juxt :kind :id) items))
+          "only the permission that still waits stays below the answer")
+    (t/is (= ["p1" "t1" "p2"] (mapv :id (:entries steps))))
+    (t/is (= :done (chat/steps-status (:entries steps))))))

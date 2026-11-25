@@ -12,6 +12,7 @@
    ["react" :as react]
    ["react-dom/client" :as rdc]
    ["react-dom/server" :as rds]
+   [app.common.data :as d]
    [app.common.types.shape :as cts]
    [app.common.uuid :as uuid]
    [app.main.data.ai.chat :as chat]
@@ -258,6 +259,32 @@
     (t/is (str/includes? markup "data-testid=\"ai-chat-status\""))
     (t/is (str/includes? markup "type=\"file\""))
     (t/is (str/includes? markup "accept=\"") "the picker offers the accepted types")))
+
+(t/deftest an-answered-permission-is-a-step-above-the-answer
+  (let [state   (fn [answer]
+                  (workspace-state
+                   [] (d/ordered-set)
+                   {:status :streaming
+                    :entries [{:kind :user :id "u1" :text "Go"}
+                              {:kind :assistant :id "a1" :text "The answer"}
+                              (cond-> {:kind :permission :id "p1" :title "Write a file"
+                                       :description "index.html" :risk :medium}
+                                (some? answer) (assoc :answer answer))]}))
+        markup  (fn [answer]
+                  (with-state (state answer)
+                    #(render-static (mf/element panel/chat-panel* #js {}))))
+        waiting (markup nil)
+        allowed (markup :allowed)]
+    (t/is (str/includes? waiting "penforge.chat.permission.allow<"))
+    (t/is (not (str/includes? waiting "ai-chat-answered-permission")))
+    (t/is (< (str/index-of waiting "The answer") (str/index-of waiting "Write a file"))
+          "a card that waits is the last thing in the chat")
+    (t/is (str/includes? allowed "ai-chat-answered-permission"))
+    (t/is (str/includes? allowed "penforge.chat.permission.allowed"))
+    (t/is (not (str/includes? allowed "penforge.chat.permission.deny<")))
+    (t/is (< (str/index-of allowed "Write a file") (str/index-of allowed "The answer"))
+          "once answered it is above the answer")
+    (t/is (str/includes? (markup :denied) "penforge.chat.permission.denied"))))
 
 (t/deftest a-removed-selection-is-not-offered-again
   (let [title  (cts/setup-shape {:type :text :name "Title"})

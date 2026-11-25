@@ -542,15 +542,21 @@
          (count))))
 
 (defn- step-entry?
-  [entry]
-  (contains? #{:tool :workflow} (:kind entry)))
+  "True for what the AI did: tool calls, workflows and permissions that
+  have their answer. A permission still waiting stays in the timeline."
+  [{:keys [kind answer]}]
+  (or (contains? #{:tool :workflow} kind)
+      (and (= :permission kind) (some? answer))))
 
 (defn timeline-items
   "The timeline as the panel shows it: within each turn (the entries
-  after a user message) all steps (tool calls, workflows) are gathered
-  into one `{:kind :steps :id <first step id> :entries [...]}` item
-  placed before the turn's other entries, so the AI's answer stays
-  below its steps instead of being split up by them."
+  after a user message) all steps (tool calls, workflows, answered
+  permissions) are gathered into one
+  `{:kind :steps :id <first step id> :entries [...]}` item placed before
+  the turn's other entries, so the AI's answer stays below its steps
+  instead of being split up by them. The answer grows in the entry where
+  it began, so an answered permission card left in its place would stay
+  below the text written after it."
   [entries]
   (let [flush (fn [out turn]
                 (let [steps (filterv step-entry? turn)]

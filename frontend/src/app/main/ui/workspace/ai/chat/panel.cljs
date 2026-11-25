@@ -384,7 +384,7 @@
 (mf/defc permission-entry*
   {::mf/private true}
   [{:keys [entry]}]
-  (let [{:keys [id title description risk answer]} entry
+  (let [{:keys [id title description risk]} entry
 
         on-allow
         (mf/use-fn (mf/deps id) #(st/emit! (chat/respond-permission id true)))
@@ -407,23 +407,37 @@
          :medium (tr "penforge.chat.permission.risk-medium")
          (tr "penforge.chat.permission.risk-low"))]]
      (when (seq description)
-       [:> text* {:as "p" :typography t/body-small :class (stl/css :muted)} description])
-     (case answer
-       :allowed
-       [:> text* {:as "p" :typography t/body-small :class (stl/css :answer)}
-        (tr "penforge.chat.permission.allowed")]
+       [:> text* {:as "p" :typography t/body-small :class (stl/css :muted :card-description)}
+        description])
+     [:div {:class (stl/css :card-actions)}
+      [:> button* {:variant "primary" :on-click on-allow}
+       (tr "penforge.chat.permission.allow")]
+      [:> button* {:variant "secondary" :on-click on-always}
+       (tr "penforge.chat.permission.always")]
+      [:> button* {:variant "ghost" :on-click on-deny}
+       (tr "penforge.chat.permission.deny")]]]))
 
-       :denied
-       [:> text* {:as "p" :typography t/body-small :class (stl/css :answer)}
-        (tr "penforge.chat.permission.denied")]
-
-       [:div {:class (stl/css :card-actions)}
-        [:> button* {:variant "primary" :on-click on-allow}
-         (tr "penforge.chat.permission.allow")]
-        [:> button* {:variant "secondary" :on-click on-always}
-         (tr "penforge.chat.permission.always")]
-        [:> button* {:variant "ghost" :on-click on-deny}
-         (tr "penforge.chat.permission.deny")]])]))
+(mf/defc permission-step*
+  "An answered permission, one line in the steps of its turn."
+  {::mf/private true}
+  [{:keys [entry]}]
+  (let [{:keys [title description answer]} entry
+        allowed (= :allowed answer)
+        line    (mf/html
+                 [:*
+                  [:> status-icon* {:status (if allowed :done :error)}]
+                  [:span {:class (stl/css :tool-summary) :title title} title]
+                  [:span {:class (stl/css :tool-answer)}
+                   (if allowed
+                     (tr "penforge.chat.permission.allowed")
+                     (tr "penforge.chat.permission.denied"))]])]
+    [:li {:class (stl/css :entry :entry-tool)
+          :data-testid "ai-chat-answered-permission"}
+     (if (seq description)
+       [:details {:class (stl/css :tool-details)}
+        [:summary {:class (stl/css :tool-line)} line]
+        [:pre {:class (stl/css :tool-detail)} description]]
+       [:div {:class (stl/css :tool-line)} line])]))
 
 (mf/defc question-option*
   {::mf/private true}
@@ -474,8 +488,9 @@
    ::mf/memo true}
   [{:keys [entry persona]}]
   (case (:kind entry)
-    :tool     [:> tool-entry* {:entry entry :persona persona}]
-    :workflow [:> workflow-entry* {:entry entry :persona persona}]
+    :tool       [:> tool-entry* {:entry entry :persona persona}]
+    :workflow   [:> workflow-entry* {:entry entry :persona persona}]
+    :permission [:> permission-step* {:entry entry}]
     nil))
 
 (mf/defc steps-entry*
@@ -803,7 +818,7 @@
             :on-drag-over on-drag-over
             :on-drag-leave on-drag-leave
             :on-drop on-drop}
-     [:ul {:class (stl/css :chips)}
+     [:ul {:class (stl/css :chips :composer-chips)}
       [:> selection-chip* {:chat chat}]
       (for [[index attachment] (map-indexed vector attachments)]
         [:> attachment-chip* {:key (str index "-" (chat/attachment-key attachment))
@@ -899,10 +914,11 @@
                         :on-click on-new-conversation}]
       [:> detach-button* {}]]
 
-     [:> connection-banner* {:connection connection}]
-     [:> design-system-start* {}]
-     [:> linked-project-panel* {}]
-     [:> design-system-binding* {}]
+     [:div {:class (stl/css :notices)}
+      [:> connection-banner* {:connection connection}]
+      [:> design-system-start* {}]
+      [:> linked-project-panel* {}]
+      [:> design-system-binding* {}]]
 
      (when (or connected (seq entries))
        [:> timeline* {:entries entries
