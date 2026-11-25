@@ -139,6 +139,15 @@ export class ClientMessageSchema {
         z.object({ type: z.literal("project.output.status"), rid: id, projectId: id }),
         z.object({ type: z.literal("project.output.preview"), ...outputFolder }),
         z.object({ type: z.literal("project.output.set"), ...outputFolder }),
+        // Claude command and permission mode
+        z.object({ type: z.literal("settings.get"), rid: id }),
+        z.object({
+            type: z.literal("settings.set"),
+            rid: id,
+            claudeCommand: z.string().max(4096).optional(),
+            permissionMode: z.enum(["manual", "auto"]).optional(),
+        }),
+        z.object({ type: z.literal("settings.test"), rid: id, claudeCommand: z.string().max(4096) }),
     ]);
 
     /**

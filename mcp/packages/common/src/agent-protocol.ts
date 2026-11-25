@@ -29,8 +29,11 @@ export type ToolCallStatus = "running" | "done" | "error";
 /** Risk level of an action that needs the user's permission. */
 export type PermissionRisk = "low" | "medium" | "high";
 
-/** Kind of a `workflow.event`; workflows may define further kinds. */
-export type WorkflowEventKind = "progress" | "plan" | "question" | "result" | "log" | (string & {});
+/**
+ * Kind of a `workflow.event`; workflows may define further kinds. `answered` follows a `question`
+ * the daemon answered itself (permission mode `auto`, {@link WorkflowAnsweredPayload}).
+ */
+export type WorkflowEventKind = "progress" | "plan" | "question" | "answered" | "result" | "log" | (string & {});
 
 // ---------------------------------------------------------------------------------------------
 // attachments
@@ -261,7 +264,8 @@ export type ClientMessage =
     | AppsClientMessage
     | ChatEditClientMessage
     | LinkedClientMessage
-    | OutputClientMessage;
+    | OutputClientMessage
+    | SettingsClientMessage;
 
 // ---------------------------------------------------------------------------------------------
 // daemon -> client
@@ -333,6 +337,18 @@ export interface PermissionRequestMessage {
     title: string;
     description: string;
     risk: PermissionRisk;
+}
+
+/**
+ * The daemon answered a permission question itself, because the permission mode is `auto`: allowed,
+ * or refused where `auto` has no right to decide (publishing, paths outside the project). Follows
+ * the question's `permission.request`, so that the answer shows where the user's answers show.
+ */
+export interface PermissionAnsweredMessage {
+    type: "permission.answered";
+    requestId: string;
+    allow: boolean;
+    auto: true;
 }
 
 /** A permission question ended without the user's answer (timed out, run ended): denied. */
@@ -459,6 +475,8 @@ export type DaemonMessage =
     | ChatHistoryMessage
     | PermissionRequestMessage
     | PermissionClosedMessage
+    | PermissionAnsweredMessage
+    | SettingsDaemonMessage
     | WorkflowStartedMessage
     | WorkflowEventMessage
     | WorkflowDoneMessage
@@ -493,11 +511,23 @@ export interface QuestionOption {
 export interface WorkflowQuestion {
     text: string;
     options: QuestionOption[];
+    /**
+     * Id of the option taken without asking when the permission mode is `auto`. A question without
+     * one waits for the user in every mode (publishing, restoring a checkpoint).
+     */
+    recommended?: string;
 }
 
 /** Payload of a `workflow.event` of kind `question`. */
 export interface WorkflowQuestionPayload extends WorkflowQuestion {
     questionId: string;
+}
+
+/** Payload of a `workflow.event` of kind `answered`. */
+export interface WorkflowAnsweredPayload {
+    questionId: string;
+    optionId: string;
+    auto: true;
 }
 
 /** Params of the built-in `answer` workflow, which answers a pending question. */
@@ -1201,3 +1231,82 @@ export interface ProjectOutputMessage {
     /** reply to a preview only */
     target?: OutputTarget;
 }
+
+// ---------------------------------------------------------------------------------------------
+// settings
+
+/**
+ * What happens when Claude needs permission: `manual` asks the user each time, `auto` approves it
+ * and lets nothing wait for the user (who may be away).
+ */
+export type PermissionMode = "manual" | "auto";
+
+/** Request for the settings; the reply is `settings`. Needs no `context.set`. */
+export interface SettingsGetMessage {
+    type: "settings.get";
+    rid: string;
+}
+
+/**
+ * Changes settings; fields left out keep their value. The reply is `settings`, which every client
+ * the change concerns receives as well.
+ *
+ * `claudeCommand` names a program this computer runs: only the local daemon accepts it, from a
+ * client on the same computer (`forbidden` otherwise), and only as a bare name or an absolute path
+ * (`bad-request` with reason `claude-command` otherwise). A change holds from the next turn on.
+ */
+export interface SettingsSetMessage {
+    type: "settings.set";
+    rid: string;
+    claudeCommand?: string;
+    permissionMode?: PermissionMode;
+}
+
+/** Asks whether a Claude command works, without saving it; the reply is `settings.tested`. */
+export interface SettingsTestMessage {
+    type: "settings.test";
+    rid: string;
+    claudeCommand: string;
+}
+
+export type SettingsClientMessage = SettingsGetMessage | SettingsSetMessage | SettingsTestMessage;
+
+/** Settings of this daemon (or, in server mode, of this connection). */
+export interface SettingsMessage {
+    type: "settings";
+    /** set on the reply to a request; absent when another client changed the settings */
+    rid?: string;
+    /** whom `permissionMode` holds for: every client of the local daemon, or this connection only */
+    scope: "machine" | "session";
+    permissionMode: PermissionMode;
+    /** command that starts Claude; absent where it may not be read (server mode, remote clients) */
+    claudeCommand?: string;
+}
+
+/**
+ * What a Claude command is: a program, an alias or a function of the user's shell, or the copy of
+ * Claude Code that comes with the daemon (`claude` when none is installed).
+ */
+export type ClaudeCommandKind = "program" | "alias" | "function" | "bundled";
+
+/**
+ * Why a Claude command does not work: no such command, it ended without starting `claude`, it took
+ * too long, or what it started is not Claude Code.
+ */
+export type ClaudeCommandProblem = "not-found" | "not-started" | "timeout" | "failed";
+
+/** Result of `settings.test`. Never holds the text of an alias or what the command printed. */
+export interface SettingsTestedMessage {
+    type: "settings.tested";
+    rid: string;
+    claudeCommand: string;
+    found: boolean;
+    kind?: ClaudeCommandKind;
+    /** file of a program */
+    path?: string;
+    /** version number Claude Code reports */
+    version?: string;
+    problem?: ClaudeCommandProblem;
+}
+
+export type SettingsDaemonMessage = SettingsMessage | SettingsTestedMessage;
