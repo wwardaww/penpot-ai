@@ -294,6 +294,7 @@ export class AgentServer {
             const session = new AgentSession(ws, {
                 ...this.sessionDeps,
                 gate: this.hosting?.gates.open(request),
+                isLocal: AgentServer.isLoopback(request.socket.remoteAddress),
                 // The upgrade passed the Origin check above; without required pairing that is
                 // enough (see AgentConfig.requirePairing).
                 verifyToken: (candidate) => !this.config.requirePairing || this.token.verify(candidate),
@@ -301,6 +302,10 @@ export class AgentServer {
             this.sessions.add(session);
             ws.on("close", () => this.sessions.delete(session));
         });
+    }
+
+    private static isLoopback(address: string | undefined): boolean {
+        return address !== undefined && AgentConfig.isLoopbackHost(address.replace(/^::ffff:/i, ""));
     }
 
     private isAllowedHost(host: string | undefined): boolean {

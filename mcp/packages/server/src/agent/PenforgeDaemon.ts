@@ -6,6 +6,8 @@ import { AppsService } from "./apps/AppsService";
 import { LinkedFolders } from "./linked/LinkedFolders";
 import { LinkService } from "./linked/LinkService";
 import { ChatService } from "./chat/ChatService";
+import { ClaudeCommands } from "./claude/ClaudeCommands";
+import { ClaudeSource } from "./claude/ClaudeSource";
 import { TurnRunner } from "./chat/TurnRunner";
 import { DevServerManager } from "./process/DevServerManager";
 import { PreviewService } from "./process/PreviewService";
@@ -19,6 +21,8 @@ import { VisualQaHost, type VisualQaServices } from "./qa/QaRun";
 import { PromptRegistry } from "./prompts/promptRegistry";
 import type { ClaudeRunner } from "./runner/ClaudeRunner";
 import { createRunner } from "./runner/createRunner";
+import { SettingsService } from "./settings/SettingsService";
+import { UserSettings } from "./settings/UserSettings";
 import { McpToolsClient } from "./tools/McpToolsClient";
 import type { PluginSessionDirectory } from "./tools/PluginSessions";
 import { WorkflowEngine } from "./workflows/WorkflowEngine";
@@ -30,6 +34,8 @@ import { WorkspaceManager } from "./workspace/WorkspaceManager";
 /** Replaceable parts of the daemon (tests use a fake runner and no MCP endpoint). */
 export interface PenforgeDaemonParts {
     runner?: ClaudeRunner;
+    /** finds the user's Claude command */
+    claudeCommands?: ClaudeCommands;
     registry?: WorkflowRegistry;
     prompts?: PromptRegistry;
     /** null disables direct MCP tool calls */
@@ -76,7 +82,16 @@ export class PenforgeDaemon {
     ) {
         this.token = new PairingToken(config.fixedToken);
         this.hosting = parts.hosting ?? null;
-        this.runner = parts.runner ?? createRunner(config, this.hosting?.turns());
+        // server mode keeps no settings of its own: it has no `claude` login, and many users
+        const isLocal = this.hosting === null && config.mode === "local";
+        const settings = isLocal ? new UserSettings(join(config.home, "settings.json")) : null;
+        const claude = settings
+            ? new ClaudeSource(
+                  parts.claudeCommands ?? new ClaudeCommands({ configuredPath: config.claudePath }),
+                  () => settings.current.claudeCommand
+              )
+            : undefined;
+        this.runner = parts.runner ?? createRunner(config, this.hosting?.turns(), claude);
         this.registry = parts.registry ?? WorkflowRegistry.withShippedWorkflows();
         this.tools = parts.tools === undefined ? new McpToolsClient(config.mcpUrl) : parts.tools;
         const turns = new TurnRunner(this.runner, parts.prompts ?? PromptRegistry.locate(), this.hosting === null);
@@ -128,6 +143,7 @@ export class PenforgeDaemon {
                     workspaces,
                     this.hosting ? "Output folders are available in the desktop app or local daemon only" : null
                 ),
+                settings: new SettingsService(settings && claude ? { settings, claude } : null),
             },
             () => ({
                 service: "penforge-agent",

@@ -112,6 +112,17 @@ It installs dependencies on first run, builds, starts the daemon and prints a
 pairing link (`https://localhost:3449/#/penforge/pair?token=...`). Open it, or
 paste it into the AI tab's pairing box.
 
+Settings > AI in the app (`#/settings/ai`) holds two settings, which the daemon
+keeps in `<PENFORGE_HOME>/settings.json`:
+
+- **Claude command** (`claude`): a name on `PATH`, an alias or function of your
+  bash or zsh, or an absolute path, without arguments. An alias or script need
+  not pass on arguments: while it runs, `claude` on its `PATH` is a stand-in
+  that adds the daemon's arguments to its own. It must call plain `claude`.
+- **Permission mode**: `manual` asks you; `auto` approves what manual would ask
+  about. Auto still refuses to publish, push or deploy and to change files
+  outside the project; questions such as "Publish?" still wait for you.
+
 Ports on the host: 4401 (MCP), 4402 (plugin bridge), 4410 (agent WebSocket). The
 devenv container's own MCP server is published on 14401 so it does not clash.
 

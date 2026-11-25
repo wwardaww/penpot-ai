@@ -12,9 +12,11 @@ import type { TurnSetup } from "./chat/TurnRunner";
 import { ClientMessageSchema } from "./ClientMessageSchema";
 import type { SessionGate } from "./SessionGate";
 import { PermissionBroker } from "./permissions/PermissionBroker";
+import { PermissionModeState } from "./permissions/PermissionModeState";
 import { ToolPermissionPolicy } from "./permissions/ToolPermissionPolicy";
 import type { PreviewService } from "./process/PreviewService";
 import type { ToolPermissionHandler } from "./runner/ClaudeRunner";
+import type { SettingsClient, SettingsService } from "./settings/SettingsService";
 import type { McpToolsClient } from "./tools/McpToolsClient";
 import type { PluginSessionDirectory } from "./tools/PluginSessions";
 import type { WorkflowEngine } from "./workflows/WorkflowEngine";
@@ -44,6 +46,10 @@ export interface AgentSessionDeps {
     links?: LinkService;
     /** output folders of web and mobile projects (W41) */
     outputs?: OutputService;
+    /** Claude command and permission mode */
+    settings?: SettingsService;
+    /** whether the client runs on the same computer as the daemon */
+    isLocal?: boolean;
 }
 
 /** WebSocket close code for policy violations (bad or missing authentication). */
@@ -56,11 +62,15 @@ const POLICY_VIOLATION = 1008;
  * closes the connection. Afterwards, messages are validated and dispatched to the services; each
  * request runs on its own, so that e.g. `permission.respond` arrives while a chat turn waits for it.
  */
-export class AgentSession implements AgentClient {
+export class AgentSession implements AgentClient, SettingsClient {
     public readonly id = randomUUID();
     private readonly logger = createLogger("AgentSession");
     private readonly closeController = new AbortController();
+    public readonly permissionMode: PermissionModeState;
+    public readonly isLocal: boolean;
     private readonly broker: PermissionBroker;
+    private readonly unfollowMode: () => void;
+    private leaveSettings?: () => void;
     private readonly authTimer: NodeJS.Timeout;
     private authenticated = false;
     /** pending gate check of the `auth` message; later messages wait for it */
@@ -75,7 +85,10 @@ export class AgentSession implements AgentClient {
         private readonly socket: WebSocket,
         private readonly deps: AgentSessionDeps
     ) {
-        this.broker = new PermissionBroker((message) => this.send(message));
+        this.permissionMode = deps.settings?.modeForConnection() ?? new PermissionModeState();
+        this.isLocal = deps.isLocal ?? false;
+        this.broker = new PermissionBroker((message) => this.send(message), undefined, this.permissionMode);
+        this.unfollowMode = this.permissionMode.onChange(() => this.broker.answerUnattended());
         this.authTimer = setTimeout(() => this.reject("Authentication timed out"), deps.authTimeoutMs);
         socket.on("message", (data, isBinary) => this.receive(data, isBinary));
         socket.on("close", () => this.dispose());
@@ -134,6 +147,7 @@ export class AgentSession implements AgentClient {
             workspace,
             permissions: this.policy.policy,
             tools,
+            permissionMode: this.permissionMode,
         };
     }
 
@@ -230,6 +244,7 @@ export class AgentSession implements AgentClient {
     private accept(): void {
         clearTimeout(this.authTimer);
         this.authenticated = true;
+        this.leaveSettings = this.deps.settings?.connect(this);
         this.send({ type: "auth.ok", daemonVersion: this.deps.daemonVersion });
     }
 
@@ -290,7 +305,20 @@ export class AgentSession implements AgentClient {
                 return this.outputs().preview(this, message);
             case "project.output.set":
                 return this.outputs().set(this, message);
+            case "settings.get":
+                return this.settings().get(this, message);
+            case "settings.set":
+                return this.settings().set(this, message);
+            case "settings.test":
+                return this.settings().test(this, message);
         }
+    }
+
+    private settings(): SettingsService {
+        if (!this.deps.settings) {
+            throw new AgentError("not-implemented", "Settings are not available in this daemon");
+        }
+        return this.deps.settings;
     }
 
     private outputs(): OutputService {
@@ -365,6 +393,8 @@ export class AgentSession implements AgentClient {
     private dispose(): void {
         clearTimeout(this.authTimer);
         this.closeController.abort();
+        this.leaveSettings?.();
+        this.unfollowMode();
         this.broker.denyAll();
         for (const waiter of [...this.contextWaiters]) {
             waiter();
