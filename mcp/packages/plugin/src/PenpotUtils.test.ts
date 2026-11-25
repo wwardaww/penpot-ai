@@ -181,3 +181,23 @@ test("isWasmRenderer — throws when the file features are not exposed", () => {
     (globalThis as any).penpot = { currentFile: {} };
     assert.throws(() => PenpotUtils.isWasmRenderer(), /does not expose the file features/);
 });
+
+test("setParentXY — places a shape in a plain board and an absolute one in a layout without a warning", () => {
+    PenpotUtils.takeWarnings();
+    const plain: any = { parent: { x: 100, y: 50, flex: null, grid: null } };
+    PenpotUtils.setParentXY(plain, 5, 6);
+    assert.deepEqual([plain.x, plain.y], [105, 56]);
+    const overlay: any = { parent: { x: 0, y: 0, flex: {} }, layoutChild: { absolute: true } };
+    PenpotUtils.setParentXY(overlay, 5, 6);
+    assert.deepEqual(PenpotUtils.takeWarnings(), []);
+});
+
+test("setParentXY — warns that a grid ignores positions", () => {
+    PenpotUtils.setParentXY(
+        { parent: { id: "g", name: "Grid", x: 0, y: 0, grid: {} }, layoutChild: null } as any,
+        1,
+        1
+    );
+    assert.match(PenpotUtils.takeWarnings()[0], /its grid layout places them/);
+    assert.deepEqual(PenpotUtils.takeWarnings(), []);
+});

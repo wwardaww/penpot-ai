@@ -127,6 +127,16 @@ export interface ExecuteCodeTaskParams {
      * The JavaScript code to be executed.
      */
     code: string;
+
+    /**
+     * Whether to note which shapes the code adds, to name the ones it leaves when it fails.
+     */
+    trackShapes?: boolean;
+
+    /**
+     * Whether to check the layout of what the code drew; needs `trackShapes`.
+     */
+    checkLayout?: boolean;
 }
 
 /**
@@ -142,6 +152,16 @@ export interface ExecuteCodeTaskResultData<T> {
      * Captured console output during code execution.
      */
     log: string;
+
+    /**
+     * Calls of the code that had no effect, if any.
+     */
+    warnings?: string[];
+
+    /**
+     * Problems of the layout, when it was checked.
+     */
+    layoutProblems?: string[];
 }
 
 /**

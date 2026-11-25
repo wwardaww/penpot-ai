@@ -262,6 +262,18 @@ export class PenpotUtils {
         );
     }
 
+    /** Warnings of {@link setParentXY} nobody took yet. */
+    private static readonly layoutWarnings = new Set<string>();
+
+    /**
+     * Returns the warnings collected since the last call.
+     */
+    public static takeWarnings(): string[] {
+        const warnings = [...PenpotUtils.layoutWarnings];
+        PenpotUtils.layoutWarnings.clear();
+        return warnings;
+    }
+
     /**
      * Sets the position of a shape relative to its parent's position.
      * This is a convenience method since parentX and parentY are read-only properties.
@@ -269,11 +281,22 @@ export class PenpotUtils {
      * @param shape - The shape to position
      * @param parentX - The desired X position relative to the parent
      * @param parentY - The desired Y position relative to the parent
+     * In a parent with a flex or grid layout, the layout places the shape: the position has no
+     * effect (unless the shape is absolute there), and a warning says so.
+     *
      * @throws Error if the shape has no parent
      */
     public static setParentXY(shape: Shape, parentX: number, parentY: number): void {
         if (!shape.parent) {
             throw new Error("Shape has no parent - cannot set parent-relative position");
+        }
+        const parent = shape.parent as Board;
+        if ((parent.flex || parent.grid) && !shape.layoutChild?.absolute) {
+            PenpotUtils.layoutWarnings.add(
+                `setParentXY has no effect on the children of "${parent.name}" ${parent.id}: its ` +
+                    `${parent.flex ? "flex" : "grid"} layout places them. Use its gap, padding and alignment, or ` +
+                    "set layoutChild.absolute = true on the child first."
+            );
         }
         shape.x = shape.parent.x + parentX;
         shape.y = shape.parent.y + parentY;

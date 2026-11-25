@@ -2,6 +2,9 @@ import { Task, TaskHandler } from "../TaskHandler";
 import { ExecuteCodeTaskParams, ExecuteCodeTaskResultData } from "../../../common/src";
 import { PenpotUtils } from "../PenpotUtils.ts";
 import { ExecuteCodeTaskConsole } from "../ExecuteCodeTaskConsole.ts";
+import { formatTaskError } from "../ErrorUtils.ts";
+import { CanvasSnapshot } from "../penforge/canvasSnapshot.ts";
+import { LayoutCheck } from "../penforge/layoutCheck.ts";
 
 /**
  * Task handler for executing JavaScript code in the plugin context.
@@ -17,6 +20,9 @@ export class ExecuteCodeTaskHandler extends TaskHandler<ExecuteCodeTaskParams> {
      * Contains the penpot API, storage object, and custom console implementation.
      */
     private readonly context: any;
+
+    /** Ids of the top-level boards that checked code drew on, the most recent last. */
+    private checkedBoards: string[] = [];
 
     constructor() {
         super();
@@ -67,6 +73,8 @@ export class ExecuteCodeTaskHandler extends TaskHandler<ExecuteCodeTaskParams> {
         const workspaceReady = () => !management || management.workspace.status === "ready";
 
         let result: any;
+        let before: CanvasSnapshot | null = null;
+        PenpotUtils.takeWarnings();
         try {
             // wait for layout updates prior to executing the supplied code (if method is available)
             try {
@@ -79,11 +87,19 @@ export class ExecuteCodeTaskHandler extends TaskHandler<ExecuteCodeTaskParams> {
                 console.error("Error waiting for layout update:", e);
             }
 
+            before = task.params.trackShapes && workspaceReady() ? ExecuteCodeTaskHandler.snapshot() : null;
+
             // execute the code in an async function with the context variables as parameters
             result = await (async (ctx) => {
                 const fn = new Function(...Object.keys(ctx), `return (async () => { ${code} })();`);
                 return fn(...Object.values(ctx));
             })(context);
+        } catch (error) {
+            const left = ExecuteCodeTaskHandler.leftBehind(before);
+            if (left === null) {
+                throw error;
+            }
+            throw new Error(`${formatTaskError(error)}\n${left}`);
         } finally {
             // restore the original value of the flags
             penpot.flags.naturalChildOrdering = originalNaturalChildOrdering;
@@ -109,7 +125,79 @@ export class ExecuteCodeTaskHandler extends TaskHandler<ExecuteCodeTaskParams> {
             result: result,
             log: this.context.console.getLog(),
         };
+        const warnings = PenpotUtils.takeWarnings();
+        if (warnings.length > 0) {
+            resultData.warnings = warnings;
+        }
+        if (task.params.checkLayout && before) {
+            resultData.layoutProblems = await this.checkLayout(before);
+        }
         task.sendSuccess(resultData);
+    }
+
+    /** Lists the shapes of the page, or null when there is none to list. */
+    private static snapshot(): CanvasSnapshot | null {
+        try {
+            return penpot.root ? CanvasSnapshot.take(penpot) : null;
+        } catch (e) {
+            console.error("Error listing the shapes of the page:", e);
+            return null;
+        }
+    }
+
+    /**
+     * Names the shapes a failed script added, which Penpot keeps.
+     *
+     * @param before - the page before the script
+     * @returns the note, or null when the script added none
+     */
+    private static leftBehind(before: CanvasSnapshot | null): string | null {
+        try {
+            const added = before?.added(penpot) ?? [];
+            if (added.length === 0) {
+                return null;
+            }
+            const names = added.slice(0, 10).map((shape) => `${shape.type} "${shape.name}" ${shape.id}`);
+            const more = added.length > names.length ? ` and ${added.length - names.length} more` : "";
+            return (
+                "The script was not rolled back. Shapes it added before the error, still there: " +
+                `${names.join(", ")}${more}. Remove them by id (penpotUtils.findShapeById(id).remove()) or go on ` +
+                "with them; do not make them a second time."
+            );
+        } catch (e) {
+            console.error("Error listing the shapes a script left:", e);
+            return null;
+        }
+    }
+
+    /**
+     * Checks the boards this and earlier checked code drew on.
+     *
+     * @param before - the page before the code
+     */
+    private async checkLayout(before: CanvasSnapshot): Promise<string[]> {
+        try {
+            await penpot.waitForLayoutUpdate();
+            const added = before.added(penpot);
+            const tops = new Map<string, any>((penpot.root as any).children.map((shape: any) => [shape.id, shape]));
+            for (const shape of added) {
+                let top: any = shape;
+                while (top && !tops.has(top.id)) {
+                    top = top.parent;
+                }
+                if (top?.type === "board") {
+                    this.checkedBoards = [...this.checkedBoards.filter((id) => id !== top.id), top.id];
+                }
+            }
+            this.checkedBoards = this.checkedBoards.filter((id) => tops.has(id));
+            return new LayoutCheck(penpot).run(
+                this.checkedBoards.map((id) => tops.get(id)),
+                added
+            );
+        } catch (e) {
+            console.error("Error checking the layout:", e);
+            return [];
+        }
     }
 
     /**

@@ -27,6 +27,7 @@ import { ReplServer } from "./ReplServer";
 import { ApiDocs } from "./ApiDocs";
 import { McpAuthentication } from "./McpAuthentication";
 import { RequestGuard } from "./RequestGuard";
+import { LayoutCheckHeader } from "./LayoutCheckHeader";
 
 /**
  * Time that in-flight requests get to deliver their replies during shutdown.
@@ -38,6 +39,9 @@ const SHUTDOWN_REPLY_GRACE_MS = 2_000;
  */
 export interface SessionContext {
     userToken?: string;
+
+    /** whether the client wants a layout check after its `execute_code` calls */
+    checkLayout?: boolean;
 }
 
 /**
@@ -377,7 +381,8 @@ export class PenpotMcpServer {
             this.logger.info(
                 `Received MCP request: method=${req.body?.method ?? "<none>"}; userTokenFp=${PenpotMcpServer.tokenFingerprint(authResult.userToken)}`
             );
-            const request = this.sessionContext.run({ userToken: authResult.userToken }, async () => {
+            const context = { userToken: authResult.userToken, checkLayout: LayoutCheckHeader.isSet(req.headers) };
+            const request = this.sessionContext.run(context, async () => {
                 // keep upstream's stateless legacy protocol, opting in only to JSON replies for POST;
                 // other methods fall through so the default handler rejects them
                 if (

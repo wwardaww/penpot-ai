@@ -77,7 +77,10 @@ export class ExecuteCodeTool extends Tool<ExecuteCodeArgs> {
     }
 
     protected async executeCore(args: ExecuteCodeArgs): Promise<ToolResponse> {
-        const taskParams: ExecuteCodeTaskParams = { code: args.code };
+        const taskParams: ExecuteCodeTaskParams = { code: args.code, trackShapes: true };
+        if (this.getSessionContext()?.checkLayout) {
+            taskParams.checkLayout = true;
+        }
         const task = new ExecuteCodePluginTask(taskParams);
         const started = Date.now();
         const result = await this.mcpServer.pluginBridge.executePluginTask(task, args.sessionId);
