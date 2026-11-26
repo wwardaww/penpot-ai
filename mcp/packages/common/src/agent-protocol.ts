@@ -611,6 +611,8 @@ export interface WorkflowClaudeRequest {
     onEvent?: (event: RunnerEvent) => void;
     /** denies tool uses before the daemon's permission policy sees them */
     toolFilter?: WorkflowToolFilter;
+    /** model of the turn (`sonnet`, `opus` or a model id) over the configured one */
+    model?: string;
 }
 
 /** Result of a Claude turn requested by a workflow. */

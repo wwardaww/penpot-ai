@@ -51,6 +51,31 @@ const FACTS = {
     assets: [{ id: "a-logo", name: "Logo", kind: "icon", width: 32, height: 32 }],
 };
 
+/** Outline of a screen as the plugin script returns it. */
+const OUTLINE = {
+    name: "Screen",
+    type: "board",
+    w: 1440,
+    h: 1024,
+    flex: { dir: "column", rowGap: 24, columnGap: 0, pad: [32, 40, 32, 40], align: "start" },
+    fill: "#FFFFFF",
+    tokens: { fill: "color.surface" },
+    children: [
+        {
+            name: "Title",
+            type: "text",
+            w: 300,
+            h: 40,
+            sizing: { h: "auto", v: "auto" },
+            fill: "#111111",
+            tokens: { fill: "color.ink" },
+            text: { characters: "Welcome back", family: "Inter", size: "32", weight: "700", grow: "auto-width" },
+        },
+        { name: "Cart button", type: "board", component: "Button / Primary", w: 120, h: 44, radius: 8 },
+        { name: "Logo", type: "rect", w: 32, h: 32, image: true },
+    ],
+};
+
 /** Penpot tools of the test file; `failing` captures fail on every try. */
 function tools(failing: string[] = []) {
     return (name: string, args: any) => {
@@ -68,6 +93,10 @@ function tools(failing: string[] = []) {
             case "export_shape":
                 return { isError: false, content: [], text: "<svg/>" };
             case "execute_code":
+                if (String(args.code).includes("visit(shape, false, true)")) {
+                    const board = BOARDS.find((b) => String(args.code).includes(JSON.stringify(b.id)));
+                    return okJson({ result: board ? { ...OUTLINE, name: board.name } : null, log: "" });
+                }
                 return String(args.code).includes("b-home")
                     ? okJson({ result: FACTS, log: "" })
                     : { isError: true, content: [], text: "no tokens" };
@@ -83,16 +112,18 @@ function tools(failing: string[] = []) {
     };
 }
 
-/** Claude writes the guide of the screens it is asked for (through the tool filter). */
+/** Claude answers the notes of the screens it is asked for (`only`: of that screen alone). */
 function guideTurn(only?: string) {
     return (request: WorkflowClaudeRequest) => {
-        for (const match of request.prompt.matchAll(/→ (.+\.md)$/gm)) {
-            assert.equal(request.toolFilter!.check("Write", { file_path: match[1] }), null);
-            if (!only || match[1].includes(only)) {
-                writeFileSync(match[1], "# Guide by Claude\n");
-            }
-        }
-        return { text: "done" };
+        const blocks = [...request.prompt.matchAll(/^=== ([\w-]+) ===/gm)]
+            .map((match) => match[1])
+            .filter((slug) => !only || slug.includes(only))
+            .map(
+                (slug) =>
+                    `=== ${slug} ===\nThe ${slug} screen.\n## Breakpoints\nStacks below 768.\n## States\nEmpty list drawn.\n` +
+                    `## Accessibility\nLabel the icon buttons.\n## Build order\n1. Layout\n2. Content`
+            );
+        return { text: blocks.join("\n\n") };
     };
 }
 
@@ -117,10 +148,10 @@ describe("instruct", () => {
         assert.ok(WorkflowRegistry.withShippedWorkflows().names().includes("instruct"));
         const build = (platform: "web" | "mobile") =>
             PromptRegistry.locate().build({ persona: "designer", platform, projectName: "P", workflow: "instruct" });
-        assert.ok(build("web").includes("**Breakpoints**"));
-        assert.ok(!build("web").includes("safe areas**"));
-        assert.ok(build("mobile").includes("safe areas**"));
-        assert.ok(!build("mobile").includes("**Breakpoints**"));
+        assert.ok(build("web").includes("## Breakpoints"));
+        assert.ok(!build("web").includes("safe areas`"));
+        assert.ok(build("mobile").includes("## Screen sizes and safe areas"));
+        assert.ok(!build("mobile").includes("## Breakpoints"));
     });
 
     test("writes a PNG and a guide for every board, and only below PenforgeUI", async () => {
@@ -169,35 +200,72 @@ describe("instruct", () => {
         assert.deepEqual(started.questions, []);
     });
 
-    test("Claude reads the design and writes guides in the project folder only", async () => {
-        const started = await run({ projectType: "mobile", tool: tools(), turn: guideTurn() });
+    test("the daemon writes the design data; Claude adds notes in one turn, without tools", async () => {
+        const started = await run({ projectType: "web", tool: tools(), turn: guideTurn() });
         await instruct.run(started.ctx, { action: "run" });
 
         assert.equal(started.turns.length, 1);
         const request = started.turns[0];
         assert.equal(request.promptName, "instruct");
-        assert.match(request.prompt, /flows\.json/);
-        assert.match(request.prompt, /animations\.json/);
+        assert.equal(request.model, "sonnet");
+        assert.match(request.prompt, /^=== home-desktop === "Home \/ Desktop" 1440×1024$/m);
+        assert.match(request.prompt, /Cart button \(click\) opens "Cart"/);
+        assert.match(request.prompt, /"Welcome back" \(text, 300×40\)/);
+        assert.ok(!request.prompt.includes("color.ink"), "Claude gets the short outline");
         assert.ok(!request.prompt.includes(output), "Claude never gets the user's folder");
         const filter = request.toolFilter!;
-        assert.notEqual(filter.check("Write", { file_path: join(output, "PenforgeUI", "guides", "x.md") }), null);
-        assert.notEqual(filter.check("Write", { file_path: join(base, "x.md") }), null);
-        assert.notEqual(filter.check("Read", { file_path: join(output, "notes.txt") }), null);
-        assert.notEqual(filter.check("Bash", { command: "npm install" }), null);
-        assert.notEqual(filter.check("mcp__penpot__execute_code", {}), null);
-        assert.equal(filter.check("mcp__penpot__get_node_properties", {}), null);
+        for (const [tool, input] of [
+            ["Write", { file_path: join(base, "x.md") }],
+            ["Read", { file_path: join(output, "notes.txt") }],
+            ["Bash", { command: "ls" }],
+            ["mcp__penpot__get_node_properties", {}],
+        ] as const) {
+            assert.notEqual(filter.check(tool, input), null, tool);
+        }
+        assert.deepEqual(filter.allowedTools, []);
         assert.ok(
             !started.calls.some((call) => ["update_design_node", "update_animations"].includes(call.name)),
             "the design does not change"
         );
+
+        const guide = readFileSync(join(output, "PenforgeUI", "guides", "home-desktop.md"), "utf8");
+        const order = [
+            "# Home / Desktop",
+            "![Home / Desktop](../screens/home-desktop.png)",
+            "The home-desktop screen.",
+            "## Layout tree",
+            '"Welcome back" (text, 300×40) · width auto, height auto · Inter 32px 700 auto-width · fill color.ink (#111111)',
+            "**Cart button** (copy of Button / Primary, 120×44) · radius 8",
+            "## Breakpoints",
+            "## States",
+            "## Flows",
+            '- Cart button (click) opens "Cart".',
+            "## Assets",
+            "- Logo: 32×32",
+            "## Accessibility",
+            "## Build order",
+        ];
+        let at = 0;
+        for (const part of order) {
+            const found = guide.indexOf(part, at);
+            assert.ok(found >= 0, `${part} in order in:\n${guide}`);
+            at = found + part.length;
+        }
+        assert.match(
+            readFileSync(join(output, "PenforgeUI", "guides", "cart.md"), "utf8"),
+            /Reached from "Home \/ Desktop" by Cart button \(click\)/
+        );
     });
 
-    test("a missing guide gets a short one, a failed capture is tried again and reported", async () => {
+    test("a guide without notes keeps its design data, a failed capture is tried again and reported", async () => {
         const started = await run({ projectType: "web", tool: tools(["b-cart"]), turn: guideTurn("cart") });
         await instruct.run(started.ctx, { action: "run" });
 
         const guide = readFileSync(join(output, "PenforgeUI", "guides", "home-desktop.md"), "utf8");
         assert.match(guide, /Cart button \(click\) opens "Cart"/);
+        assert.match(guide, /## Layout tree/);
+        assert.match(guide, /notes \(purpose, states, accessibility, build order\) are missing/);
+        assert.match(readFileSync(join(output, "PenforgeUI", "guides", "cart.md"), "utf8"), /## Accessibility/);
         assert.deepEqual(
             result(started).screens.map((screen: any) => screen.captured),
             [true, false]
@@ -208,37 +276,50 @@ describe("instruct", () => {
         assert.equal(captures.length, 4);
     });
 
-    test("many screens are written in several turns, each turn's guides reach the folder at once", async () => {
-        const many = Array.from({ length: 14 }, (_, n) => ({ ...BOARDS[0], id: `b-${n}`, name: `Screen ${n}` }));
+    test("the data guides reach the folder first; the notes come in up to three turns at once", async () => {
+        const many = Array.from({ length: 26 }, (_, n) => ({ ...BOARDS[0], id: `b-${n}`, name: `Screen ${n}` }));
         const tool = (name: string, args: any) => (name === "list_boards" ? okJson(many) : tools()(name, args));
         const inFolder: number[] = [];
+        let active = 0;
+        let most = 0;
         const write = guideTurn();
-        const turn = (request: WorkflowClaudeRequest) => {
+        const turn = async (request: WorkflowClaudeRequest) => {
+            active++;
+            most = Math.max(most, active);
             const guides = join(output, "PenforgeUI", "guides");
             inFolder.push(existsSync(guides) ? readdirSync(guides).length : 0);
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            active--;
             return write(request);
         };
         const started = await run({ projectType: "web", tool, turn });
         await instruct.run(started.ctx, { action: "run" });
-        assert.equal(started.turns.length, 3);
-        assert.deepEqual(inFolder, [0, 6, 12]);
+        // 8 screens per turn
+        assert.equal(started.turns.length, 4);
+        assert.equal(most, 3);
+        assert.deepEqual(inFolder, [26, 26, 26, 26]);
+        const counts = started.events
+            .filter((event) => (event.payload as any)?.step === "guides")
+            .map((event) => (event.payload as any).params.done);
+        assert.equal(counts.at(-1), 26);
         assert.ok(existsSync(join(output, "PenforgeUI", "screens", "screen-0.png")));
-        assert.equal(readdirSync(join(output, "PenforgeUI", "guides")).length, 14);
+        assert.equal(readdirSync(join(output, "PenforgeUI", "guides")).length, 26);
     });
 
-    test("a turn that writes no guide stops the turns; every screen still gets a guide", async () => {
-        const many = Array.from({ length: 14 }, (_, n) => ({ ...BOARDS[0], id: `b-${n}`, name: `Screen ${n}` }));
+    test("a turn that writes no notes stops the turns; every screen keeps its data guide", async () => {
+        const many = Array.from({ length: 40 }, (_, n) => ({ ...BOARDS[0], id: `b-${n}`, name: `Screen ${n}` }));
         const tool = (name: string, args: any) => (name === "list_boards" ? okJson(many) : tools()(name, args));
         const started = await run({ projectType: "web", tool, turn: () => ({ text: "the writes were refused" }) });
         await instruct.run(started.ctx, { action: "run" });
-        assert.equal(started.turns.length, 1);
+        // the turns already running finish; no new one starts
+        assert.equal(started.turns.length, 3);
         const guides = readdirSync(join(output, "PenforgeUI", "guides"));
-        assert.equal(guides.length, 14);
+        assert.equal(guides.length, 40);
         assert.match(
-            readFileSync(join(output, "PenforgeUI", "guides", "screen-13.md"), "utf8"),
-            /could not be written automatically/
+            readFileSync(join(output, "PenforgeUI", "guides", "screen-39.md"), "utf8"),
+            /are missing: run Instruct again/
         );
-        assert.ok(started.events.some((event) => (event.payload as any)?.code === "guides-stopped"));
+        assert.equal(started.events.filter((event) => (event.payload as any)?.code === "guides-stopped").length, 1);
     });
 
     test("a new run keeps what the user added or changed", async () => {

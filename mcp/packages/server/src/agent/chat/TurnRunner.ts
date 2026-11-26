@@ -37,6 +37,8 @@ export interface TurnRequest {
     allowedTools?: readonly string[];
     /** what the turn's tools may do; `setup.permissions` applies it */
     toolFilter?: WorkflowToolFilter;
+    /** model of the turn over the configured one */
+    model?: string;
 }
 
 /**
@@ -117,6 +119,7 @@ export class TurnRunner {
             cwd: setup.workspace.root,
             systemPromptAppend: systemPrompt,
             allowedTools: request.allowedTools,
+            ...(request.model ? { model: request.model } : {}),
             permissions: app.permissions(setup.permissions),
             additionalDirectories: app.directories,
             // who needs the guide also needs to be told what it drew wrong

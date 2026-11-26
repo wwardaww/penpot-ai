@@ -173,6 +173,7 @@ export class WorkflowEngine {
                 systemPromptAppend: request.systemPromptAppend,
                 allowedTools: filter?.allowedTools,
                 toolFilter: filter,
+                model: request.model,
             }
         );
         for await (const event of events) {

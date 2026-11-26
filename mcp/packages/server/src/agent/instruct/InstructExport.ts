@@ -1,13 +1,13 @@
-import { mkdir, readdir, rm, writeFile } from "fs/promises";
+import { mkdir, rm, writeFile } from "fs/promises";
 import { dirname, join } from "path";
 import type { WorkflowContext, WorkflowWorkspaceApi } from "@penpot/mcp-common";
 import { BuildLock } from "../build/BuildLock";
 import { LinkedFolders } from "../linked/LinkedFolders";
-import { LinkedToolFilter } from "../linked/LinkedToolFilter";
 import { RedesignScreens, type ScreenBoard } from "../linked/RedesignScreens";
 import { FolderPaths } from "../workspace/FolderPaths";
 import type { ProjectOutput } from "../workspace/ProjectOutput";
 import { DesignSpecExport, type ScreenFiles } from "./DesignSpecExport";
+import { GuideWriter } from "./GuideWriter";
 import { SpecFolder } from "./SpecFolder";
 
 /** Params of the `instruct` workflow. */
@@ -63,16 +63,15 @@ interface FlowEdge {
  * `screens/` (PNG 1× and 2×), `assets/`, `tokens.json`, `fonts.md`, `README.md` and one
  * `guides/<screen>.md` per screen.
  *
- * Everything is prepared in the project's own `.penforge/instruct/` first; Claude works only
- * there. The daemon copies the files into the user's folder ({@link SpecFolder}) as they are
- * ready: the screens, assets and tokens first, then the guides after each Claude turn, so the
- * folder fills while the run goes on and a stopped run keeps what was done. Files of the last run
- * are removed only when the run ends. No git command runs.
+ * Everything is prepared in the project's own `.penforge/instruct/` first. The guides hold the
+ * design data the daemon reads itself and short notes Claude writes without tools
+ * ({@link GuideWriter}). The daemon copies the files into the user's folder ({@link SpecFolder})
+ * as they are ready: the screens, assets, tokens and data guides first, then the notes after each
+ * Claude turn, so the folder fills while the run goes on and a stopped run keeps what was done.
+ * Files of the last run are removed only when the run ends. No git command runs.
  */
 export class InstructExport {
     private static readonly GENERATOR = "penforge-instruct";
-    /** screens per Claude turn */
-    private static readonly BATCH = 6;
     private static readonly STAGING = "instruct";
 
     private readonly spec: DesignSpecExport;
@@ -132,7 +131,7 @@ export class InstructExport {
         // the screens are in the folder before Claude starts on the guides
         await target.publish(out, true);
         const edges = await this.flows();
-        await this.writeGuides(staging, out, boards, screens, edges, () => target.publish(out, true));
+        await this.writeGuides(boards, out, screens, edges, () => target.publish(out, true));
         await writeFile(join(out, "README.md"), this.readme(boards, screens, assets, edges), "utf8");
         this.checkCancelled();
         this.progress("write", "Writing the folder");
@@ -209,129 +208,27 @@ export class InstructExport {
     }
 
     private async writeGuides(
-        staging: string,
-        out: string,
         boards: ScreenBoard[],
+        out: string,
         screens: ScreenFiles[],
         edges: FlowEdge[],
         publish: () => Promise<unknown>
     ): Promise<void> {
-        const guidesDir = join(out, "guides");
-        const factsDir = join(staging, "facts");
-        await mkdir(factsDir, { recursive: true });
         const animations = await this.read("get_animation_spec", { fileId: this.ctx.context.fileId });
-        await writeFile(join(factsDir, "animations.json"), `${JSON.stringify(animations ?? {}, null, 1)}\n`, "utf8");
         const names = new Map(boards.map((board) => [board.boardId, board.name]));
         const named = edges.map((edge) => ({
             ...edge,
             fromName: names.get(edge.from) ?? null,
             toName: names.get(edge.to) ?? null,
         }));
-        await writeFile(join(factsDir, "flows.json"), `${JSON.stringify(named, null, 1)}\n`, "utf8");
-        const expected = new Set(screens.map((screen) => `${screen.slug}.md`));
-        for (let start = 0; start < screens.length; start += InstructExport.BATCH) {
-            this.checkCancelled();
-            this.ctx.emit("progress", {
-                step: "guides",
-                params: { done: start, total: screens.length },
-                text: "Writing the guides",
-            });
-            const list = screens
-                .slice(start, start + InstructExport.BATCH)
-                .map((screen, index) => {
-                    const board = boards[start + index];
-                    return `- "${screen.name}" (boardId ${board.boardId}, ${board.width}×${board.height}) → ${join(guidesDir, `${screen.slug}.md`)}`;
-                })
-                .join("\n");
-            const all = screens
-                .map((screen, index) => `"${screen.name}" ${boards[index].width}×${boards[index].height}`)
-                .join(", ");
-            const before = await InstructExport.guideCount(guidesDir, expected);
-            try {
-                await this.ctx.runner.run({
-                    prompt: [
-                        "Write one guide per screen with the Write tool, to the path given:",
-                        list,
-                        "",
-                        `All screens of the file: ${all}.`,
-                        `The PNGs, assets, tokens.json and fonts.md are in \`${out}\`.`,
-                        `Navigation between screens: \`${join(factsDir, "flows.json")}\`.`,
-                        `Animations: \`${join(factsDir, "animations.json")}\`.`,
-                    ].join("\n"),
-                    promptName: "instruct",
-                    toolFilter: new LinkedToolFilter(
-                        this.ctx.workspace.root,
-                        [this.ctx.workspace.root],
-                        guidesDir,
-                        true
-                    ),
-                });
-            } catch (error) {
-                if (this.ctx.signal.aborted) {
-                    throw error;
-                }
-                this.ctx.emit("log", {
-                    code: "guides-failed",
-                    params: {},
-                    text: `Some guides could not be written: ${String(error)}`,
-                });
-            }
-            await InstructExport.dropStrayFiles(guidesDir, expected);
-            this.checkCancelled();
-            await publish();
-            if ((await InstructExport.guideCount(guidesDir, expected)) === before) {
-                // the same would happen to the next screens: they get the short guide at once
-                this.ctx.emit("log", {
-                    code: "guides-stopped",
-                    params: {},
-                    text: "Claude wrote no guide in the last turn; the remaining screens get a short guide.",
-                });
-                break;
-            }
-        }
-        const written = new Set(await readdir(guidesDir).catch(() => [] as string[]));
-        for (const [index, screen] of screens.entries()) {
-            if (!written.has(`${screen.slug}.md`)) {
-                const guide = InstructExport.fallbackGuide(screen, boards[index], named);
-                await writeFile(join(guidesDir, `${screen.slug}.md`), guide, "utf8");
-            }
-        }
-        await InstructExport.dropStrayFiles(guidesDir, expected);
-    }
-
-    /** How many of the expected guides exist. */
-    private static async guideCount(guidesDir: string, expected: Set<string>): Promise<number> {
-        const names = await readdir(guidesDir).catch(() => [] as string[]);
-        return names.filter((name) => expected.has(name)).length;
-    }
-
-    /** Removes anything but the guides, which does not belong in the folder. */
-    private static async dropStrayFiles(guidesDir: string, expected: Set<string>): Promise<void> {
-        for (const name of await readdir(guidesDir)) {
-            if (!expected.has(name)) {
-                await rm(join(guidesDir, name), { recursive: true, force: true });
-            }
-        }
-    }
-
-    private static fallbackGuide(
-        screen: ScreenFiles,
-        board: ScreenBoard,
-        edges: Array<FlowEdge & { toName: string | null }>
-    ): string {
-        const links = edges
-            .filter((edge) => edge.from === board.boardId && edge.toName !== null)
-            .map((edge) => `- ${edge.sourceName || "Screen"} (${edge.trigger || "click"}) opens "${edge.toName}".`);
-        return [
-            `# ${screen.name}`,
-            "",
-            `![${screen.name}](../${screen.png1x})`,
-            "",
-            `- Size: ${board.width}×${board.height}.`,
-            "- The detailed guide could not be written automatically; run Instruct again.",
-            ...(links.length > 0 ? ["", "## Flows", ...links] : []),
-            "",
-        ].join("\n");
+        await new GuideWriter(this.ctx, this.mobile).write(
+            join(out, "guides"),
+            screens,
+            boards,
+            named,
+            animations,
+            publish
+        );
     }
 
     private readme(boards: ScreenBoard[], screens: ScreenFiles[], assets: number, edges: FlowEdge[]): string {
